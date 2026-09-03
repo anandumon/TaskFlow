@@ -1,0 +1,41 @@
+spring:
+  # ── Supabase PostgreSQL Configuration ──────────────────────
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:db.your-project-ref.supabase.co}:${DB_PORT:5432}/${DB_NAME:postgres}?sslmode=${DB_SSLMODE:require}}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:your-supabase-password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 30000
+      keepalive-time: 60000
+
+  # ── JPA / Hibernate Settings for Cloud DB ─────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  # ── Flyway Migrations for Supabase ────────────────────────
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    schemas: public
+    default-schema: public
+
+# ── Logging ────────────────────────────────────────────────
+logging:
+  level:
+    com.taskflow: INFO
+    org.flywaydb: INFO
+    org.hibernate.SQL: WARN

@@ -1,0 +1,273 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban } from 'lucide-react'
+import { useWorkspaceStore } from '@/stores/workspace-store'
+import { useTaskStore, TaskStatus, TaskEnvironment, Subtask, FileChange } from '@/stores/task-store'
+import { useProjectStore } from '@/stores/project-store'
+import { useStatusStore } from '@/stores/status-store'
+
+import { TaskGitBranchCard } from '@/features/tasks/components/TaskGitBranchCard'
+import { TaskSubtasksCard } from '@/features/tasks/components/TaskSubtasksCard'
+import { TaskFilesChangedCard } from '@/features/tasks/components/TaskFilesChangedCard'
+import { TaskPropertiesCard } from '@/features/tasks/components/TaskPropertiesCard'
+import { TaskDiscussionCard } from '@/features/tasks/components/TaskDiscussionCard'
+
+export default function TaskDetailsPage() {
+  const params = useParams()
+  const router = useRouter()
+  const taskId = params.id as string
+
+  const { currentWorkspace } = useWorkspaceStore()
+  const {
+    tasks,
+    loadTasks,
+    updateTask,
+    updateStatus,
+    updateEnvironment,
+    deleteTask,
+    toggleSubtask,
+    addSubtask,
+    updateSubtaskBranch,
+    addNote,
+  } = useTaskStore()
+  const { projects, loadProjects } = useProjectStore()
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (currentWorkspace?.id) {
+      loadTasks(currentWorkspace.id)
+      loadProjects(currentWorkspace.id)
+    }
+  }, [currentWorkspace?.id, loadTasks, loadProjects])
+
+  const task = tasks.find((t) => t.id === taskId)
+  const project = projects.find((p) => p.id === task?.projectId)
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  if (!task) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 text-center space-y-4 animate-fade-in">
+        <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
+        <h2 className="text-xl font-bold text-foreground">Task Not Found</h2>
+        <p className="text-xs text-muted-foreground">The requested deliverable could not be loaded.</p>
+        <Link
+          href="/app/tasks"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to My Tasks
+        </Link>
+      </div>
+    )
+  }
+
+  // Parse JSON data safely
+  let subtasks: Subtask[] = []
+  try {
+    subtasks = JSON.parse(task.subtasks || '[]')
+  } catch {
+    subtasks = []
+  }
+
+  let filesChanged: FileChange[] = []
+  try {
+    filesChanged = JSON.parse(task.filesChanged || '[]')
+  } catch {
+    filesChanged = []
+  }
+
+  const handleSaveMainBranch = async (branchToSave: string) => {
+    await updateTask(task.id, { branchName: branchToSave.trim() })
+    showToast('Branch name saved to database!')
+  }
+
+  const handleToggleSubtask = async (subtaskId: string) => {
+    await toggleSubtask(task.id, subtaskId)
+  }
+
+  const handleAddSubtask = async (title: string, branchName?: string) => {
+    await addSubtask(task.id, title, branchName)
+    showToast('Subtask added!')
+  }
+
+  const handleSaveSubtaskBranch = async (subtaskId: string, branch: string) => {
+    await updateSubtaskBranch(task.id, subtaskId, branch)
+    showToast('Subtask branch updated!')
+  }
+
+  const handleUpdateSubtaskDetails = async (subtaskId: string, updatedFields: Partial<Subtask>) => {
+    const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, ...updatedFields } : s))
+    await updateTask(task.id, { subtasks: JSON.stringify(updated) })
+    showToast('Subtask details updated!')
+  }
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    const updated = subtasks.filter((s) => s.id !== subtaskId)
+    await updateTask(task.id, { subtasks: JSON.stringify(updated) })
+    showToast('Subtask removed')
+  }
+
+  const handleAddFileChange = async (newFile: FileChange) => {
+    const updated = [...filesChanged, newFile]
+    await updateTask(task.id, { filesChanged: JSON.stringify(updated) })
+    showToast('File change logged!')
+  }
+
+  const handleAddNote = async (noteText: string) => {
+    await addNote(task.id, noteText)
+    showToast('Note added to discussion!')
+  }
+
+  const handleStatusUpdate = async (newStatus: TaskStatus) => {
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    await updateStatus(task.id, newStatus)
+    loadProjects(wsId)
+    showToast(`Status updated to ${newStatus.toUpperCase()}`)
+  }
+
+  const handleEnvUpdate = async (newEnv: TaskEnvironment) => {
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    if (newEnv === 'MAIN') {
+      await updateStatus(task.id, 'done', 'MAIN')
+      showToast('Task promoted to MAIN & marked as Done!')
+    } else {
+      await updateEnvironment(task.id, newEnv)
+      showToast(`Review environment updated to ${newEnv}`)
+    }
+    loadProjects(wsId)
+  }
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Top Breadcrumb & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/70">
+        <div className="flex items-center gap-3">
+          <Link
+            href={project ? `/app/projects/${project.id}` : '/app/tasks'}
+            className="p-2.5 rounded-xl border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+            title={project ? `Back to ${project.name}` : 'Back to Tasks Board'}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">{project ? `Back to ${project.name}` : 'Back'}</span>
+          </Link>
+          <div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Link href="/app/projects" className="hover:underline">Projects</Link>
+              <span>/</span>
+              {project ? (
+                <Link
+                  href={`/app/projects/${project.id}`}
+                  className="text-primary font-bold hover:underline flex items-center gap-1"
+                >
+                  <FolderKanban className="w-3.5 h-3.5" />
+                  {project.name}
+                </Link>
+              ) : (
+                <span>Standalone</span>
+              )}
+            </div>
+            <h1 className="text-xl font-bold text-foreground mt-0.5">{task.title}</h1>
+          </div>
+        </div>
+
+        {/* Status & Environment Selectors */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 bg-muted/80 px-3 py-1.5 rounded-xl border border-border text-xs">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">Status:</span>
+            <select
+              value={task.status}
+              onChange={(e) => handleStatusUpdate(e.target.value as TaskStatus)}
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
+            >
+              {useStatusStore.getState().getStatuses(currentWorkspace?.id || 'default').map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-muted/80 px-3 py-1.5 rounded-xl border border-border text-xs">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">Env:</span>
+            <select
+              value={task.environment || 'DEV'}
+              disabled={task.status === 'done'}
+              onChange={(e) => handleEnvUpdate(e.target.value as TaskEnvironment)}
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="DEV">DEV</option>
+              <option value="SIT">SIT</option>
+              <option value="UAT">UAT</option>
+              <option value="RELEASE">RELEASE</option>
+              <option value="MAIN">MAIN</option>
+            </select>
+          </div>
+
+          <button
+            onClick={async () => {
+              await deleteTask(task.id)
+              router.push('/app/tasks')
+            }}
+            className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Delete Task"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Columns */}
+        <div className="lg:col-span-2 space-y-6">
+          <TaskGitBranchCard
+            branchName={task.branchName}
+            taskTitle={task.title}
+            onSaveBranch={handleSaveMainBranch}
+          />
+
+          <TaskSubtasksCard
+            subtasks={subtasks}
+            onToggleSubtask={handleToggleSubtask}
+            onAddSubtask={handleAddSubtask}
+            onSaveSubtaskBranch={handleSaveSubtaskBranch}
+            onDeleteSubtask={handleDeleteSubtask}
+            onUpdateSubtaskDetails={handleUpdateSubtaskDetails}
+          />
+
+          <TaskFilesChangedCard
+            filesChanged={filesChanged}
+            onAddFileChange={handleAddFileChange}
+          />
+
+          <TaskDiscussionCard
+            notes={task.notes}
+            onAddNote={handleAddNote}
+          />
+        </div>
+
+        {/* Right 1 Column */}
+        <div className="space-y-6">
+          <TaskPropertiesCard
+            task={task}
+            project={project}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

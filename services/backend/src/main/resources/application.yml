@@ -1,0 +1,109 @@
+spring:
+  application:
+    name: taskflow-backend
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # ── JPA / Hibernate ─────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        default_batch_fetch_size: 20
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  # ── Flyway ──────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # ── Jackson ─────────────────────────────────────────────
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+
+  # ── Mail (Gmail SMTP) ──────────────────────────────────
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+# ── Server ──────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+# ── Actuator ────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ── TaskFlow Custom Properties ──────────────────────────
+taskflow:
+  jwt:
+    secret: ${JWT_SECRET:taskflow-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}
+    access-token-expiration: ${JWT_ACCESS_EXPIRATION:900000}     # 15 minutes
+    refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
+  
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+  
+  app:
+    name: TaskFlow
+    url: ${APP_URL:http://localhost:3000}
+    api-url: ${API_URL:http://localhost:8080}
+  
+  admin:
+    email: ${ADMIN_EMAIL:admin@taskflow.dev}
+    password: ${ADMIN_PASSWORD:Admin@TaskFlow2026}
+    first-name: ${ADMIN_FIRST_NAME:Admin}
+    last-name: ${ADMIN_LAST_NAME:User}
+
+app:
+  email-verification:
+    enabled: ${EMAIL_VERIFICATION_ENABLED:true}
+    otp:
+      length: ${EMAIL_VERIFICATION_OTP_LENGTH:6}
+      expiry-minutes: ${EMAIL_VERIFICATION_EXPIRY_MINUTES:2}
+      max-attempts: ${EMAIL_VERIFICATION_MAX_ATTEMPTS:5}
+      resend-cooldown-seconds: ${EMAIL_VERIFICATION_COOLDOWN_SECONDS:60}
+      max-resends-per-hour: ${EMAIL_VERIFICATION_MAX_RESENDS_PER_HOUR:5}
+
+# ── OpenAPI ─────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api/docs
+  swagger-ui:
+    path: /api/swagger-ui
+    operations-sorter: method
