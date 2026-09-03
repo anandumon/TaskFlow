@@ -5,31 +5,66 @@ import { Loader2 } from 'lucide-react'
 
 interface SocialAuthButtonsProps {
   mode?: 'signup' | 'signin'
+  email?: string
 }
 
-export function SocialAuthButtons({ mode = 'signup' }: SocialAuthButtonsProps) {
+export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
-  const handleGoogleLogin = () => {
-    setIsGoogleLoading(true)
-    const clientId =
-      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      '467128497270-rosss833r78go1fkgav1hp1mc6ur7884.apps.googleusercontent.com'
-    const redirectUri = `${window.location.origin}/oauth/callback`
-    const scope = encodeURIComponent('openid email profile')
-    const state = encodeURIComponent(
-      JSON.stringify({
-        provider: 'google',
-        mode: mode,
-        returnUrl: '/app/home',
-      })
-    )
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true)
+      const clientId =
+        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+        '467128497270-rosss833r78go1fkgav1hp1mc6ur7884.apps.googleusercontent.com'
+      const redirectUri = `${window.location.origin}/oauth/callback`
+      const scope = encodeURIComponent('openid email profile')
+      const nonce = Math.random().toString(36).substring(2)
 
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-      redirectUri
-    )}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account&state=${state}`
+      // Generate RFC 7636 PKCE Code Verifier & Challenge
+      let codeChallenge = ''
+      try {
+        const array = new Uint8Array(32)
+        window.crypto.getRandomValues(array)
+        const verifier = Array.from(array, (byte) => ('0' + (byte & 0xff).toString(16)).slice(-2)).join('')
+        sessionStorage.setItem('google_oauth_code_verifier', verifier)
 
-    window.location.href = googleAuthUrl
+        const encoder = new TextEncoder()
+        const data = encoder.encode(verifier)
+        const digest = await window.crypto.subtle.digest('SHA-256', data)
+        const uint8 = new Uint8Array(digest)
+        let binary = ''
+        for (let i = 0; i < uint8.byteLength; i++) {
+          binary += String.fromCharCode(uint8[i])
+        }
+        const base64 = btoa(binary)
+        codeChallenge = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      } catch (pkceErr) {
+        console.warn('PKCE challenge generation fallback:', pkceErr)
+      }
+
+      const state = encodeURIComponent(
+        JSON.stringify({
+          provider: 'google',
+          mode: mode,
+          email: email ? email.trim().toLowerCase() : undefined,
+          returnUrl: '/app/home',
+        })
+      )
+
+      let googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=id_token%20token&scope=${scope}&nonce=${nonce}&prompt=select_account&state=${state}`
+
+      if (email && email.includes('@')) {
+        googleAuthUrl += `&login_hint=${encodeURIComponent(email.trim())}`
+      }
+
+      window.location.href = googleAuthUrl
+    } catch (err) {
+      console.error('Google login initialization failed:', err)
+      setIsGoogleLoading(false)
+    }
   }
 
   /*

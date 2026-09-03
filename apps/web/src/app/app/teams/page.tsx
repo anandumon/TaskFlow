@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Users2, Plus, Shield, Mail, Crown, X, Trash2, CheckCircle2 } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 
@@ -15,6 +16,7 @@ interface Member {
 }
 
 export default function TeamsPage() {
+  const { user } = useAuthStore()
   const { currentOrg } = useOrgStore()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -22,32 +24,22 @@ export default function TeamsPage() {
   const [inviteName, setInviteName] = useState('')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const [membersList, setMembersList] = useState<Member[]>([
-    {
-      id: '1',
-      name: 'Anand Admin',
-      email: 'admin@taskflow.dev',
-      role: 'Owner',
-      status: 'Active',
-      isOwner: true,
-    },
-    {
-      id: '2',
-      name: 'Sarah Chen',
-      email: 'sarah@taskflow.dev',
-      role: 'Admin',
-      status: 'Active',
-      isOwner: false,
-    },
-    {
-      id: '3',
-      name: 'Alex Rivera',
-      email: 'alex@taskflow.dev',
-      role: 'Member',
-      status: 'Active',
-      isOwner: false,
-    },
-  ])
+  const [membersList, setMembersList] = useState<Member[]>([])
+
+  useEffect(() => {
+    if (user) {
+      setMembersList([
+        {
+          id: user.id || 'owner',
+          name: user.displayName || `${user.firstName || 'Owner'} ${user.lastName || ''}`.trim(),
+          email: user.email,
+          role: 'Owner',
+          status: 'Active',
+          isOwner: true,
+        },
+      ])
+    }
+  }, [user])
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,7 +85,7 @@ export default function TeamsPage() {
             <Users2 className="w-6 h-6 text-primary" /> Teams & Organization Members
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Manage granular role permissions and team assignments for {currentOrg?.name || 'TaskFlow HQ'}.
+            Manage granular role permissions and team assignments for {currentOrg?.name || 'your organization'}.
           </p>
         </div>
 

@@ -91,7 +91,7 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
   return (
     <aside
       aria-label="Product Highlights"
-      className="hidden lg:flex lg:w-1/2 min-h-screen bg-gradient-to-br from-[#161028] via-[#0E091B] to-[#120924] p-8 xl:p-12 flex-col justify-between relative overflow-hidden border-r border-white/[0.07] shrink-0"
+      className="hidden lg:flex lg:w-1/2 h-screen max-h-screen bg-gradient-to-br from-[#161028] via-[#0E091B] to-[#120924] p-6 xl:p-10 flex-col justify-between relative overflow-hidden border-r border-white/[0.07] shrink-0 select-none"
     >
       {/* Subtle background ambient glows */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
@@ -101,7 +101,7 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
       {/* Top Header */}
       <header className="relative z-10 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/30">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/30">
             <Zap className="w-4 h-4 text-white" aria-hidden="true" />
           </div>
           <span className="text-xl font-black tracking-tight text-white">TaskFlow</span>
@@ -112,9 +112,9 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
       </header>
 
       {/* Center Hero & Benefits */}
-      <section className="relative z-10 space-y-6 max-w-lg my-auto py-6">
-        <div className="space-y-3">
-          <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
+      <section className="relative z-10 space-y-4 xl:space-y-5 max-w-lg my-auto py-2">
+        <div className="space-y-2">
+          <h1 className="text-2xl xl:text-3xl font-extrabold tracking-tight text-white leading-tight">
             {isSignUp ? (
               <>
                 Everything you need.<br />
@@ -136,13 +136,13 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
 
         {/* Dynamic Feature Cards */}
         {isSignUp ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             {signupCards.map((card) => {
               const Icon = card.icon
               return (
                 <div
                   key={card.tag}
-                  className={`p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md space-y-1.5 ${card.borderHover} transition-all duration-150 shadow-sm`}
+                  className={`p-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md space-y-1 ${card.borderHover} transition-all duration-150 shadow-sm`}
                 >
                   <div className={`flex items-center gap-1.5 ${card.color} font-bold text-[10px] uppercase tracking-wider`}>
                     <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
@@ -155,13 +155,13 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
             })}
           </div>
         ) : (
-          <div className="space-y-3 pt-1">
+          <div className="space-y-2.5 pt-1">
             {signinCards.map((card) => {
               const Icon = card.icon
               return (
                 <div
                   key={card.tag}
-                  className={`p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md flex items-start gap-3.5 ${card.borderHover} transition-all duration-150 shadow-sm`}
+                  className={`p-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md flex items-start gap-3 ${card.borderHover} transition-all duration-150 shadow-sm`}
                 >
                   <div className={`w-8 h-8 rounded-xl ${card.bg} ${card.color} flex items-center justify-center shrink-0 mt-0.5`}>
                     <Icon className="w-4 h-4" aria-hidden="true" />

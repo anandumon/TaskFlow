@@ -47,8 +47,10 @@ class ApiClient {
       ...(options?.headers as Record<string, string>),
     }
 
-    if (this.accessToken) {
-      headers['Authorization'] = `Bearer ${this.accessToken}`
+    const token = this.accessToken || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null)
+    if (token) {
+      this.accessToken = token
+      headers['Authorization'] = `Bearer ${token}`
     }
 
     const res = await fetch(`${this.baseUrl}${path}`, {

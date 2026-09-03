@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -35,11 +35,21 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState('UTC (GMT+0:00)')
 
   // Org state
-  const [orgName, setOrgName] = useState(currentOrg?.name || 'TaskFlow HQ')
+  const [orgName, setOrgName] = useState(currentOrg?.name || '')
 
   // Workspace state
-  const [wsName, setWsName] = useState(currentWorkspace?.name || 'Engineering & Product')
+  const [wsName, setWsName] = useState(currentWorkspace?.name || '')
   const [wsColor, setWsColor] = useState(currentWorkspace?.color || '#6366F1')
+
+  // Sync with store when currentOrg or currentWorkspace loads
+  React.useEffect(() => {
+    if (currentOrg?.name) setOrgName(currentOrg.name)
+  }, [currentOrg?.name])
+
+  React.useEffect(() => {
+    if (currentWorkspace?.name) setWsName(currentWorkspace.name)
+    if (currentWorkspace?.color) setWsColor(currentWorkspace.color)
+  }, [currentWorkspace?.name, currentWorkspace?.color])
 
   // Teams state
   const [customTeams, setCustomTeams] = useState([

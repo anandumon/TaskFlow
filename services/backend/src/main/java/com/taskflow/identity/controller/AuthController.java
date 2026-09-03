@@ -39,6 +39,16 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @GetMapping("/check-user")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> checkUser(
+            @RequestParam("email") String email) {
+        boolean exists = authService.checkUserExists(email);
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("email", email != null ? email.toLowerCase().trim() : "");
+        result.put("exists", exists);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
     @PostMapping("/oauth")
     public ResponseEntity<ApiResponse<AuthResponse>> socialLogin(
             @Valid @RequestBody SocialLoginRequest request) {

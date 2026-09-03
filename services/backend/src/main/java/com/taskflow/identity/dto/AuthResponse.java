@@ -17,6 +17,7 @@ public class AuthResponse {
     private boolean requiresVerification;
     private String verificationMessage;
     private String devCode;
+    private String confirmationToken;
     private UserResponse user;
 
     @Data

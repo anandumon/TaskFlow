@@ -37,10 +37,10 @@ function VerifyEmailContent() {
           setStatus('success')
           setStatusMessage(msg || 'Email address confirmed successfully!')
 
-          // Auto-redirect to signin page after 1.5 seconds
+          // Auto-redirect directly inside to dashboard
           setTimeout(() => {
-            router.push(`/login?email=${encodeURIComponent(emailParam)}&verified=true`)
-          }, 1500)
+            window.location.replace('/app/home')
+          }, 1200)
         } catch (err: any) {
           setStatus('error')
           setStatusMessage(
@@ -82,14 +82,14 @@ function VerifyEmailContent() {
               {statusMessage}
             </p>
             <p className="text-xs text-muted-foreground">
-              Redirecting you to the Sign In page now...
+              Redirecting you directly inside TaskFlow now...
             </p>
             <div className="pt-2">
               <Link
-                href={`/login?email=${encodeURIComponent(emailParam)}&verified=true`}
+                href="/app/home"
                 className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 cursor-pointer"
               >
-                Proceed to Sign In <ArrowRight className="w-4 h-4" />
+                Go to Dashboard <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>

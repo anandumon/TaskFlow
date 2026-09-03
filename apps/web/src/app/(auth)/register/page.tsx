@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
@@ -17,27 +17,55 @@ import {
   ArrowRight,
   AlertCircle,
   RotateCw,
+  KeyRound,
 } from 'lucide-react'
 
-export default function RegisterPage() {
+function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { register, resendCode, isLoading, error, clearError } = useAuthStore()
+  const { register, resendCode, verifyEmail, isLoading, error, clearError } = useAuthStore()
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
+  const [oauthMeta, setOauthMeta] = useState<{ provider?: string; googleId?: string } | null>(null)
+  const [googleNotice, setGoogleNotice] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Step State: 'register' -> 'verify' (Email Confirmation Link Screen)
+  // Step State: 'register' -> 'verify' (Email Confirmation Screen)
   const [step, setStep] = useState<'register' | 'verify'>('register')
   const [registeredEmail, setRegisteredEmail] = useState('')
+  const [verificationOtp, setVerificationOtp] = useState('')
+  const [confirmationToken, setConfirmationToken] = useState('')
+  const [otpInput, setOtpInput] = useState('')
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [otpError, setOtpError] = useState<string | null>(null)
   const [resendStatus, setResendStatus] = useState<string | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(60)
 
-  // Clear any residual errors on page mount & prepopulate email if query param passed
+  // Clear residual errors on page mount & prepopulate parameters
   useEffect(() => {
     clearError()
     const qEmail = searchParams.get('email')
-    if (qEmail) {
-      setForm((prev) => ({ ...prev, email: qEmail }))
+    const qFirst = searchParams.get('firstName')
+    const qLast = searchParams.get('lastName')
+    const qProvider = searchParams.get('provider')
+    const qGoogleId = searchParams.get('googleId')
+    const qReason = searchParams.get('reason')
+
+    if (qEmail || qFirst || qLast) {
+      setForm((prev) => ({
+        ...prev,
+        email: qEmail || prev.email,
+        firstName: qFirst || prev.firstName,
+        lastName: qLast || prev.lastName,
+      }))
+    }
+
+    if (qProvider === 'google') {
+      setOauthMeta({ provider: 'GOOGLE', googleId: qGoogleId || undefined })
+    }
+
+    if (qReason === 'google_not_found') {
+      setGoogleNotice('Account not found. Please create your account first to continue.')
     }
   }, [clearError, searchParams])
 
@@ -51,18 +79,11 @@ export default function RegisterPage() {
     }
   }, [step, cooldownSeconds])
 
-  const maskEmail = (email: string) => {
-    if (!email || !email.includes('@')) return email
-    const [name, domain] = email.split('@')
-    if (name.length <= 2) return `${name}***@${domain}`
-    return `${name.slice(0, 2)}***${name.slice(-1)}@${domain}`
-  }
-
   // Password requirements calculation
   const passwordChecks = [
-    { label: 'At least 8 characters', met: form.password.length >= 8 },
-    { label: 'Contains a number', met: /\d/.test(form.password) },
-    { label: 'Contains a special character', met: /[^A-Za-z0-9]/.test(form.password) },
+    { label: '8+ chars', met: form.password.length >= 8 },
+    { label: 'Number', met: /\d/.test(form.password) },
+    { label: 'Special symbol', met: /[^A-Za-z0-9]/.test(form.password) },
   ]
   const isPasswordValid = passwordChecks.every((c) => c.met)
 
@@ -70,24 +91,50 @@ export default function RegisterPage() {
     e.preventDefault()
     if (!isPasswordValid) return
     clearError()
+    setIsSubmitting(true)
 
     try {
-      await register(form)
+      const res = await register({
+        ...form,
+        authProvider: oauthMeta?.provider || 'LOCAL',
+        providerId: oauthMeta?.googleId,
+      })
       setRegisteredEmail(form.email)
+      if (res.devCode) setVerificationOtp(res.devCode)
+      if (res.confirmationToken) setConfirmationToken(res.confirmationToken)
       setCooldownSeconds(60)
       setStep('verify')
     } catch {
       // handled by auth store
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleVerifyOtp = async (codeToVerify: string) => {
+    if (!codeToVerify || codeToVerify.length < 6) return
+    setIsVerifyingOtp(true)
+    setOtpError(null)
+    try {
+      await verifyEmail(registeredEmail, codeToVerify)
+      // Authentication and verification successful: take user directly inside!
+      window.location.replace('/app/home')
+    } catch (err: any) {
+      setOtpError(
+        err?.response?.data?.message || err?.message || 'Invalid verification code. Please check and try again.'
+      )
+    } finally {
+      setIsVerifyingOtp(false)
     }
   }
 
   const handleResend = async () => {
     if (cooldownSeconds > 0) return
     try {
-      setResendStatus('Resending confirmation email...')
+      setResendStatus('Resending confirmation code...')
       await resendCode(registeredEmail)
       setCooldownSeconds(60)
-      setResendStatus('A fresh confirmation link has been sent to your email.')
+      setResendStatus('A fresh confirmation code has been dispatched.')
       setTimeout(() => setResendStatus(null), 5000)
     } catch (err: any) {
       setResendStatus(err?.message || 'Failed to resend confirmation email')
@@ -96,58 +143,65 @@ export default function RegisterPage() {
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
-    clearError()
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left — Brand Value Proposition Panel (Signup Variant) */}
-      <AuthMarketingPanel variant="signup" />
+    <div className="flex h-screen max-h-screen overflow-hidden bg-background">
+      {/* LEFT MARKETING PANEL (Sticky & responsive) */}
+      <AuthMarketingPanel />
 
-      {/* Right — Signup & Verification Form */}
-      <main className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12 overflow-y-auto">
-        <div className="w-full max-w-[480px] space-y-6">
+      {/* RIGHT AUTH PANEL */}
+      <main className="flex-1 h-full flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
+        <div className="w-full max-w-[420px] space-y-3.5 my-auto">
 
           {/* STEP 1: Registration Screen */}
           {step === 'register' && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-3.5 animate-fade-in">
               {/* Mobile Branding Logo */}
-              <div className="lg:hidden flex items-center gap-3 justify-center mb-4">
-                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25">
-                  <Zap className="w-6 h-6" />
+              <div className="lg:hidden flex items-center gap-2.5 justify-center mb-1">
+                <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/25">
+                  <Zap className="w-4 h-4" />
                 </div>
-                <span className="text-2xl font-black tracking-tight text-foreground">TaskFlow</span>
+                <span className="text-xl font-black tracking-tight text-foreground">TaskFlow</span>
               </div>
 
               {/* Header Badge, Title & Subtitle */}
-              <div className="space-y-2 text-center lg:text-left">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                  <Zap className="w-3.5 h-3.5" />
+              <div className="space-y-1 text-center lg:text-left">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold border border-primary/20">
+                  <Zap className="w-3 h-3" />
                   Start free &bull; Set up in minutes
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                <h1 className="text-2xl xl:text-[26px] font-extrabold tracking-tight text-foreground">
                   Create your TaskFlow account
                 </h1>
-                <p className="text-xs text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground">
                   Start organizing your work, projects, and everyday life in one place.
                 </p>
               </div>
 
+              {/* Account Not Found Notice Banner */}
+              {googleNotice && (
+                <div className="rounded-xl bg-primary/10 border border-primary/25 p-2.5 text-xs text-primary font-medium flex items-center gap-2 animate-fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-primary" />
+                  <span>{googleNotice}</span>
+                </div>
+              )}
+
               {/* Error Banner */}
               {error && (
-                <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive animate-fade-in font-medium flex items-center gap-2">
+                <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive animate-fade-in font-medium flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* Google Social Authentication */}
-              <SocialAuthButtons mode="signup" />
+              <SocialAuthButtons mode="signup" email={form.email} />
 
               {/* Email Signup Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
                     <label htmlFor="firstName" className="text-xs font-semibold text-foreground">
                       First name
                     </label>
@@ -159,12 +213,12 @@ export default function RegisterPage() {
                       autoComplete="given-name"
                       value={form.firstName}
                       onChange={(e) => updateField('firstName', e.target.value)}
-                      className="flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
+                      className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
                       required
                     />
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <label htmlFor="lastName" className="text-xs font-semibold text-foreground">
                       Last name
                     </label>
@@ -176,61 +230,64 @@ export default function RegisterPage() {
                       autoComplete="family-name"
                       value={form.lastName}
                       onChange={(e) => updateField('lastName', e.target.value)}
-                      className="flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
+                      className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                {/* Email Input */}
+                <div className="space-y-1">
                   <label htmlFor="email" className="text-xs font-semibold text-foreground">
-                    Email address
+                    Work email or personal email
                   </label>
                   <input
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder="name@company.com"
                     autoComplete="email"
                     value={form.email}
                     onChange={(e) => updateField('email', e.target.value)}
-                    className="flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
+                    className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
                     required
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                {/* Password Input */}
+                <div className="space-y-1">
                   <label htmlFor="password" className="text-xs font-semibold text-foreground">
-                    Password
+                    Create password
                   </label>
                   <div className="relative">
                     <input
                       id="password"
                       name="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Create a strong password"
+                      placeholder="At least 8 characters"
                       autoComplete="new-password"
                       value={form.password}
                       onChange={(e) => updateField('password', e.target.value)}
-                      className="flex h-11 w-full rounded-xl border border-border bg-background pl-3.5 pr-10 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
+                      className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 pr-10 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
 
-                  {/* Password validation indicators */}
-                  <div className="pt-1.5 space-y-1">
-                    {passwordChecks.map((check, i) => (
+                  {/* Horizontal Compact Validation Row */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {passwordChecks.map((check, idx) => (
                       <div
-                        key={i}
-                        className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${
-                          check.met ? 'text-emerald-500' : 'text-muted-foreground'
+                        key={idx}
+                        className={`flex items-center gap-1 text-[11px] font-medium transition-colors ${
+                          check.met ? 'text-emerald-500' : 'text-muted-foreground/70'
                         }`}
                       >
                         <span
@@ -249,10 +306,10 @@ export default function RegisterPage() {
                 {/* Primary CTA */}
                 <button
                   type="submit"
-                  disabled={isLoading || !isPasswordValid}
-                  className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-98 cursor-pointer mt-2"
+                  disabled={isSubmitting || !isPasswordValid}
+                  className="w-full h-10 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-98 cursor-pointer mt-1"
                 >
-                  {isLoading ? (
+                  {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Creating your account...
@@ -264,7 +321,7 @@ export default function RegisterPage() {
               </form>
 
               {/* Already have an account */}
-              <p className="text-center text-xs text-muted-foreground">
+              <p className="text-center text-xs text-muted-foreground pt-0.5">
                 Already have an account?{' '}
                 <Link href="/login" className="text-primary font-bold hover:underline">
                   Sign in
@@ -273,76 +330,111 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* STEP 2: Email Confirmation Sent Screen */}
+          {/* STEP 2: Email Confirmation & Verification Screen */}
           {step === 'verify' && (
-            <div className="rounded-3xl bg-card/85 border border-border/80 shadow-2xl p-6 sm:p-8 space-y-6 animate-fade-in backdrop-blur-md text-center">
-              <div className="space-y-3">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-primary/20 via-primary/10 to-transparent text-primary flex items-center justify-center mx-auto shadow-inner border border-primary/20 animate-pulse">
-                  <Mail className="w-8 h-8 text-primary" />
+            <div className="rounded-3xl bg-card/85 border border-border/80 shadow-2xl p-6 sm:p-7 space-y-4 animate-fade-in backdrop-blur-md text-center">
+              <div className="space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary/20 via-primary/10 to-transparent text-primary flex items-center justify-center mx-auto shadow-inner border border-primary/20 animate-pulse">
+                  <Mail className="w-7 h-7 text-primary" />
                 </div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Confirm your email address</h1>
-                <p className="text-muted-foreground text-xs leading-relaxed max-w-sm mx-auto">
-                  Follow the link sent to your email below to confirm this address and finish setting up your TaskFlow account.
+                <h1 className="text-xl font-extrabold tracking-tight text-foreground">Confirm your email address</h1>
+                <p className="text-muted-foreground text-xs leading-relaxed max-w-xs mx-auto">
+                  Enter your 6-digit verification code below to activate your TaskFlow account.
                 </p>
-                <div className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary font-bold text-xs border border-primary/20">
+                <div className="inline-block px-3.5 py-1 rounded-full bg-primary/10 text-primary font-bold text-xs border border-primary/20">
                   {registeredEmail}
                 </div>
               </div>
 
-              {/* Instructional Note */}
-              <div className="p-4 rounded-2xl bg-muted/40 border border-border/50 text-left space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Next Step:</span>
+              {/* 6-Digit OTP Form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  handleVerifyOtp(otpInput)
+                }}
+                className="space-y-2 pt-1 text-left"
+              >
+                <label htmlFor="otp" className="text-xs font-semibold text-foreground">
+                  Verification Code (6-digits)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="otp"
+                    type="text"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpInput}
+                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                    className="flex h-11 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-center text-lg tracking-widest font-mono font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={isVerifyingOtp || otpInput.length !== 6}
+                    className="h-11 px-5 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-primary/25 cursor-pointer shrink-0"
+                  >
+                    {isVerifyingOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
+                  </button>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed pl-6">
-                  Open the verification email in your inbox (or spam folder) and click the <strong>Confirm email address</strong> button. You will be automatically activated and redirected to sign in.
-                </p>
-              </div>
+
+                {otpError && (
+                  <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive font-medium flex items-center gap-1.5 animate-fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{otpError}</span>
+                  </div>
+                )}
+              </form>
+
+
 
               {resendStatus && (
-                <div className="rounded-xl bg-primary/10 border border-primary/20 p-3 text-xs text-primary font-semibold animate-fade-in">
+                <div className="rounded-xl bg-primary/10 border border-primary/20 p-2.5 text-xs text-primary font-semibold animate-fade-in">
                   {resendStatus}
                 </div>
               )}
 
-              {/* Direct Link to Sign In */}
-              <div className="space-y-3 pt-2">
-                <Link
-                  href={`/login?email=${encodeURIComponent(registeredEmail)}&verified=true`}
-                  className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 cursor-pointer"
+              {/* Bottom Actions */}
+              <div className="flex items-center justify-between text-xs pt-3 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setStep('register')}
+                  className="text-muted-foreground hover:text-foreground font-medium flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  Proceed to Sign In <ArrowRight className="w-4 h-4" />
-                </Link>
+                  <ArrowLeft className="w-3.5 h-3.5" /> Change email
+                </button>
 
-                <div className="flex items-center justify-between text-xs pt-3 border-t border-border/60">
-                  <button
-                    type="button"
-                    onClick={() => setStep('register')}
-                    className="text-muted-foreground hover:text-foreground font-medium flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Change email
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleResend}
-                    disabled={cooldownSeconds > 0 || isLoading}
-                    className={`font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      cooldownSeconds > 0
-                        ? 'text-muted-foreground/60 cursor-not-allowed'
-                        : 'text-primary hover:underline'
-                    }`}
-                  >
-                    <RotateCw className="w-3 h-3" />
-                    {cooldownSeconds > 0 ? `Resend email in ${cooldownSeconds}s` : 'Resend confirmation email'}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={cooldownSeconds > 0 || isLoading}
+                  className={`font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    cooldownSeconds > 0
+                      ? 'text-muted-foreground/60 cursor-not-allowed'
+                      : 'text-primary hover:underline'
+                  }`}
+                >
+                  <RotateCw className="w-3 h-3" />
+                  {cooldownSeconds > 0 ? `Resend code in ${cooldownSeconds}s` : 'Resend code'}
+                </button>
               </div>
             </div>
           )}
         </div>
       </main>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <RegisterContent />
+    </Suspense>
   )
 }

@@ -26,4 +26,7 @@ public class RegisterRequest {
     private String password;
 
     private String timezone;
+    private String authProvider;
+    private String providerId;
+    private String avatarUrl;
 }

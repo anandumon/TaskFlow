@@ -45,19 +45,29 @@ public class EmailVerificationService {
     private String appUrl;
 
     public void sendPendingConfirmationEmail(String email, String firstName) {
-        String baseUrl = (appUrl != null && !appUrl.isBlank()) ? appUrl : "http://localhost:3000";
         String rawToken = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        String confirmationUrl = baseUrl + "/verify-email?token=" + rawToken + "&email=" + email;
+        String rawOtp = String.format("%06d", secureRandom.nextInt(1000000));
+        sendPendingConfirmationEmail(email, firstName, rawToken, rawOtp);
+    }
+
+    public void sendPendingConfirmationEmail(String email, String firstName, String token, String otp) {
+        String baseUrl = (appUrl != null && !appUrl.isBlank()) ? appUrl : "http://localhost:3000";
+        String effectiveToken = (token != null && !token.isBlank()) ? token : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String confirmationUrl = baseUrl + "/verify-email?token=" + effectiveToken + "&email=" + email;
 
         log.info("\n" +
                 "======================================================================\n" +
-                "📧 [TASKFLOW CONFIRMATION EMAIL DISPATCH]\n" +
+                "📧 [TASKFLOW CONFIRMATION EMAIL & OTP DISPATCH]\n" +
                 "To               : {}\n" +
                 "Confirmation Link: {}\n" +
+                "Verification OTP : {}\n" +
                 "======================================================================",
-                email, confirmationUrl);
+                email, confirmationUrl, otp);
 
         emailService.sendEmailConfirmationLink(email, firstName, confirmationUrl);
+        if (otp != null && !otp.isBlank()) {
+            emailService.sendEmailVerificationOtp(email, firstName, otp);
+        }
     }
 
     @Autowired

@@ -8,6 +8,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { CommandPalette } from '@/components/command-palette'
+import { OnboardingWizardModal } from '@/features/onboarding/components/OnboardingWizardModal'
 import { Loader2 } from 'lucide-react'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -18,29 +19,59 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [initialLoaded, setInitialLoaded] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
-    loadUser()
-  }, [loadUser])
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated) {
-        router.push('/login')
-      } else {
-        fetchOrganizations().then((orgs) => {
-          if (orgs.length === 0) {
-            router.push('/onboarding')
-          } else {
-            const org = orgs[0]
-            fetchWorkspaces(org.id).then(() => {
-              setInitialLoaded(true)
-            })
-          }
-        })
+    if (user && user.id && user.email !== 'admin@taskflow.dev') {
+      const completed = localStorage.getItem(`taskflow_onboarding_completed_${user.id}`)
+      if (!completed) {
+        setShowOnboarding(true)
       }
     }
-  }, [isLoading, isAuthenticated, router, fetchOrganizations, fetchWorkspaces])
+  }, [user])
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
+    if (!token) {
+      setAuthChecked(true)
+      router.push('/login')
+      return
+    }
+
+    loadUser().finally(() => {
+      setAuthChecked(true)
+    })
+  }, [loadUser, router])
+
+  useEffect(() => {
+    if (!authChecked || isLoading) return
+
+    if (!isAuthenticated) {
+      router.push('/login')
+      return
+    }
+
+    fetchOrganizations()
+      .then((orgs) => {
+        if (!orgs || orgs.length === 0) {
+          router.push('/onboarding')
+        } else {
+          const org = orgs[0]
+          fetchWorkspaces(org.id)
+            .then(() => {
+              setInitialLoaded(true)
+            })
+            .catch(() => {
+              setInitialLoaded(true)
+            })
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching orgs in layout:', err)
+        setInitialLoaded(true)
+      })
+  }, [authChecked, isLoading, isAuthenticated, router, fetchOrganizations, fetchWorkspaces])
 
   useEffect(() => {
     if (currentOrg) {
@@ -59,7 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  if (isLoading || !initialLoaded) {
+  if (!authChecked || isLoading || !initialLoaded) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
         <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-xl shadow-primary/20 animate-pulse">
@@ -88,6 +119,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} />
+
+      {/* ClickUp-style Onboarding Wizard Modal for New Users */}
+      {showOnboarding && (
+        <OnboardingWizardModal
+          onComplete={() => {
+            setShowOnboarding(false)
+            if (user?.id) {
+              localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
+            }
+            localStorage.setItem('taskflow_onboarding_completed', 'true')
+          }}
+        />
+      )}
     </div>
   )
 }

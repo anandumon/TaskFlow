@@ -18,6 +18,7 @@ interface RegisterResult {
   email: string
   message?: string
   devCode?: string
+  confirmationToken?: string
 }
 
 interface AuthState {
@@ -26,6 +27,7 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
+  checkUser: (email: string) => Promise<boolean>
   login: (email: string, password: string) => Promise<void>
   socialLogin: (
     provider: string,
@@ -33,13 +35,17 @@ interface AuthState {
     name?: string,
     code?: string,
     idToken?: string,
-    mode?: string
+    mode?: string,
+    providerId?: string
   ) => Promise<void>
   register: (data: {
     firstName: string
     lastName: string
     email: string
     password: string
+    authProvider?: string
+    providerId?: string
+    avatarUrl?: string
   }) => Promise<RegisterResult>
   verifyEmail: (email: string, code: string) => Promise<string>
   confirmEmail: (email?: string, token?: string) => Promise<string>
@@ -54,6 +60,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+
+  checkUser: async (email: string) => {
+    try {
+      const res = await apiClient.get<{ email: string; exists: boolean }>(
+        `/api/v1/auth/check-user?email=${encodeURIComponent(email)}`
+      )
+      return res.data?.exists ?? false
+    } catch {
+      return false
+    }
+  },
 
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
@@ -85,10 +102,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     name?: string,
     code?: string,
     idToken?: string,
-    mode?: string
+    mode?: string,
+    providerId?: string
   ) => {
     set({ isLoading: true, error: null })
     try {
+      let cleanProviderId = providerId
+      if (!cleanProviderId && idToken) {
+        try {
+          const parts = idToken.split('.')
+          if (parts.length >= 2) {
+            const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+            const payload = JSON.parse(atob(base64))
+            cleanProviderId = payload.sub
+          }
+        } catch {}
+      }
+      if (!cleanProviderId && code) {
+        cleanProviderId = code.substring(0, 100)
+      }
+      if (!cleanProviderId) {
+        cleanProviderId = `${provider}-${Date.now()}`
+      }
+      if (cleanProviderId.length > 255) {
+        cleanProviderId = cleanProviderId.substring(0, 255)
+      }
+
       const response = await apiClient.post<{
         accessToken: string
         refreshToken: string
@@ -100,7 +139,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         code,
         idToken,
         mode: mode || 'signin',
-        providerId: code || idToken || `${provider}-${Date.now()}`,
+        providerId: cleanProviderId,
       })
 
       const { accessToken, refreshToken, user } = response.data
@@ -127,47 +166,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         requiresVerification?: boolean
         verificationMessage?: string
         devCode?: string
+        confirmationToken?: string
         user: User
       }>('/api/v1/auth/register', data)
 
-      // Dispatch live real email confirmation link to user's inbox via Supabase cloud mailer
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cmNmY3pkZnN0bnltYmVpY21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDQ3NjYsImV4cCI6MjEwMzgyMDc2Nn0.Ec38y04rUfXHECajZ__g1CW0hn_k41jSXxTwBJjO9_c'
-
-        const redirectTo = typeof window !== 'undefined'
-          ? `${window.location.origin}/verify-email?email=${encodeURIComponent(data.email)}`
-          : `http://localhost:3000/verify-email?email=${encodeURIComponent(data.email)}`
-
-        fetch(`${supabaseUrl}/auth/v1/signup`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-          },
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-            options: {
-              data: {
-                first_name: data.firstName,
-                last_name: data.lastName,
-              },
-              emailRedirectTo: redirectTo,
-            },
-          }),
-        }).catch((e) => console.warn('Supabase mailer non-fatal:', e))
-      } catch (mailErr) {
-        console.warn('Live mailer dispatch warning:', mailErr)
-      }
+      set({ isLoading: false, error: null })
 
       set({ isLoading: false, error: null })
 
       return {
         requiresVerification: true,
         email: data.email,
-        message: 'A confirmation link has been sent to your email address.',
+        message: response.data?.verificationMessage || 'A confirmation link has been sent to your email address.',
+        devCode: response.data?.devCode,
+        confirmationToken: response.data?.confirmationToken,
       }
     } catch (err: any) {
       set({
@@ -181,51 +193,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   verifyEmail: async (email: string, code: string) => {
     set({ isLoading: true, error: null })
     try {
-      // 1. Verify on live cloud mailer
-      let cloudVerified = false
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cmNmY3pkZnN0bnltYmVpY21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDQ3NjYsImV4cCI6MjEwMzgyMDc2Nn0.Ec38y04rUfXHECajZ__g1CW0hn_k41jSXxTwBJjO9_c'
-
-        const res = await fetch(`${supabaseUrl}/auth/v1/verify`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-          },
-          body: JSON.stringify({
-            type: 'email',
-            email,
-            token: code,
-          }),
-        })
-        if (res.ok) {
-          cloudVerified = true
-        }
-      } catch (cloudErr) {
-        console.warn('Cloud OTP verification fallback:', cloudErr)
-      }
-
-      // 2. Complete verification in backend
       try {
         const response = await apiClient.post<{
           success: boolean
           code: string
           message: string
           remainingAttempts?: number
+          accessToken?: string
+          refreshToken?: string
+          user?: User
         }>('/api/v1/auth/verify-email', {
           email,
           code,
           otp: code,
         })
+
+        if (response.data.accessToken) {
+          apiClient.setAccessToken(response.data.accessToken)
+          localStorage.setItem('accessToken', response.data.accessToken)
+          if (response.data.refreshToken) {
+            localStorage.setItem('refreshToken', response.data.refreshToken)
+          }
+          if (response.data.user) {
+            set({ user: response.data.user, isAuthenticated: true })
+          }
+        }
+
         set({ isLoading: false })
         return response.data?.message || 'Email verified successfully!'
       } catch (backendErr: any) {
-        if (cloudVerified) {
-          set({ isLoading: false })
-          return 'Email verified successfully!'
-        }
         throw backendErr
       }
     } catch (err: any) {
@@ -249,8 +245,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         success: boolean
         code: string
         message: string
+        accessToken?: string
+        refreshToken?: string
+        user?: User
       }>(`/api/v1/auth/confirm-email?${queryParams.toString()}`)
       
+      if (response.data.accessToken) {
+        apiClient.setAccessToken(response.data.accessToken)
+        localStorage.setItem('accessToken', response.data.accessToken)
+        if (response.data.refreshToken) {
+          localStorage.setItem('refreshToken', response.data.refreshToken)
+        }
+        if (response.data.user) {
+          set({ user: response.data.user, isAuthenticated: true })
+        }
+      }
+
       set({ isLoading: false })
       return response.data?.message || 'Email confirmed successfully!'
     } catch (err: any) {
@@ -265,34 +275,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   resendCode: async (email: string) => {
     try {
-      // Trigger cloud mailer dispatch to real inbox
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cmNmY3pkZnN0bnltYmVpY21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDQ3NjYsImV4cCI6MjEwMzgyMDc2Nn0.Ec38y04rUfXHECajZ__g1CW0hn_k41jSXxTwBJjO9_c'
-
-        const redirectTo = typeof window !== 'undefined'
-          ? `${window.location.origin}/verify-email?email=${encodeURIComponent(email)}`
-          : `http://localhost:3000/verify-email?email=${encodeURIComponent(email)}`
-
-        fetch(`${supabaseUrl}/auth/v1/resend`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-          },
-          body: JSON.stringify({
-            type: 'signup',
-            email,
-            options: {
-              emailRedirectTo: redirectTo,
-            },
-          }),
-        }).catch((e) => console.warn('Supabase resend non-fatal:', e))
-      } catch (mailErr) {
-        console.warn('Resend mailer dispatch warning:', mailErr)
-      }
-
       const response = await apiClient.post<{
         success: boolean
         code: string
@@ -320,12 +302,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadUser: async () => {
-    const token = localStorage.getItem('accessToken')
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
     if (!token) {
-      set({ isLoading: false })
+      set({ user: null, isAuthenticated: false, isLoading: false })
       return
     }
 
+    set({ isLoading: true })
     apiClient.setAccessToken(token)
     try {
       const response = await apiClient.get<User>('/api/v1/auth/me')

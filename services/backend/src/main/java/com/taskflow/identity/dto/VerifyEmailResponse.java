@@ -15,4 +15,7 @@ public class VerifyEmailResponse {
     private String code;
     private String message;
     private Integer remainingAttempts;
+    private String accessToken;
+    private String refreshToken;
+    private AuthResponse.UserResponse user;
 }

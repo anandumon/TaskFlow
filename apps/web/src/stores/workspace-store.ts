@@ -44,6 +44,7 @@ interface WorkspaceState {
   fetchWorkspaces: (orgId: string) => Promise<Workspace[]>
   setCurrentWorkspace: (workspace: Workspace | null) => void
   createWorkspace: (orgId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
+  updateWorkspace: (orgId: string, workspaceId: string, data: { name?: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
   fetchTeams: (workspaceId: string) => Promise<Team[]>
   createTeam: (workspaceId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Team>
 }
@@ -88,6 +89,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return newWs
     } catch (err: any) {
       set({ error: err?.message || 'Failed to create workspace', isLoading: false })
+      throw err
+    }
+  },
+
+  updateWorkspace: async (orgId, workspaceId, data) => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await apiClient.put<Workspace>(
+        `/api/v1/organizations/${orgId}/workspaces/${workspaceId}`,
+        data
+      )
+      const updatedWs = res.data
+      set((state) => ({
+        workspaces: state.workspaces.map((w) => (w.id === workspaceId ? updatedWs : w)),
+        currentWorkspace: state.currentWorkspace?.id === workspaceId ? updatedWs : state.currentWorkspace,
+        isLoading: false,
+      }))
+      return updatedWs
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to update workspace', isLoading: false })
       throw err
     }
   },
