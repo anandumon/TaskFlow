@@ -19,6 +19,9 @@ public class User extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(name = "auth_user_id", unique = true)
+    private UUID authUserId;
+
     @Column(name = "password_hash")
     private String passwordHash;
 

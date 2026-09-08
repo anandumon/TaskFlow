@@ -22,6 +22,9 @@ public class SmtpEmailService implements EmailService {
     @Value("${spring.mail.username:noreply@taskflow.dev}")
     private String fromEmail;
 
+    @Value("${taskflow.app.url:http://localhost:3000}")
+    private String appUrl;
+
     @Autowired
     public SmtpEmailService(@Autowired(required = false) JavaMailSender mailSender,
                             EmailTemplateService emailTemplateService,
@@ -106,6 +109,47 @@ public class SmtpEmailService implements EmailService {
         } catch (Exception e) {
             log.warn("⚠ [EMAIL DISPATCH] SMTP server unavailable ({}). Use the confirmation link logged above to complete verification.",
                     e.getMessage());
+        }
+    }
+
+    @Async
+    @Override
+    public void sendAccountCreationSuccessEmail(String recipientEmail, String recipientName) {
+        String maskedEmail = maskEmail(recipientEmail);
+        String baseUrl = (appUrl != null && !appUrl.isBlank()) ? appUrl : "http://localhost:3000";
+        String loginUrl = baseUrl + "/login?email=" + recipientEmail + "&verified=true";
+
+        log.info("\n" +
+                "======================================================================\n" +
+                "🎉 [TASKFLOW EMAIL DISPATCH] ACCOUNT CREATION SUCCESSFUL\n" +
+                "To        : {}\n" +
+                "Recipient : {}\n" +
+                "Login URL : {}\n" +
+                "======================================================================",
+                recipientEmail, recipientName, loginUrl);
+
+        if (mailSender == null) {
+            log.info("ℹ Local mode: JavaMailSender bean unavailable.");
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            String sender = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "noreply@taskflow.dev";
+            helper.setFrom(sender, "TaskFlow");
+            helper.setTo(recipientEmail);
+            helper.setSubject("Account Created Successfully - Welcome to TaskFlow!");
+
+            String htmlBody = emailTemplateService.renderAccountCreatedTemplate(recipientName, loginUrl);
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            log.info("✔ [EMAIL DISPATCH] Account creation success email transmitted via SMTP for: {}", maskedEmail);
+        } catch (Exception e) {
+            log.warn("⚠ [EMAIL DISPATCH] Failed to transmit account creation success email to {}: {}",
+                    maskedEmail, e.getMessage());
         }
     }
 

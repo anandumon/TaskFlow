@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,6 +24,47 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    @Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @GetMapping("/debug/auth-schema")
+    public ResponseEntity<?> debugAuthSchema() {
+        if (jdbcTemplate == null) return ResponseEntity.ok("No jdbcTemplate");
+        var result = new java.util.HashMap<String, Object>();
+        try {
+            var triggers = jdbcTemplate.queryForList(
+                "SELECT tgname, relname, proname FROM pg_trigger " +
+                "JOIN pg_class ON pg_trigger.tgrelid = pg_class.oid " +
+                "JOIN pg_proc ON pg_trigger.tgfoid = pg_proc.oid " +
+                "JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid " +
+                "WHERE pg_namespace.nspname = 'auth' AND pg_class.relname = 'users';"
+            );
+            result.put("triggers", triggers);
+
+            var columns = jdbcTemplate.queryForList(
+                "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'users' ORDER BY ordinal_position;"
+            );
+            result.put("columns", columns);
+
+            var users = jdbcTemplate.queryForList(
+                "SELECT id, email, created_at, confirmed_at, email_confirmed_at FROM auth.users ORDER BY created_at DESC LIMIT 5;"
+            );
+            result.put("users", users);
+        } catch (Exception ex) {
+            result.put("error", ex.getMessage());
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/debug/clean-auth-users")
+    public ResponseEntity<?> cleanAuthUsers() {
+        if (jdbcTemplate != null) {
+            jdbcTemplate.update("DELETE FROM auth.identities;");
+            jdbcTemplate.update("DELETE FROM auth.users;");
+            return ResponseEntity.ok("Deleted all rows from auth.identities and auth.users");
+        }
+        return ResponseEntity.ok("No jdbcTemplate");
+    }
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(

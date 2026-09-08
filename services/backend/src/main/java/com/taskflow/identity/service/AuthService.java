@@ -54,7 +54,8 @@ public class AuthService {
                        EventPublisher eventPublisher,
                        EmailVerificationService emailVerificationService,
                        @Autowired(required = false) OrganizationRepository organizationRepository,
-                       @Autowired(required = false) OrganizationMemberRepository organizationMemberRepository) {
+                       @Autowired(required = false) OrganizationMemberRepository organizationMemberRepository,
+                       @Autowired(required = false) SupabaseUserProvisioner supabaseUserProvisioner) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -64,7 +65,10 @@ public class AuthService {
         this.emailVerificationService = emailVerificationService;
         this.organizationRepository = organizationRepository;
         this.organizationMemberRepository = organizationMemberRepository;
+        this.supabaseUserProvisioner = supabaseUserProvisioner;
     }
+
+    private final SupabaseUserProvisioner supabaseUserProvisioner;
 
     @lombok.Data
     @lombok.Builder
@@ -175,6 +179,9 @@ public class AuthService {
                 pendingRegistrations.remove(email);
                 log.info("✔ User successfully created in database after OTP verification: {}", savedUser.getEmail());
 
+                // Send Account Creation Success welcome email
+                emailVerificationService.sendAccountCreationSuccessEmail(savedUser.getEmail(), savedUser.getFirstName());
+
                 AuthResponse auth = generateAuthResponse(savedUser);
                 return VerifyEmailResponse.builder()
                         .success(true)
@@ -202,6 +209,7 @@ public class AuthService {
                     user.setEmailVerified(true);
                     user.setStatus("ACTIVE");
                     user = userRepository.save(user);
+                    emailVerificationService.sendAccountCreationSuccessEmail(user.getEmail(), user.getFirstName());
                 }
                 AuthResponse auth = generateAuthResponse(user);
                 return VerifyEmailResponse.builder()
@@ -314,7 +322,8 @@ public class AuthService {
 
     public boolean checkUserExists(String email) {
         if (email == null || email.isBlank()) return false;
-        return userRepository.existsByEmailAndDeletedFalse(email.toLowerCase().trim());
+        String normalized = email.toLowerCase().trim();
+        return userRepository.existsByEmailAndDeletedFalse(normalized) || pendingRegistrations.containsKey(normalized);
     }
 
     @Transactional
@@ -413,6 +422,10 @@ public class AuthService {
 
             User savedUser = userRepository.save(newUser);
             log.info("✔ Google user signed up and saved to database: {}", savedUser.getEmail());
+
+            // Send Account Creation Success welcome email
+            emailVerificationService.sendAccountCreationSuccessEmail(savedUser.getEmail(), savedUser.getFirstName());
+
             return generateAuthResponse(savedUser);
         }
 

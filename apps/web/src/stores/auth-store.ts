@@ -1,9 +1,11 @@
 'use client'
 
 import { create } from 'zustand'
+import { supabase } from '@/lib/supabase/client'
+import { mapSupabaseError } from '@/lib/supabase/errors'
 import { apiClient } from '@/lib/api-client'
 
-interface User {
+export interface User {
   id: string
   email: string
   firstName: string
@@ -13,12 +15,10 @@ interface User {
   emailVerified: boolean
 }
 
-interface RegisterResult {
+export interface RegisterResult {
   requiresVerification: boolean
   email: string
   message?: string
-  devCode?: string
-  confirmationToken?: string
 }
 
 interface AuthState {
@@ -27,28 +27,14 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
-  checkUser: (email: string) => Promise<boolean>
   login: (email: string, password: string) => Promise<void>
-  socialLogin: (
-    provider: string,
-    email?: string,
-    name?: string,
-    code?: string,
-    idToken?: string,
-    mode?: string,
-    providerId?: string
-  ) => Promise<void>
   register: (data: {
     firstName: string
     lastName: string
     email: string
     password: string
-    authProvider?: string
-    providerId?: string
-    avatarUrl?: string
   }) => Promise<RegisterResult>
   verifyEmail: (email: string, code: string) => Promise<string>
-  confirmEmail: (email?: string, token?: string) => Promise<string>
   resendCode: (email: string) => Promise<string>
   logout: () => Promise<void>
   loadUser: () => Promise<void>
@@ -61,285 +47,201 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  checkUser: async (email: string) => {
-    try {
-      const res = await apiClient.get<{ email: string; exists: boolean }>(
-        `/api/v1/auth/check-user?email=${encodeURIComponent(email)}`
-      )
-      return res.data?.exists ?? false
-    } catch {
-      return false
-    }
-  },
-
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await apiClient.post<{
-        accessToken: string
-        refreshToken: string
-        user: User
-      }>('/api/v1/auth/login', { email, password })
+      const cleanEmail = email.trim().toLowerCase()
+      const res = await apiClient.post<any>('/api/v1/auth/login', {
+        email: cleanEmail,
+        password,
+      })
 
-      const { accessToken, refreshToken, user } = response.data
-      apiClient.setAccessToken(accessToken)
-      localStorage.setItem('accessToken', accessToken)
-      localStorage.setItem('refreshToken', refreshToken)
+      const authData = res.data
+      if (!authData || !authData.accessToken) {
+        throw new Error('Authentication failed: No access token returned')
+      }
 
-      set({ user, isAuthenticated: true, isLoading: false })
-    } catch (err: any) {
+      apiClient.setAccessToken(authData.accessToken)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('accessToken', authData.accessToken)
+        if (authData.refreshToken) {
+          localStorage.setItem('refreshToken', authData.refreshToken)
+        }
+      }
+
+      const u = authData.user
       set({
-        error: err?.message || 'Login failed',
+        user: {
+          id: u?.id || '',
+          email: u?.email || cleanEmail,
+          firstName: u?.firstName || '',
+          lastName: u?.lastName || '',
+          displayName: u?.displayName || `${u?.firstName || ''} ${u?.lastName || ''}`.trim() || cleanEmail,
+          emailVerified: !!u?.emailVerified,
+          avatarUrl: u?.avatarUrl,
+        },
+        isAuthenticated: true,
         isLoading: false,
+        error: null,
       })
-      throw err
-    }
-  },
-
-  socialLogin: async (
-    provider: string,
-    email?: string,
-    name?: string,
-    code?: string,
-    idToken?: string,
-    mode?: string,
-    providerId?: string
-  ) => {
-    set({ isLoading: true, error: null })
-    try {
-      let cleanProviderId = providerId
-      if (!cleanProviderId && idToken) {
-        try {
-          const parts = idToken.split('.')
-          if (parts.length >= 2) {
-            const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-            const payload = JSON.parse(atob(base64))
-            cleanProviderId = payload.sub
-          }
-        } catch {}
-      }
-      if (!cleanProviderId && code) {
-        cleanProviderId = code.substring(0, 100)
-      }
-      if (!cleanProviderId) {
-        cleanProviderId = `${provider}-${Date.now()}`
-      }
-      if (cleanProviderId.length > 255) {
-        cleanProviderId = cleanProviderId.substring(0, 255)
-      }
-
-      const response = await apiClient.post<{
-        accessToken: string
-        refreshToken: string
-        user: User
-      }>('/api/v1/auth/oauth', {
-        provider,
-        email,
-        name,
-        code,
-        idToken,
-        mode: mode || 'signin',
-        providerId: cleanProviderId,
-      })
-
-      const { accessToken, refreshToken, user } = response.data
-      apiClient.setAccessToken(accessToken)
-      localStorage.setItem('accessToken', accessToken)
-      localStorage.setItem('refreshToken', refreshToken)
-
-      set({ user, isAuthenticated: true, isLoading: false })
     } catch (err: any) {
-      set({
-        error: err?.message || 'OAuth social login failed',
-        isLoading: false,
-      })
-      throw err
+      const errMsg = err?.response?.data?.message || err?.message || 'Invalid email or password'
+      set({ error: errMsg, isLoading: false })
+      throw new Error(errMsg)
     }
   },
 
   register: async (data) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await apiClient.post<{
-        accessToken?: string
-        refreshToken?: string
-        requiresVerification?: boolean
-        verificationMessage?: string
-        devCode?: string
-        confirmationToken?: string
-        user: User
-      }>('/api/v1/auth/register', data)
+      const cleanEmail = data.email.trim().toLowerCase()
+      await apiClient.post('/api/v1/auth/register', {
+        email: cleanEmail,
+        password: data.password,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+      })
 
-      set({ isLoading: false, error: null })
-
-      set({ isLoading: false, error: null })
-
+      set({ isLoading: false })
       return {
         requiresVerification: true,
-        email: data.email,
-        message: response.data?.verificationMessage || 'A confirmation link has been sent to your email address.',
-        devCode: response.data?.devCode,
-        confirmationToken: response.data?.confirmationToken,
+        email: cleanEmail,
+        message: 'A verification email with your 6-digit code has been sent.',
       }
     } catch (err: any) {
-      set({
-        error: err?.message || 'Registration failed',
-        isLoading: false,
-      })
-      throw err
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to create account. Please try again.'
+      set({ error: errMsg, isLoading: false })
+      throw new Error(errMsg)
     }
   },
 
   verifyEmail: async (email: string, code: string) => {
     set({ isLoading: true, error: null })
     try {
-      try {
-        const response = await apiClient.post<{
-          success: boolean
-          code: string
-          message: string
-          remainingAttempts?: number
-          accessToken?: string
-          refreshToken?: string
-          user?: User
-        }>('/api/v1/auth/verify-email', {
-          email,
-          code,
-          otp: code,
+      const cleanToken = code.replace(/[\s-]+/g, '').trim()
+      const cleanEmail = email.trim().toLowerCase()
+
+      const res = await apiClient.post<any>('/api/v1/auth/verify-email', {
+        email: cleanEmail,
+        code: cleanToken,
+        otp: cleanToken,
+      })
+
+      const authData = res.data
+      if (authData?.accessToken) {
+        apiClient.setAccessToken(authData.accessToken)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', authData.accessToken)
+          if (authData.refreshToken) {
+            localStorage.setItem('refreshToken', authData.refreshToken)
+          }
+        }
+      }
+
+      if (authData?.user) {
+        const u = authData.user
+        set({
+          user: {
+            id: u.id,
+            email: u.email || cleanEmail,
+            firstName: u.firstName || '',
+            lastName: u.lastName || '',
+            displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || cleanEmail,
+            emailVerified: true,
+            avatarUrl: u.avatarUrl,
+          },
+          isAuthenticated: true,
+          isLoading: false,
         })
-
-        if (response.data.accessToken) {
-          apiClient.setAccessToken(response.data.accessToken)
-          localStorage.setItem('accessToken', response.data.accessToken)
-          if (response.data.refreshToken) {
-            localStorage.setItem('refreshToken', response.data.refreshToken)
-          }
-          if (response.data.user) {
-            set({ user: response.data.user, isAuthenticated: true })
-          }
-        }
-
+      } else {
         set({ isLoading: false })
-        return response.data?.message || 'Email verified successfully!'
-      } catch (backendErr: any) {
-        throw backendErr
-      }
-    } catch (err: any) {
-      const errMsg = err?.message || 'Verification failed. Invalid or expired code.'
-      set({
-        error: errMsg,
-        isLoading: false,
-      })
-      throw err
-    }
-  },
-
-  confirmEmail: async (email?: string, token?: string) => {
-    set({ isLoading: true, error: null })
-    try {
-      const queryParams = new URLSearchParams()
-      if (email) queryParams.append('email', email)
-      if (token) queryParams.append('token', token)
-
-      const response = await apiClient.post<{
-        success: boolean
-        code: string
-        message: string
-        accessToken?: string
-        refreshToken?: string
-        user?: User
-      }>(`/api/v1/auth/confirm-email?${queryParams.toString()}`)
-      
-      if (response.data.accessToken) {
-        apiClient.setAccessToken(response.data.accessToken)
-        localStorage.setItem('accessToken', response.data.accessToken)
-        if (response.data.refreshToken) {
-          localStorage.setItem('refreshToken', response.data.refreshToken)
-        }
-        if (response.data.user) {
-          set({ user: response.data.user, isAuthenticated: true })
-        }
       }
 
-      set({ isLoading: false })
-      return response.data?.message || 'Email confirmed successfully!'
+      return 'Email verified successfully!'
     } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || 'Failed to confirm email.'
-      set({
-        error: errMsg,
-        isLoading: false,
-      })
-      throw err
+      const errMsg = err?.response?.data?.message || err?.message || 'Verification failed. Please check the code.'
+      set({ error: errMsg, isLoading: false })
+      throw new Error(errMsg)
     }
   },
 
   resendCode: async (email: string) => {
     try {
-      const response = await apiClient.post<{
-        success: boolean
-        code: string
-        message: string
-        retryAfterSeconds?: number
-      }>(`/api/v1/auth/resend-code?email=${encodeURIComponent(email)}`)
-
-      return response.data?.message || 'Confirmation email resent!'
+      const cleanEmail = email.trim().toLowerCase()
+      await apiClient.post('/api/v1/auth/resend-verification-otp', {
+        email: cleanEmail,
+      })
+      return 'Verification code sent successfully!'
     } catch (err: any) {
-      throw err
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to resend verification code.'
+      throw new Error(errMsg)
     }
   },
 
   logout: async () => {
-    const refreshToken = localStorage.getItem('refreshToken')
     try {
-      await apiClient.post('/api/v1/auth/logout', { refreshToken })
-    } catch {
-      // Ignore logout errors
+      await supabase.auth.signOut()
+    } finally {
+      apiClient.setAccessToken(null)
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+      }
+      set({ user: null, isAuthenticated: false, error: null })
     }
-    apiClient.setAccessToken(null)
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    set({ user: null, isAuthenticated: false, isLoading: false })
   },
 
   loadUser: async () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
-    if (!token) {
-      set({ user: null, isAuthenticated: false, isLoading: false })
-      return
-    }
-
-    set({ isLoading: true })
-    apiClient.setAccessToken(token)
     try {
-      const response = await apiClient.get<User>('/api/v1/auth/me')
-      set({ user: response.data, isAuthenticated: true, isLoading: false })
-    } catch {
-      // Try refresh
-      const refreshToken = localStorage.getItem('refreshToken')
-      if (refreshToken) {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
+      if (token) {
+        apiClient.setAccessToken(token)
         try {
-          const res = await apiClient.post<{
-            accessToken: string
-            refreshToken: string
-            user: User
-          }>('/api/v1/auth/refresh', { refreshToken })
-
-          apiClient.setAccessToken(res.data.accessToken)
-          localStorage.setItem('accessToken', res.data.accessToken)
-          localStorage.setItem('refreshToken', res.data.refreshToken)
-          set({
-            user: res.data.user,
-            isAuthenticated: true,
-            isLoading: false,
-          })
-          return
+          const res = await apiClient.get<any>('/api/v1/auth/me')
+          if (res.data) {
+            const u = res.data
+            set({
+              user: {
+                id: u.id,
+                email: u.email || '',
+                firstName: u.firstName || '',
+                lastName: u.lastName || '',
+                displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'User',
+                emailVerified: !!u.emailVerified,
+                avatarUrl: u.avatarUrl,
+              },
+              isAuthenticated: true,
+              isLoading: false,
+            })
+            return
+          }
         } catch {
-          // Refresh failed
+          // Token expired or invalid, continue to fallback or clear
         }
       }
-      apiClient.setAccessToken(null)
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
+
+      // Fallback: check Supabase session
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        apiClient.setAccessToken(session.access_token)
+        const u = session.user
+        set({
+          user: {
+            id: u.id,
+            email: u.email || '',
+            firstName: u.user_metadata?.first_name || '',
+            lastName: u.user_metadata?.last_name || '',
+            displayName: `${u.user_metadata?.first_name || ''} ${u.user_metadata?.last_name || ''}`.trim() || u.email || 'User',
+            emailVerified: !!u.email_confirmed_at,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        })
+        return
+      }
+
+      set({ user: null, isAuthenticated: false, isLoading: false })
+    } catch {
       set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },

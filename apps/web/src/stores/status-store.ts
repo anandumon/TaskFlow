@@ -70,12 +70,31 @@ export const BUILT_IN_TEMPLATES: Record<string, StatusTemplate> = {
   },
 }
 
+export const CATEGORY_RANK: Record<StatusCategory, number> = {
+  NOT_STARTED: 0,
+  ACTIVE: 1,
+  DONE: 2,
+  CLOSED: 3,
+}
+
+export function sortStatusesByStructure(statuses: CustomStatus[]): CustomStatus[] {
+  return [...statuses].sort((a, b) => {
+    const rankA = CATEGORY_RANK[a.category] ?? 1
+    const rankB = CATEGORY_RANK[b.category] ?? 1
+    if (rankA !== rankB) {
+      return rankA - rankB
+    }
+    return (a.order ?? 0) - (b.order ?? 0)
+  })
+}
+
 interface StatusStore {
   workspaceStatuses: Record<string, CustomStatus[]>
   selectedTemplate: Record<string, string>
   progressIconsEnabled: boolean
   getStatuses: (workspaceId: string) => CustomStatus[]
   setStatuses: (workspaceId: string, statuses: CustomStatus[]) => void
+  reorderStatuses: (workspaceId: string, statuses: CustomStatus[]) => void
   addStatus: (workspaceId: string, category: StatusCategory, name: string, color?: string) => void
   updateStatus: (workspaceId: string, statusId: string, updates: Partial<CustomStatus>) => void
   deleteStatus: (workspaceId: string, statusId: string) => void
@@ -100,16 +119,31 @@ export const useStatusStore = create<StatusStore>()(
       getStatuses: (workspaceId: string) => {
         const current = get().workspaceStatuses[workspaceId]
         if (current && current.length > 0) {
-          return current.sort((a, b) => a.order - b.order)
+          return sortStatusesByStructure(current)
         }
         return DEFAULT_STATUSES
       },
 
       setStatuses: (workspaceId: string, statuses: CustomStatus[]) => {
+        const reindexed = sortStatusesByStructure(statuses).map((s, idx) => ({ ...s, order: idx }))
         set((state) => ({
           workspaceStatuses: {
             ...state.workspaceStatuses,
-            [workspaceId]: statuses,
+            [workspaceId]: reindexed,
+          },
+        }))
+      },
+
+      reorderStatuses: (workspaceId: string, statuses: CustomStatus[]) => {
+        const updated = statuses.map((s, idx) => ({ ...s, order: idx }))
+        set((state) => ({
+          workspaceStatuses: {
+            ...state.workspaceStatuses,
+            [workspaceId]: updated,
+          },
+          selectedTemplate: {
+            ...state.selectedTemplate,
+            [workspaceId]: 'custom',
           },
         }))
       },
@@ -130,13 +164,18 @@ export const useStatusStore = create<StatusStore>()(
           name: name.toUpperCase().trim(),
           color: color || defaultColors[category],
           category,
-          order: statuses.length,
+          order: 0,
         }
+
+        const reindexed = sortStatusesByStructure([...statuses, newStatus]).map((s, idx) => ({
+          ...s,
+          order: idx,
+        }))
 
         set((state) => ({
           workspaceStatuses: {
             ...state.workspaceStatuses,
-            [workspaceId]: [...statuses, newStatus],
+            [workspaceId]: reindexed,
           },
           selectedTemplate: {
             ...state.selectedTemplate,

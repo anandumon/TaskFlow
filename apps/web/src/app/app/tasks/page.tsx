@@ -27,6 +27,7 @@ import {
   FileCode,
   ChevronRight,
   ChevronDown,
+  GripVertical,
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-store'
@@ -80,8 +81,111 @@ export default function TasksPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
 
-  const { getStatuses, progressIconsEnabled } = useStatusStore()
+  const { getStatuses, reorderStatuses, progressIconsEnabled } = useStatusStore()
   const workspaceStatuses = getStatuses(currentWorkspace?.id || 'default')
+
+  // Drag and Drop State for Columns and Tasks
+  const [draggedColId, setDraggedColId] = useState<string | null>(null)
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [taskDragOverColId, setTaskDragOverColId] = useState<string | null>(null)
+
+  const handleColDragStart = (e: React.DragEvent, colId: string) => {
+    e.dataTransfer.setData('type', 'column')
+    e.dataTransfer.setData('col_id', colId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggedColId(colId)
+  }
+
+  const handleColDragOver = (e: React.DragEvent, colId: string) => {
+    if (draggedColId && draggedColId !== colId) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverColId(colId)
+    }
+  }
+
+  const handleColDragLeave = (colId: string) => {
+    if (dragOverColId === colId) {
+      setDragOverColId(null)
+    }
+  }
+
+  const handleColDrop = (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault()
+    if (!draggedColId || draggedColId === targetColId) {
+      setDraggedColId(null)
+      setDragOverColId(null)
+      return
+    }
+
+    const currentStatuses = [...workspaceStatuses]
+    const fromIndex = currentStatuses.findIndex((s) => s.id === draggedColId)
+    const toIndex = currentStatuses.findIndex((s) => s.id === targetColId)
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const [moved] = currentStatuses.splice(fromIndex, 1)
+      currentStatuses.splice(toIndex, 0, moved)
+      const updated = currentStatuses.map((s, idx) => ({ ...s, order: idx }))
+      reorderStatuses(currentWorkspace?.id || 'default', updated)
+      showToast(`Position updated: "${moved.name}" column moved`)
+    }
+
+    setDraggedColId(null)
+    setDragOverColId(null)
+  }
+
+  const handleColDragEnd = () => {
+    setDraggedColId(null)
+    setDragOverColId(null)
+  }
+
+  const handleTaskDragStart = (e: React.DragEvent, taskId: string) => {
+    e.stopPropagation()
+    e.dataTransfer.setData('type', 'task')
+    e.dataTransfer.setData('task_id', taskId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggedTaskId(taskId)
+  }
+
+  const handleTaskDragOverCol = (e: React.DragEvent, colId: string) => {
+    if (draggedTaskId) {
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
+      setTaskDragOverColId(colId)
+    }
+  }
+
+  const handleTaskDragLeaveCol = (colId: string) => {
+    if (taskDragOverColId === colId) {
+      setTaskDragOverColId(null)
+    }
+  }
+
+  const handleTaskDropOnCol = (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggedTaskId) return
+
+    const task = tasks.find((t) => t.id === draggedTaskId)
+    if (task && task.status !== targetColId) {
+      updateStatus(draggedTaskId, targetColId as TaskStatus)
+      const targetCol = columns.find((c) => c.id === targetColId)
+      if (targetCol?.category === 'CLOSED') {
+        updateEnvironment(draggedTaskId, 'MAIN')
+      }
+      showToast(`Moved "${task.title}" to ${targetCol?.title || targetColId}`)
+    }
+
+    setDraggedTaskId(null)
+    setTaskDragOverColId(null)
+  }
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null)
+    setTaskDragOverColId(null)
+  }
 
   useEffect(() => {
     if (currentWorkspace?.id) {
@@ -412,9 +516,9 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Board View */}
+        {/* Board View - Horizontal Kanban Workflow matching Statuses Structure */}
         {viewMode === 'board' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+          <div className="flex gap-4 items-start overflow-x-auto pb-6 pt-1 px-1 scrollbar-thin scrollbar-thumb-border/80 scrollbar-track-transparent">
             {columns.map((col) => {
               const colTasks = filteredTasks.filter(
                 (t) =>
@@ -423,14 +527,36 @@ export default function TasksPage() {
               )
               const isClosed = col.category === 'CLOSED' || col.id === 'done' || col.id === 'complete'
 
+              const isDraggingThisCol = draggedColId === col.id
+              const isDragOverThisCol = dragOverColId === col.id
+              const isTaskDragOverThisCol = taskDragOverColId === col.id
+
               return (
                 <div
                   key={col.id}
-                  className="bg-card/75 border border-border/70 rounded-2xl p-4 space-y-3 backdrop-blur-sm shadow-sm flex flex-col"
+                  onDragOver={(e) => handleColDragOver(e, col.id)}
+                  onDragLeave={() => handleColDragLeave(col.id)}
+                  onDrop={(e) => handleColDrop(e, col.id)}
+                  className={`w-[320px] min-w-[300px] max-w-[340px] shrink-0 bg-card/75 border rounded-2xl p-4 space-y-3 backdrop-blur-sm shadow-sm flex flex-col transition-all duration-200 ${
+                    isDraggingThisCol
+                      ? 'opacity-40 border-dashed border-primary ring-2 ring-primary/20 scale-[0.98]'
+                      : isDragOverThisCol
+                      ? 'border-primary ring-2 ring-primary/60 bg-primary/[0.04] scale-[1.02] shadow-lg'
+                      : isTaskDragOverThisCol
+                      ? 'border-primary/80 ring-2 ring-primary/40 bg-accent/30'
+                      : 'border-border/70 hover:border-border'
+                  }`}
                 >
-                  {/* Column Header */}
-                  <div className="flex items-center justify-between pb-2.5 border-b border-border/50">
-                    <div className="flex items-center gap-2">
+                  {/* Column Header (Draggable to reorder columns) */}
+                  <div
+                    draggable={true}
+                    onDragStart={(e) => handleColDragStart(e, col.id)}
+                    onDragEnd={handleColDragEnd}
+                    className="flex items-center justify-between pb-2.5 border-b border-border/50 cursor-grab active:cursor-grabbing group/header select-none"
+                    title="Drag column header to change position"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 group-hover/header:text-muted-foreground/90 shrink-0 transition-colors" />
                       <div
                         className="w-3 h-3 rounded-full flex items-center justify-center shrink-0"
                         style={{
@@ -440,8 +566,8 @@ export default function TasksPage() {
                       >
                         {isClosed && <CheckCircle2 className="w-2 h-2 text-white" />}
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-foreground uppercase tracking-wide">
+                      <div className="truncate">
+                        <span className="text-xs font-bold text-foreground uppercase tracking-wide truncate">
                           {col.title}
                         </span>
                         <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-semibold">
@@ -457,7 +583,7 @@ export default function TasksPage() {
                         setIsModalOpen(true)
                       }}
                       title="Add task to this column"
-                      className="p-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer"
+                      className="p-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent transition-colors cursor-pointer shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -478,10 +604,21 @@ export default function TasksPage() {
                   )}
 
                   {/* Task list in col */}
-                  <div className="space-y-2.5 min-h-[140px]">
+                  <div
+                    onDragOver={(e) => handleTaskDragOverCol(e, col.id)}
+                    onDragLeave={() => handleTaskDragLeaveCol(col.id)}
+                    onDrop={(e) => handleTaskDropOnCol(e, col.id)}
+                    className={`space-y-2.5 min-h-[160px] rounded-xl transition-colors ${
+                      isTaskDragOverThisCol ? 'bg-primary/[0.04] p-1.5 border-2 border-dashed border-primary/50' : ''
+                    }`}
+                  >
                     {colTasks.length === 0 ? (
-                      <div className="text-center py-8 text-xs text-muted-foreground border-2 border-dashed border-border/40 rounded-xl">
-                        No tasks in {col.title.toLowerCase()}
+                      <div className={`text-center py-8 text-xs rounded-xl border-2 border-dashed transition-colors ${
+                        isTaskDragOverThisCol
+                          ? 'border-primary text-primary font-semibold bg-primary/10'
+                          : 'border-border/40 text-muted-foreground'
+                      }`}>
+                        {isTaskDragOverThisCol ? 'Drop task here' : `No tasks in ${col.title.toLowerCase()}`}
                       </div>
                     ) : (
                       colTasks.map((task) => {
@@ -489,11 +626,17 @@ export default function TasksPage() {
                         const allowedEnvs = getProjectEnvs(task.projectId)
                         const proj = projects.find(p => p.id === task.projectId)
                         const projColor = getProjectColor(proj, task.projectId)
+                        const isDraggingTask = draggedTaskId === task.id
 
                         return (
                           <div
                             key={task.id}
-                            className="p-4 rounded-2xl border shadow-xs hover:shadow-lg transition-all space-y-3 group relative overflow-hidden"
+                            draggable={true}
+                            onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                            onDragEnd={handleTaskDragEnd}
+                            className={`p-4 rounded-2xl border shadow-xs hover:shadow-lg transition-all space-y-3 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none ${
+                              isDraggingTask ? 'opacity-35 scale-[0.98] border-dashed border-primary' : ''
+                            }`}
                             style={{
                               backgroundColor: `${projColor}14`,
                               borderColor: `${projColor}55`,

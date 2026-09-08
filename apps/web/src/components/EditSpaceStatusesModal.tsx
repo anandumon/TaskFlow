@@ -22,6 +22,7 @@ import {
   CustomStatus,
   StatusCategory,
   BUILT_IN_TEMPLATES,
+  sortStatusesByStructure,
 } from '@/stores/status-store'
 
 interface EditSpaceStatusesModalProps {
@@ -75,6 +76,8 @@ export function EditSpaceStatusesModal({
   const [activeMenuStatusId, setActiveMenuStatusId] = useState<string | null>(null)
   const [editingNameStatusId, setEditingNameStatusId] = useState<string | null>(null)
   const [tempEditName, setTempEditName] = useState('')
+  const [draggedStatusId, setDraggedStatusId] = useState<string | null>(null)
+  const [dragOverStatusId, setDragOverStatusId] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +87,8 @@ export function EditSpaceStatusesModal({
       setAddingCategory(null)
       setColorPickerStatusId(null)
       setActiveMenuStatusId(null)
+      setDraggedStatusId(null)
+      setDragOverStatusId(null)
     }
   }, [isOpen, workspaceId, getStatuses, selectedTemplate])
 
@@ -99,7 +104,7 @@ export function EditSpaceStatusesModal({
         id: s.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
         order: idx,
       }))
-      setLocalStatuses(newSt)
+      setLocalStatuses(sortStatusesByStructure(newSt))
     }
   }
 
@@ -111,12 +116,60 @@ export function EditSpaceStatusesModal({
       name: newStatusName.toUpperCase().trim(),
       color: newStatusColor,
       category: cat,
-      order: localStatuses.length,
+      order: 0,
     }
-    setLocalStatuses([...localStatuses, newStatus])
+    const combined = sortStatusesByStructure([...localStatuses, newStatus]).map((s, idx) => ({
+      ...s,
+      order: idx,
+    }))
+    setLocalStatuses(combined)
     setTemplateKey('custom')
     setNewStatusName('')
     setAddingCategory(null)
+  }
+
+  const handleStatusDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggedStatusId(id)
+  }
+
+  const handleStatusDragOver = (e: React.DragEvent, id: string) => {
+    if (draggedStatusId && draggedStatusId !== id) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverStatusId(id)
+    }
+  }
+
+  const handleStatusDrop = (e: React.DragEvent, targetId: string, targetCategory: StatusCategory) => {
+    e.preventDefault()
+    if (!draggedStatusId || draggedStatusId === targetId) {
+      setDraggedStatusId(null)
+      setDragOverStatusId(null)
+      return
+    }
+
+    const next = [...localStatuses]
+    const fromIndex = next.findIndex((s) => s.id === draggedStatusId)
+    const toIndex = next.findIndex((s) => s.id === targetId)
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const [moved] = next.splice(fromIndex, 1)
+      moved.category = targetCategory
+      next.splice(toIndex, 0, moved)
+      const reindexed = next.map((s, idx) => ({ ...s, order: idx }))
+      setLocalStatuses(reindexed)
+      setTemplateKey('custom')
+    }
+
+    setDraggedStatusId(null)
+    setDragOverStatusId(null)
+  }
+
+  const handleStatusDragEnd = () => {
+    setDraggedStatusId(null)
+    setDragOverStatusId(null)
   }
 
   const handleDeleteStatus = (id: string) => {
@@ -298,14 +351,56 @@ export function EditSpaceStatusesModal({
                   </div>
 
                   {/* Status List in this Category */}
-                  <div className="space-y-1.5">
+                  <div
+                    onDragOver={(e) => {
+                      if (draggedStatusId) {
+                        e.preventDefault()
+                      }
+                    }}
+                    onDrop={(e) => {
+                      if (draggedStatusId && !dragOverStatusId) {
+                        e.preventDefault()
+                        const next = [...localStatuses]
+                        const fromIndex = next.findIndex((s) => s.id === draggedStatusId)
+                        if (fromIndex !== -1) {
+                          const [moved] = next.splice(fromIndex, 1)
+                          moved.category = cat.key
+                          const lastCatIdx = next.map(s => s.category).lastIndexOf(cat.key)
+                          if (lastCatIdx !== -1) {
+                            next.splice(lastCatIdx + 1, 0, moved)
+                          } else {
+                            next.push(moved)
+                          }
+                          setLocalStatuses(next.map((s, idx) => ({ ...s, order: idx })))
+                          setTemplateKey('custom')
+                        }
+                        setDraggedStatusId(null)
+                        setDragOverStatusId(null)
+                      }
+                    }}
+                    className="space-y-1.5 min-h-[36px]"
+                  >
                     {catStatuses.map((st) => (
                       <div
                         key={st.id}
-                        className="group flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/15 transition-all relative"
+                        draggable={true}
+                        onDragStart={(e) => handleStatusDragStart(e, st.id)}
+                        onDragOver={(e) => handleStatusDragOver(e, st.id)}
+                        onDragLeave={() => {
+                          if (dragOverStatusId === st.id) setDragOverStatusId(null)
+                        }}
+                        onDrop={(e) => handleStatusDrop(e, st.id, cat.key)}
+                        onDragEnd={handleStatusDragEnd}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all relative ${
+                          draggedStatusId === st.id
+                            ? 'opacity-40 border-dashed border-primary bg-primary/10'
+                            : dragOverStatusId === st.id
+                            ? 'border-primary ring-2 ring-primary/50 bg-white/[0.08] scale-[1.01]'
+                            : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/[0.06] hover:border-white/15'
+                        }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <GripVertical className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 shrink-0 cursor-grab" />
+                          <GripVertical className="w-3.5 h-3.5 text-white/20 group-hover:text-white/60 shrink-0 cursor-grab active:cursor-grabbing" />
 
                           {/* Color / Icon trigger */}
                           <div className="relative">

@@ -67,6 +67,14 @@ public class EmailTemplateService {
                 .replace("{{expiryMinutes}}", String.valueOf(expiryMinutes));
     }
 
+    public String renderAccountCreatedTemplate(String recipientName, String loginUrl) {
+        String template = loadTemplate("templates/email/account-created.html");
+        String safeName = (recipientName != null && !recipientName.isBlank()) ? recipientName.trim() : "there";
+        return template
+                .replace("{{name}}", escapeHtml(safeName))
+                .replace("{{loginUrl}}", loginUrl);
+    }
+
     private String loadTemplate(String templatePath) {
         return templateCache.computeIfAbsent(templatePath, path -> {
             try {

@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -28,6 +29,7 @@ import java.util.UUID;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
+    private final SupabaseJwtValidator supabaseJwtValidator;
     private final UserRepository userRepository;
     private final RolePermissionRepository rolePermissionRepository;
 
@@ -38,39 +40,98 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = extractJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && jwtProvider.validateToken(jwt)) {
-                UUID userId = jwtProvider.getUserIdFromToken(jwt);
+            if (StringUtils.hasText(jwt)) {
+                // 1. First attempt Supabase Auth JWT validation
+                SupabaseJwtValidator.SupabaseUserClaims sbClaims = supabaseJwtValidator.parseAndValidate(jwt);
 
-                Optional<User> userOpt = userRepository.findByIdAndDeletedFalse(userId);
-                if (userOpt.isPresent()) {
-                    User user = userOpt.get();
+                if (sbClaims != null && sbClaims.getUserId() != null) {
+                    UUID authUserId = sbClaims.getUserId();
+                    String email = sbClaims.getEmail();
 
-                    // Check account lock
-                    if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(java.time.Instant.now())) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        return;
+                    // Find or provision User in TaskFlow application database
+                    User user = null;
+                    Optional<User> userOpt = userRepository.findByAuthUserIdAndDeletedFalse(authUserId);
+                    if (userOpt.isPresent()) {
+                        user = userOpt.get();
+                    } else if (email != null) {
+                        Optional<User> emailUserOpt = userRepository.findByEmailAndDeletedFalse(email);
+                        if (emailUserOpt.isPresent()) {
+                            user = emailUserOpt.get();
+                            user.setAuthUserId(authUserId);
+                            user.setEmailVerified(true);
+                            user = userRepository.save(user);
+                        }
                     }
 
-                    // Load permissions for this user (aggregate from all org memberships)
-                    Set<String> permissions = rolePermissionRepository.findPermissionCodesByUserId(userId);
+                    // Unregistered users must explicitly register via signup flow
+                    if (user == null) {
+                        log.debug("[SUPABASE AUTH] User {} is not registered in TaskFlow database.", email);
+                    }
 
-                    UserPrincipal principal = new UserPrincipal(
-                            user.getId(),
-                            user.getEmail(),
-                            user.getPasswordHash(),
-                            user.getFirstName(),
-                            user.getLastName(),
-                            user.isEmailVerified(),
-                            false,
-                            permissions
-                    );
+                    if (user != null) {
+                        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(java.time.Instant.now())) {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            return;
+                        }
 
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        Set<String> permissions = Collections.emptySet();
+                        try {
+                            permissions = rolePermissionRepository.findPermissionCodesByUserId(user.getId());
+                        } catch (Exception permEx) {
+                            log.debug("Permissions lookup fallback for user: {}", user.getId());
+                        }
 
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    TenantContext.setUserId(userId);
+                        UserPrincipal principal = new UserPrincipal(
+                                user.getId(),
+                                user.getEmail(),
+                                user.getPasswordHash() != null ? user.getPasswordHash() : "",
+                                user.getFirstName(),
+                                user.getLastName(),
+                                user.isEmailVerified(),
+                                false,
+                                permissions
+                        );
+
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                        TenantContext.setUserId(user.getId());
+                    }
+                }
+                // 2. Fallback to TaskFlow native JWT Provider
+                else if (jwtProvider.validateToken(jwt)) {
+                    UUID userId = jwtProvider.getUserIdFromToken(jwt);
+                    Optional<User> userOpt = userRepository.findByIdAndDeletedFalse(userId);
+                    if (userOpt.isPresent()) {
+                        User user = userOpt.get();
+
+                        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(java.time.Instant.now())) {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            return;
+                        }
+
+                        Set<String> permissions = rolePermissionRepository.findPermissionCodesByUserId(userId);
+
+                        UserPrincipal principal = new UserPrincipal(
+                                user.getId(),
+                                user.getEmail(),
+                                user.getPasswordHash(),
+                                user.getFirstName(),
+                                user.getLastName(),
+                                user.isEmailVerified(),
+                                false,
+                                permissions
+                        );
+
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                        TenantContext.setUserId(userId);
+                    }
                 }
             }
         } catch (Exception ex) {
@@ -90,17 +151,5 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
         return null;
-    }
-
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
-        if (path.equals("/api/v1/auth/me")) {
-            return false;
-        }
-        return (path.startsWith("/api/v1/auth/") && !path.equals("/api/v1/auth/me")) ||
-               path.startsWith("/api/docs") ||
-               path.startsWith("/api/swagger-ui") ||
-               path.startsWith("/actuator/");
     }
 }

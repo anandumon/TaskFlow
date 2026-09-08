@@ -57,17 +57,19 @@ public class EmailVerificationService {
 
         log.info("\n" +
                 "======================================================================\n" +
-                "📧 [TASKFLOW CONFIRMATION EMAIL & OTP DISPATCH]\n" +
+                "🔐 [TASKFLOW VERIFICATION OTP DISPATCH]\n" +
                 "To               : {}\n" +
-                "Confirmation Link: {}\n" +
                 "Verification OTP : {}\n" +
                 "======================================================================",
-                email, confirmationUrl, otp);
+                email, otp);
 
-        emailService.sendEmailConfirmationLink(email, firstName, confirmationUrl);
         if (otp != null && !otp.isBlank()) {
             emailService.sendEmailVerificationOtp(email, firstName, otp);
         }
+    }
+
+    public void sendAccountCreationSuccessEmail(String email, String firstName) {
+        emailService.sendAccountCreationSuccessEmail(email, firstName);
     }
 
     @Autowired
@@ -124,11 +126,10 @@ public class EmailVerificationService {
         String baseUrl = (appUrl != null && !appUrl.isBlank()) ? appUrl : "http://localhost:3000";
         String confirmationUrl = baseUrl + "/verify-email?token=" + rawOtp + "&email=" + user.getEmail();
 
-        log.info("🛡 [AUDIT: EMAIL_VERIFICATION_REQUESTED] Generated confirmation link for user: {} ({})",
-                maskEmail(user.getEmail()), confirmationUrl);
+        log.info("🛡 [AUDIT: EMAIL_VERIFICATION_REQUESTED] Generated OTP for user: {}",
+                maskEmail(user.getEmail()));
 
-        // Send via Email Service (both confirmation link and OTP fallback)
-        emailService.sendEmailConfirmationLink(user.getEmail(), user.getFirstName(), confirmationUrl);
+        // Send ONLY the 6-digit OTP verification email
         emailService.sendEmailVerificationOtp(user.getEmail(), user.getFirstName(), rawOtp);
     }
 
@@ -167,6 +168,9 @@ public class EmailVerificationService {
         user.setEmailVerified(true);
         user.setStatus("ACTIVE");
         userRepository.save(user);
+
+        // Send Account Creation Success welcome email
+        sendAccountCreationSuccessEmail(user.getEmail(), user.getFirstName());
 
         log.info("✔ [EMAIL_CONFIRMED] Successfully verified email address for: {}", normalizedEmail);
 
@@ -260,6 +264,9 @@ public class EmailVerificationService {
 
         user.setEmailVerified(true);
         userRepository.save(user);
+
+        // Send Account Creation Success welcome email
+        sendAccountCreationSuccessEmail(user.getEmail(), user.getFirstName());
 
         log.info("✔ [AUDIT: EMAIL_VERIFICATION_SUCCEEDED] Account successfully verified for: {}", maskEmail(normalizedEmail));
 
