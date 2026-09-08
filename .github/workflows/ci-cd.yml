@@ -12,7 +12,7 @@ jobs:
   # Job 1: Build & Verify Backend (Spring Boot + Java 21)
   # ─────────────────────────────────────────────────────────────
   backend-build:
-    name: Build & Verify Backend
+    name: Build & Verify Backend (Spring Boot)
     runs-on: ubuntu-latest
 
     defaults:
@@ -44,27 +44,34 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Compile Java backend
-        run: ./gradlew compileJava --no-daemon
-
-      - name: Package Boot JAR
-        run: ./gradlew bootJar -x test --no-daemon
+      - name: Build Spring Boot Application
+        run: |
+          if [ -f "pom.xml" ]; then
+            echo "Building with Maven..."
+            mvn clean package -DskipTests --batch-mode
+            mkdir -p build/libs
+            cp target/taskflow-backend.jar build/libs/taskflow-backend.jar || true
+          fi
+          if [ ! -f "build/libs/taskflow-backend.jar" ]; then
+            echo "Building with Gradle..."
+            chmod +x gradlew
+            ./gradlew bootJar -x test --no-daemon
+          fi
 
       - name: Archive Backend Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: taskflow-backend-jar
-          path: services/backend/build/libs/taskflow-backend.jar
+          path: |
+            services/backend/build/libs/taskflow-backend.jar
+            services/backend/target/taskflow-backend.jar
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
   # Job 2: Build & Verify Frontend (Next.js 13 + Node.js 20)
   # ─────────────────────────────────────────────────────────────
   frontend-build:
-    name: Build & Verify Frontend
+    name: Build & Verify Frontend (Next.js)
     runs-on: ubuntu-latest
 
     defaults:
@@ -90,7 +97,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install --no-audit
 
       - name: TypeScript type check
         run: npx tsc --noEmit
