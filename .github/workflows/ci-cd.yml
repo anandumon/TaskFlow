@@ -1,0 +1,108 @@
+name: TaskFlow CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: Build & Verify Backend (Spring Boot + Java 21)
+  # ─────────────────────────────────────────────────────────────
+  backend-build:
+    name: Build & Verify Backend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: services/backend
+
+    env:
+      SPRING_PROFILES_ACTIVE: ${{ secrets.SPRING_PROFILES_ACTIVE || 'supabase' }}
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+      MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'taskflow-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-security' }}
+      CORS_ORIGINS: ${{ secrets.CORS_ORIGINS || 'http://localhost:3000' }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Compile Java backend
+        run: ./gradlew compileJava --no-daemon
+
+      - name: Package Boot JAR
+        run: ./gradlew bootJar -x test --no-daemon
+
+      - name: Archive Backend Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-backend-jar
+          path: services/backend/build/libs/taskflow-backend.jar
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: Build & Verify Frontend (Next.js 13 + Node.js 20)
+  # ─────────────────────────────────────────────────────────────
+  frontend-build:
+    name: Build & Verify Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    env:
+      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8080' }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Build Next.js Web App
+        run: npm run build
+
+      - name: Archive Frontend Next Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-frontend-build
+          path: |
+            apps/web/.next
+            apps/web/public
+          retention-days: 7
