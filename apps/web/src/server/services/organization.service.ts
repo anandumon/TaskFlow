@@ -26,8 +26,32 @@ export interface OrgMemberDto {
 const OWNER_ROLE_ID = 'a0000000-0000-0000-0000-000000000001'
 const MEMBER_ROLE_ID = 'a0000000-0000-0000-0000-000000000004'
 
-function ensureUuid(id?: string): string {
-  if (id && id.length === 36 && id.includes('-')) return id
+function isUuid(val?: string | null): boolean {
+  if (!val || typeof val !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
+}
+
+async function resolveValidOwnerId(userId?: string): Promise<string> {
+  if (userId) {
+    if (isUuid(userId)) {
+      const row = await queryOne(
+        `SELECT id FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+        [userId]
+      )
+      if (row?.id) return row.id
+    } else if (userId.includes('@')) {
+      const row = await queryOne(
+        `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+        [userId.toLowerCase().trim()]
+      )
+      if (row?.id) return row.id
+    }
+  }
+
+  // Fallback to first active user in database
+  const fallback = await queryOne(`SELECT id FROM users WHERE (deleted = false OR deleted IS NULL) ORDER BY created_at ASC LIMIT 1`)
+  if (fallback?.id) return fallback.id
+
   return '543cb7a9-44dc-4a3e-844c-020d52cefca7'
 }
 
@@ -68,7 +92,7 @@ export async function createOrganization(
   input: { name: string; slug?: string }
 ): Promise<OrganizationDto> {
   const id = crypto.randomUUID()
-  const validOwnerId = ensureUuid(userId)
+  const validOwnerId = await resolveValidOwnerId(userId)
   const slug = (input.slug || input.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
