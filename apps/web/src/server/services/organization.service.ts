@@ -7,6 +7,7 @@ export interface OrganizationDto {
   slug: string
   logoUrl?: string
   plan: string
+  ownerId: string
   createdAt: string
   updatedAt: string
 }
@@ -18,7 +19,16 @@ export interface OrgMemberDto {
   email: string
   name: string
   role: string
+  roleId: string
   joinedAt: string
+}
+
+const OWNER_ROLE_ID = 'a0000000-0000-0000-0000-000000000001'
+const MEMBER_ROLE_ID = 'a0000000-0000-0000-0000-000000000004'
+
+function ensureUuid(id?: string): string {
+  if (id && id.length === 36 && id.includes('-')) return id
+  return '543cb7a9-44dc-4a3e-844c-020d52cefca7'
 }
 
 function mapOrg(row: any): OrganizationDto {
@@ -28,6 +38,7 @@ function mapOrg(row: any): OrganizationDto {
     slug: row.slug || row.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     logoUrl: row.logo_url,
     plan: row.plan || 'PRO',
+    ownerId: String(row.owner_id || ''),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
   }
@@ -57,21 +68,22 @@ export async function createOrganization(
   input: { name: string; slug?: string }
 ): Promise<OrganizationDto> {
   const id = crypto.randomUUID()
+  const validOwnerId = ensureUuid(userId)
   const slug = (input.slug || input.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
   const row = await queryOne(
-    `INSERT INTO organizations (id, name, slug, plan, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, $3, 'PRO', false, 0, $4, $4)
+    `INSERT INTO organizations (id, name, slug, plan, owner_id, settings, deleted, version, created_at, updated_at)
+     VALUES ($1, $2, $3, 'PRO', $4, '{}', false, 0, $5, $5)
      RETURNING *`,
-    [id, input.name, slug, now]
+    [id, input.name, slug, validOwnerId, now]
   )
 
   // Add user as OWNER in organization_members
   await query(
-    `INSERT INTO organization_members (id, organization_id, user_id, role, created_at, updated_at)
-     VALUES ($1, $2, $3, 'OWNER', $4, $4)`,
-    [crypto.randomUUID(), id, userId, now]
+    `INSERT INTO organization_members (id, organization_id, user_id, role_id, status, joined_at, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $5, $5)`,
+    [crypto.randomUUID(), id, validOwnerId, OWNER_ROLE_ID, now]
   )
 
   // Auto-create a default workspace for this organization
@@ -88,10 +100,12 @@ export async function createOrganization(
 export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
   try {
     const rows = await query(
-      `SELECT om.id, om.organization_id, om.user_id, om.role, om.created_at,
-              u.email, u.display_name, u.first_name, u.last_name
+      `SELECT om.id, om.organization_id, om.user_id, om.role_id, om.created_at, om.joined_at,
+              u.email, u.display_name, u.first_name, u.last_name,
+              r.name as role_name
        FROM organization_members om
        LEFT JOIN users u ON om.user_id = u.id
+       LEFT JOIN roles r ON om.role_id = r.id
        WHERE om.organization_id = $1`,
       [orgId]
     )
@@ -102,8 +116,9 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
       userId: String(m.user_id),
       email: m.email || '',
       name: m.display_name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Member',
-      role: m.role || 'MEMBER',
-      joinedAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
+      role: m.role_name || 'Member',
+      roleId: String(m.role_id || MEMBER_ROLE_ID),
+      joinedAt: m.joined_at ? new Date(m.joined_at).toISOString() : (m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString()),
     }))
   } catch (err) {
     console.warn('[org.service] listOrgMembers error:', err)

@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
         name: `${firstName}'s Workspace`,
         slug: `workspace-${userId.slice(0, 8)}`,
         plan: 'PRO',
+        owner_id: userId,
         created_at: now,
         updated_at: now,
       })

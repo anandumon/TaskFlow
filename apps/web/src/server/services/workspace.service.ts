@@ -101,10 +101,12 @@ export async function updateWorkspace(
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberDto[]> {
   try {
     const rows = await query(
-      `SELECT wm.id, wm.workspace_id, wm.role, wm.created_at,
-              u.id as user_id, u.email, u.display_name, u.avatar_url
+      `SELECT wm.id, wm.workspace_id, wm.role_id, wm.created_at, wm.joined_at,
+              u.id as user_id, u.email, u.display_name, u.avatar_url,
+              r.name as role_name
        FROM workspace_members wm
        LEFT JOIN users u ON wm.user_id = u.id
+       LEFT JOIN roles r ON wm.role_id = r.id
        WHERE wm.workspace_id = $1`,
       [workspaceId]
     )
@@ -114,8 +116,8 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
       email: m.email || '',
       displayName: m.display_name || m.name || 'Member',
       avatarUrl: m.avatar_url,
-      role: m.role || 'MEMBER',
-      joinedAt: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
+      role: m.role_name || 'Member',
+      joinedAt: m.joined_at ? new Date(m.joined_at).toISOString() : (m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString()),
     }))
   } catch (err) {
     console.warn('[workspace.service] getWorkspaceMembers error:', err)
