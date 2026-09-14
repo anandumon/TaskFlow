@@ -210,3 +210,342 @@ export async function updateTask(id: string, updates: Partial<TaskDto>): Promise
 export async function deleteTask(id: string): Promise<void> {
   await query(`UPDATE tasks SET deleted = true, updated_at = $1 WHERE id = $2`, [new Date(), id])
 }
+
+export interface DueDateInfo {
+  daysLeft: number
+  timeRemainingText: string
+  bannerText: string
+  badgeClass: string
+  isDueNearOrToday: boolean
+}
+
+export function parseDueDate(rawDue?: string): DueDateInfo {
+  if (!rawDue || !rawDue.trim()) {
+    return { daysLeft: 0, timeRemainingText: 'Due Date not set', bannerText: 'DUE DATE NOTICE', badgeClass: 'due-near', isDueNearOrToday: false }
+  }
+  const cleaned = rawDue.trim()
+  const todayStr = new Date().toISOString().split('T')[0]
+  const tomorrow = new Date(Date.now() + 86400000)
+  const tomorrowStr = tomorrow.toISOString().split('T')[0]
+
+  if (cleaned.toLowerCase() === 'today' || cleaned === todayStr) {
+    return { daysLeft: 0, timeRemainingText: 'Due Today', bannerText: 'DUE TODAY', badgeClass: 'due-today', isDueNearOrToday: true }
+  }
+  if (cleaned.toLowerCase() === 'tomorrow' || cleaned === tomorrowStr) {
+    return { daysLeft: 1, timeRemainingText: '1 Day Left', bannerText: 'DUE IN 1 DAY', badgeClass: 'due-near', isDueNearOrToday: true }
+  }
+
+  try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dueDate = new Date(cleaned)
+    if (isNaN(dueDate.getTime())) {
+      return { daysLeft: 0, timeRemainingText: cleaned, bannerText: 'TASK DUE ALERT', badgeClass: 'due-near', isDueNearOrToday: false }
+    }
+    dueDate.setHours(0, 0, 0, 0)
+    const diffMs = dueDate.getTime() - today.getTime()
+    const days = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+    if (days === 0) {
+      return { daysLeft: 0, timeRemainingText: 'Due Today', bannerText: 'DUE TODAY', badgeClass: 'due-today', isDueNearOrToday: true }
+    } else if (days === 1) {
+      return { daysLeft: 1, timeRemainingText: '1 Day Left', bannerText: 'DUE IN 1 DAY', badgeClass: 'due-near', isDueNearOrToday: true }
+    } else if (days > 1) {
+      return { daysLeft: days, timeRemainingText: `${days} Days Left`, bannerText: `DUE IN ${days} DAYS`, badgeClass: 'due-near', isDueNearOrToday: days <= 3 }
+    } else {
+      const overdueDays = Math.abs(days)
+      return { daysLeft: days, timeRemainingText: `${overdueDays} ${overdueDays === 1 ? 'Day' : 'Days'} Overdue`, bannerText: `OVERDUE BY ${overdueDays} ${overdueDays === 1 ? 'DAY' : 'DAYS'}`, badgeClass: 'due-today', isDueNearOrToday: true }
+    }
+  } catch {
+    return { daysLeft: 0, timeRemainingText: cleaned, bannerText: 'TASK DUE ALERT', badgeClass: 'due-near', isDueNearOrToday: false }
+  }
+}
+
+function escapeHtml(input: string): string {
+  if (!input) return ''
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}
+
+export async function dispatchDueAlert(
+  taskId: string,
+  callerEmail?: string,
+  callerName?: string
+): Promise<any> {
+  const { sendTaskDueAlertEmail } = await import('./email.service')
+  const task = await queryOne(`SELECT * FROM tasks WHERE id = $1 AND (deleted = false OR deleted IS NULL)`, [taskId])
+  if (!task) throw new Error('Task not found')
+
+  const dueInfo = parseDueDate(task.due_date)
+
+  let projectName = 'Project'
+  if (task.project_id) {
+    const proj = await queryOne(`SELECT name FROM projects WHERE id = $1`, [task.project_id])
+    if (proj?.name) projectName = proj.name
+  }
+
+  let workspaceName = 'Workspace'
+  let workspace: any = null
+  if (task.workspace_id) {
+    workspace = await queryOne(`SELECT name, created_by FROM workspaces WHERE id = $1`, [task.workspace_id])
+    if (workspace?.name) workspaceName = workspace.name
+  }
+
+  let recipientEmail = callerEmail || ''
+  let recipientName = callerName || task.assignee_name || 'Team Member'
+
+  if (task.assignee_id) {
+    const assignee = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [task.assignee_id])
+    if (assignee?.email) {
+      recipientEmail = assignee.email
+      recipientName = `${assignee.first_name || ''} ${assignee.last_name || ''}`.trim() || assignee.email
+    }
+  }
+
+  if (!recipientEmail && workspace?.created_by) {
+    const creator = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [workspace.created_by])
+    if (creator?.email) {
+      recipientEmail = creator.email
+      recipientName = `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || creator.email
+    }
+  }
+
+  if (!recipientEmail) {
+    recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const taskUrl = `${appUrl}/app/tasks`
+
+  await sendTaskDueAlertEmail(
+    recipientEmail,
+    recipientName,
+    task.title,
+    projectName,
+    workspaceName,
+    task.due_date || 'Today',
+    dueInfo.timeRemainingText,
+    dueInfo.bannerText,
+    (task.status || 'todo').toUpperCase(),
+    (task.priority || 'medium').toUpperCase(),
+    taskUrl
+  )
+
+  await query(`UPDATE tasks SET last_due_alert_at = NOW() WHERE id = $1`, [taskId])
+  console.log(`🔔 [task.service] Dispatched due alert for task '${task.title}' to ${recipientEmail}`)
+
+  return {
+    success: true,
+    taskId: task.id,
+    recipientEmail,
+    recipientName,
+    dueDate: task.due_date,
+    status: dueInfo.bannerText,
+  }
+}
+
+export async function dispatchDateDueAlerts(
+  workspaceId: string,
+  selectedDate?: string,
+  overrideEmail?: string,
+  callerName?: string
+): Promise<any> {
+  const { sendDateDueAlertDigestEmail } = await import('./email.service')
+  const workspace = await queryOne(`SELECT * FROM workspaces WHERE id = $1`, [workspaceId])
+  if (!workspace) throw new Error('Workspace not found')
+
+  const targetDate = selectedDate && selectedDate.trim() ? selectedDate.trim() : new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0]
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+
+  const tasks = await query(
+    `SELECT * FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL) AND LOWER(status) != 'done' ORDER BY created_at DESC`,
+    [workspaceId]
+  )
+
+  const matchingTasks = tasks.filter((t: any) => {
+    if (!t.due_date || !t.due_date.trim()) return false
+    const d = t.due_date.trim()
+    if (d.toLowerCase() === targetDate.toLowerCase()) return true
+    if (d.toLowerCase() === 'today' && targetDate === todayStr) return true
+    if (d.toLowerCase() === 'tomorrow' && targetDate === tomorrowStr) return true
+    return false
+  })
+
+  let recipientEmail = overrideEmail || ''
+  let recipientName = callerName || 'Team Member'
+
+  if (!recipientEmail && workspace.created_by) {
+    const creator = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [workspace.created_by])
+    if (creator?.email) {
+      recipientEmail = creator.email
+      recipientName = `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || creator.email
+    }
+  }
+
+  if (!recipientEmail) {
+    recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const workspaceUrl = `${appUrl}/app/tasks`
+
+  if (matchingTasks.length === 0) {
+    return {
+      success: true,
+      taskCount: 0,
+      recipientEmail,
+      selectedDate: targetDate,
+      message: `No tasks found due on ${targetDate}`,
+    }
+  }
+
+  let taskListHtml = ''
+  for (const t of matchingTasks) {
+    let projName = 'General'
+    if (t.project_id) {
+      const p = await queryOne(`SELECT name FROM projects WHERE id = $1`, [t.project_id])
+      if (p?.name) projName = p.name
+    }
+
+    taskListHtml += `
+      <div class="task-card">
+        <h3 class="task-title">${escapeHtml(t.title)}</h3>
+        <div class="task-meta">
+          <span>📁 <strong>${escapeHtml(projName)}</strong></span>
+          <span class="tag-badge">${escapeHtml(t.tag || 'Task')}</span>
+          <span class="priority-badge">${escapeHtml((t.priority || 'Medium').toUpperCase())}</span>
+          <span>👤 ${escapeHtml(t.assignee_name || 'You')}</span>
+          <span>⚙️ ${escapeHtml((t.status || 'todo').toUpperCase())}</span>
+        </div>
+      </div>
+    `
+    await query(`UPDATE tasks SET last_due_alert_at = NOW() WHERE id = $1`, [t.id])
+  }
+
+  await sendDateDueAlertDigestEmail(
+    recipientEmail,
+    recipientName,
+    targetDate,
+    matchingTasks.length,
+    taskListHtml,
+    workspaceUrl
+  )
+
+  return {
+    success: true,
+    taskCount: matchingTasks.length,
+    recipientEmail,
+    selectedDate: targetDate,
+    message: `Sent due alert for ${matchingTasks.length} task(s) to ${recipientEmail}`,
+  }
+}
+
+export async function dispatchUpcomingDueAlerts(
+  workspaceId: string,
+  overrideEmail?: string,
+  callerName?: string
+): Promise<any> {
+  const { sendDateDueAlertDigestEmail } = await import('./email.service')
+  const workspace = await queryOne(`SELECT * FROM workspaces WHERE id = $1`, [workspaceId])
+  if (!workspace) throw new Error('Workspace not found')
+
+  const tasks = await query(
+    `SELECT * FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL) AND LOWER(status) != 'done' AND due_date IS NOT NULL AND due_date != '' ORDER BY created_at DESC`,
+    [workspaceId]
+  )
+
+  let recipientEmail = overrideEmail || ''
+  let recipientName = callerName || 'Team Member'
+
+  if (!recipientEmail && workspace.created_by) {
+    const creator = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [workspace.created_by])
+    if (creator?.email) {
+      recipientEmail = creator.email
+      recipientName = `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || creator.email
+    }
+  }
+
+  if (!recipientEmail) {
+    recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const workspaceUrl = `${appUrl}/app/tasks`
+
+  let taskListHtml = ''
+  let totalPendingSubtasks = 0
+
+  for (const t of tasks) {
+    let projName = 'General'
+    if (t.project_id) {
+      const p = await queryOne(`SELECT name FROM projects WHERE id = $1`, [t.project_id])
+      if (p?.name) projName = p.name
+    }
+
+    let subtasksList: any[] = []
+    try {
+      if (typeof t.subtasks === 'string' && t.subtasks.trim()) {
+        subtasksList = JSON.parse(t.subtasks)
+      } else if (Array.isArray(t.subtasks)) {
+        subtasksList = t.subtasks
+      }
+    } catch {}
+
+    const pendingSubtasks = Array.isArray(subtasksList)
+      ? subtasksList.filter((s: any) => !s?.completed && s?.title).map((s: any) => s.title)
+      : []
+
+    totalPendingSubtasks += pendingSubtasks.length
+
+    taskListHtml += `
+      <div class="task-card" style="margin-bottom: 16px; padding: 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: #6366f1;">📁 ${escapeHtml(projName)}</span>
+          <span style="font-size: 11px; font-weight: 700; color: #f43f5e;">📅 Due: ${escapeHtml(t.due_date)}</span>
+        </div>
+        <h3 class="task-title" style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #ffffff;">${escapeHtml(t.title)}</h3>
+        <div class="task-meta" style="font-size: 11px; color: #94a3b8; display: flex; gap: 10px; margin-bottom: 8px;">
+          <span>Priority: <strong>${escapeHtml((t.priority || 'medium').toUpperCase())}</strong></span>
+          <span>Status: <strong>${escapeHtml((t.status || 'todo').toUpperCase())}</strong></span>
+          <span>Assignee: <strong>${escapeHtml(t.assignee_name || 'You')}</strong></span>
+        </div>
+        ${
+          pendingSubtasks.length > 0
+            ? `
+          <div style="margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(99,102,241,0.08); border-left: 3px solid #6366f1;">
+            <div style="font-size: 10px; font-weight: 800; color: #a5b4fc; text-transform: uppercase; margin-bottom: 4px;">Pending Subtasks (${pendingSubtasks.length})</div>
+            <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #cbd5e1;">
+              ${pendingSubtasks.map((st: string) => `<li style="margin-bottom: 2px;">${escapeHtml(st)}</li>`).join('')}
+            </ul>
+          </div>
+        `
+            : ''
+        }
+      </div>
+    `
+    await query(`UPDATE tasks SET last_due_alert_at = NOW() WHERE id = $1`, [t.id])
+  }
+
+  await sendDateDueAlertDigestEmail(
+    recipientEmail,
+    recipientName,
+    'Upcoming Sprint Milestones',
+    tasks.length,
+    taskListHtml,
+    workspaceUrl
+  )
+
+  return {
+    success: true,
+    taskCount: tasks.length,
+    pendingSubtasksCount: totalPendingSubtasks,
+    recipientEmail,
+    message: `Sent upcoming due alert for ${tasks.length} task(s) and ${totalPendingSubtasks} subtask(s) to ${recipientEmail}`,
+  }
+}
+

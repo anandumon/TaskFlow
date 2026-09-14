@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
-import { supabaseAdmin } from '@/server/db/supabase-admin'
+import { verifyEmailOtp } from '@/server/services/auth.service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,30 +10,14 @@ export async function POST(req: NextRequest) {
       return apiError('Email and verification code are required', 400)
     }
 
-    const { data, error } = await supabaseAdmin.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: token.trim(),
-      type: 'signup',
+    const result = await verifyEmailOtp({
+      email,
+      otp: token,
     })
 
-    if (error || !data.session) {
-      return apiError(error?.message || 'Invalid or expired verification code', 400)
-    }
-
-    const u = data.user
-    return apiSuccess({
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-      user: u ? {
-        id: u.id,
-        email: u.email,
-        firstName: u.user_metadata?.first_name || '',
-        lastName: u.user_metadata?.last_name || '',
-        displayName: `${u.user_metadata?.first_name || ''} ${u.user_metadata?.last_name || ''}`.trim() || u.email,
-        emailVerified: true,
-      } : null,
-    })
+    return apiSuccess(result)
   } catch (err: any) {
-    return apiError(err.message || 'Verification failed', 500)
+    console.error('[API /auth/verify-email] Error:', err)
+    return apiError(err?.message || 'Verification failed', 400, 'INVALID_OTP')
   }
 }

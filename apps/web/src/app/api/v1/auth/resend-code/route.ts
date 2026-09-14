@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       retryAfterSeconds: 60,
     })
   } catch (err: any) {
-    console.error('[API /auth/resend-verification-otp] Error:', err)
+    console.error('[API /auth/resend-code] Error:', err)
     return apiError(err?.message || 'Failed to resend code', 400)
   }
 }

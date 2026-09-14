@@ -96,6 +96,26 @@ export async function createInvitation(
     ]
   )
 
+  // Dispatch Project Invitation Email
+  try {
+    const inviter = await queryOne(`SELECT first_name, last_name, email FROM users WHERE id = $1`, [creatorId])
+    const inviterName = inviter ? `${inviter.first_name || ''} ${inviter.last_name || ''}`.trim() || inviter.email : 'A team member'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const inviteUrl = `${appUrl}/invitations/accept?token=${token}`
+
+    const { sendProjectInvitationEmail } = await import('./email.service')
+    await sendProjectInvitationEmail(
+      input.email.toLowerCase().trim(),
+      inviterName,
+      orgName,
+      wsName,
+      prjName,
+      inviteUrl
+    )
+  } catch (err: any) {
+    console.error('[invitation.service] Failed to send invitation email:', err?.message || err)
+  }
+
   return mapInvitation(row)
 }
 

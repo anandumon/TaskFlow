@@ -16,6 +16,7 @@ target/
 *.jar
 *.war
 *.class
+*.zip
 
 # Environment and secrets (strictly never commit secrets or credentials)
 .env
