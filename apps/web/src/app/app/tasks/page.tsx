@@ -126,7 +126,8 @@ function UserSelect({
   const selectedUser = users.find(
     (u) =>
       u.name.toLowerCase() === (value || '').toLowerCase() ||
-      (u.email && u.email.toLowerCase() === (value || '').toLowerCase())
+      (u.email && u.email.toLowerCase() === (value || '').toLowerCase()) ||
+      ((value || '').toLowerCase() === 'you' && (u.role === 'Current User' || u.id === 'current-user'))
   )
 
   const filteredUsers = users.filter((u) => {
@@ -243,7 +244,8 @@ function UserSelect({
                 filteredUsers.map((u) => {
                   const isCur =
                     (value || '').toLowerCase() === u.name.toLowerCase() ||
-                    (u.email && (value || '').toLowerCase() === u.email.toLowerCase())
+                    (u.email && (value || '').toLowerCase() === u.email.toLowerCase()) ||
+                    ((value || '').toLowerCase() === 'you' && (u.role === 'Current User' || u.id === 'current-user'))
                   return (
                     <button
                       key={u.id}
@@ -510,55 +512,123 @@ export default function TasksPage() {
     }
   }, [user])
 
-  // Aggregated list of all users having access to the workspace / project
+  // Aggregated list of all unique users having access to the workspace / project
   const availableUsers = React.useMemo(() => {
     const list: AssignableUser[] = []
-    const seen = new Set<string>()
+    const seenIds = new Set<string>()
+    const seenEmails = new Set<string>()
+    const seenNames = new Set<string>()
+
+    // Helper to register an identity as seen
+    const registerSeen = (name?: string, email?: string, id?: string) => {
+      if (id && id.trim()) seenIds.add(id.trim())
+      if (email && email.trim()) {
+        const cleanEmail = email.trim().toLowerCase()
+        seenEmails.add(cleanEmail)
+        const prefix = cleanEmail.split('@')[0]
+        if (prefix) seenNames.add(prefix)
+      }
+      if (name && name.trim()) {
+        const cleanName = name.trim().toLowerCase().replace(/\s+/g, ' ')
+        seenNames.add(cleanName)
+      }
+    }
+
+    // Helper to check if an identity is already present
+    const isAlreadySeen = (name?: string, email?: string, id?: string) => {
+      const cleanId = id?.trim()
+      if (cleanId && seenIds.has(cleanId)) return true
+
+      const cleanEmail = email?.trim().toLowerCase()
+      if (cleanEmail && seenEmails.has(cleanEmail)) return true
+
+      const cleanName = name?.trim().toLowerCase().replace(/\s+/g, ' ')
+      if (cleanName) {
+        if (cleanName === 'you') return true
+        if (seenNames.has(cleanName)) return true
+        if (cleanName.includes('@') && seenEmails.has(cleanName)) return true
+      }
+
+      return false
+    }
 
     const addUser = (name: string, email?: string, role?: string, id?: string) => {
-      const cleanName = name.trim()
-      if (!cleanName) return
-      const key = (email || cleanName).toLowerCase()
-      if (seen.has(key)) return
-      seen.add(key)
+      const cleanName = name ? name.trim().replace(/\s+/g, ' ') : ''
+      const cleanEmail = email ? email.trim() : undefined
+      const cleanId = id ? id.trim() : undefined
+
+      if (!cleanName && !cleanEmail) return
+
+      // Never add placeholder 'You' as a separate user
+      if (cleanName.toLowerCase() === 'you') return
+
+      if (isAlreadySeen(cleanName, cleanEmail, cleanId)) {
+        return
+      }
+
+      registerSeen(cleanName, cleanEmail, cleanId)
+
       list.push({
-        id: id || key,
-        name: cleanName,
-        email: email?.trim(),
+        id: cleanId || cleanEmail?.toLowerCase() || cleanName.toLowerCase(),
+        name: cleanName || cleanEmail || 'User',
+        email: cleanEmail,
         role: role || 'Member',
-        initials: getInitials(cleanName),
-        color: getAvatarColor(cleanName),
+        initials: getInitials(cleanName || cleanEmail || 'User'),
+        color: getAvatarColor(cleanName || cleanEmail || 'User'),
       })
     }
 
-    // 1. Current logged-in user
+    // 1. Current logged-in user (always placed first)
     if (user) {
       const myName =
-        user.displayName ||
+        user.displayName?.trim() ||
         (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '') ||
-        user.email?.split('@')[0] ||
-        'You';
-      addUser(myName, user.email, 'Current User', user.id);
+        user.email?.split('@')[0]?.trim() ||
+        'You'
+
+      const cleanMyEmail = user.email?.trim()
+      const cleanMyId = user.id?.trim()
+
+      registerSeen(myName, cleanMyEmail, cleanMyId)
+      seenNames.add('you')
+      if (user.firstName?.trim()) seenNames.add(user.firstName.trim().toLowerCase())
+      if (user.lastName?.trim()) seenNames.add(user.lastName.trim().toLowerCase())
+      if (user.displayName?.trim()) seenNames.add(user.displayName.trim().toLowerCase())
+      if (cleanMyEmail) {
+        const prefix = cleanMyEmail.toLowerCase().split('@')[0]
+        if (prefix) seenNames.add(prefix)
+      }
+
+      list.push({
+        id: cleanMyId || 'current-user',
+        name: myName,
+        email: cleanMyEmail,
+        role: 'Current User',
+        initials: getInitials(myName),
+        color: getAvatarColor(myName),
+      })
     }
 
     // 2. Workspace members
     if (wsMembers && Array.isArray(wsMembers)) {
       wsMembers.forEach((m: any) => {
-        const memberName = m.displayName || m.email?.split('@')[0] || 'Member';
-        addUser(memberName, m.email, m.role, m.userId || m.id);
-      });
+        const memberName = m.displayName?.trim() || m.email?.split('@')[0]?.trim() || 'Member'
+        addUser(memberName, m.email, m.role, m.userId || m.id)
+      })
     }
 
     // 3. Organization members
     if (orgMembers && Array.isArray(orgMembers)) {
       orgMembers.forEach((m: any) => {
         const memberName =
-          [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email?.split('@')[0] || 'Member';
-        addUser(memberName, m.email, m.role, m.userId || m.id);
-      });
+          [m.firstName, m.lastName].filter(Boolean).join(' ').trim() ||
+          m.email?.split('@')[0]?.trim() ||
+          'Member'
+        addUser(memberName, m.email, m.role, m.userId || m.id)
+      })
     }
 
-    // 4. Any assignees or reviewers previously assigned across tasks
+    // 4. Any assignees or reviewers previously assigned across existing tasks
     tasks.forEach((t) => {
       if (t.assigneeName) addUser(t.assigneeName, undefined, 'Assignee')
       if (t.reviewerName) addUser(t.reviewerName, undefined, 'Reviewer')
@@ -676,8 +746,8 @@ export default function TasksPage() {
         description: newTaskDescription.trim(),
         tag: newTaskTag,
         tagColor: getTagColor(newTaskTag),
-        assigneeName: newTaskAssignee || currentUserName,
-        reviewerName: newTaskAssignedBy || currentUserName,
+        assigneeName: newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName),
+        reviewerName: newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName),
         dueDate: newTaskDue || todayStr,
         status: newTaskStatus,
         environment: isDone ? 'MAIN' : 'DEV',
@@ -744,8 +814,8 @@ export default function TasksPage() {
     setEditTitle(task.title || '')
     setEditProjectId(task.projectId || '')
     setEditTag(task.tag || 'Frontend')
-    setEditAssignee(task.assigneeName || currentUserName)
-    setEditAssignedBy(task.reviewerName || currentUserName)
+    setEditAssignee(task.assigneeName === 'You' ? currentUserName : (task.assigneeName || currentUserName))
+    setEditAssignedBy(task.reviewerName === 'You' ? currentUserName : (task.reviewerName || currentUserName))
     setEditDue(task.dueDate || todayStr)
     setEditPriority(task.priority || 'medium')
     setEditStatus(task.status || 'todo')
@@ -835,8 +905,8 @@ export default function TasksPage() {
         title: editTitle.trim(),
         description: editDescription.trim(),
         tag: editTag,
-        assigneeName: editAssignee,
-        reviewerName: editAssignedBy,
+        assigneeName: editAssignee === 'You' ? currentUserName : (editAssignee || currentUserName),
+        reviewerName: editAssignedBy === 'You' ? currentUserName : (editAssignedBy || currentUserName),
         dueDate: editDue,
         priority: editPriority,
         status: editStatus,
