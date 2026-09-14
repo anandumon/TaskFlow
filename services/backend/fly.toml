@@ -9,6 +9,7 @@ primary_region = "sin" # Singapore or iad / sjc / ams depending on preference
 [env]
   PORT = "8080"
   SPRING_PROFILES_ACTIVE = "supabase"
+  CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://task-flow-seven-ochre.vercel.app"
 
 [http_service]
   internal_port = 8080
