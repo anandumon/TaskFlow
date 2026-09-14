@@ -57,6 +57,12 @@ public class CalendarEvent {
     @Column(name = "etag")
     private String etag;
 
+    @Column(name = "meeting_url", length = 1000)
+    private String meetingUrl;
+
+    @Column(name = "location", length = 500)
+    private String location;
+
     @Column(name = "last_synced_at")
     private Instant lastSyncedAt;
 

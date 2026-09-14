@@ -30,6 +30,8 @@ jobs:
       CORS_ORIGINS: ${{ secrets.CORS_ORIGINS || 'http://localhost:3000' }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID || secrets.GOOGLE_CLIENT_ID }}
+      TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET || secrets.GOOGLE_CLIENT_SECRET }}
 
     steps:
       - name: Checkout repository

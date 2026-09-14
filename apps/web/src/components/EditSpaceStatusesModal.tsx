@@ -24,6 +24,7 @@ import {
   BUILT_IN_TEMPLATES,
   sortStatusesByStructure,
 } from '@/stores/status-store'
+import { Portal } from '@/components/ui/portal'
 
 interface EditSpaceStatusesModalProps {
   isOpen: boolean
@@ -231,8 +232,9 @@ export function EditSpaceStatusesModal({
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-4xl max-h-[92vh] bg-[#12111A] border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white">
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
+        <div className="w-full max-w-4xl max-h-[92vh] bg-[#12111A] border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white">
         {/* Header */}
         <div className="h-14 px-6 border-b border-white/[0.08] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -601,5 +603,6 @@ export function EditSpaceStatusesModal({
         </div>
       </div>
     </div>
-  )
+  </Portal>
+)
 }

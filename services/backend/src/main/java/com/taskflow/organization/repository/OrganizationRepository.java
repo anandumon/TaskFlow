@@ -21,4 +21,6 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
     @Query("SELECT o FROM Organization o JOIN OrganizationMember om ON o.id = om.organizationId " +
            "WHERE om.userId = :userId AND o.deleted = false ORDER BY o.name")
     List<Organization> findAllByMemberUserId(UUID userId);
+
+    List<Organization> findByOwnerIdAndDeletedFalse(UUID ownerId);
 }

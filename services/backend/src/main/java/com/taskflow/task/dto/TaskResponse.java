@@ -33,6 +33,8 @@ public class TaskResponse {
     private String filesChanged;
     private String notes;
     private String historyLogs;
+    private Integer position;
+    private Integer progress;
     private Instant createdAt;
     private Instant updatedAt;
 }

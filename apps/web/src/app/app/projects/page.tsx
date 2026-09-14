@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import {
   FolderKanban,
   Plus,
@@ -13,14 +14,22 @@ import {
   GitBranch,
   Layers,
   Sparkles,
-  Server
+  Server,
+  LayoutGrid,
+  List,
+  ArrowRight,
+  Check,
+  GripVertical,
 } from 'lucide-react'
+import { Portal } from '@/components/ui/portal'
+import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { ProjectCard } from '@/features/projects/components/ProjectCard'
 
 export default function ProjectsPage() {
-  const { currentWorkspace } = useWorkspaceStore()
+  const { currentOrg } = useOrgStore()
+  const { currentWorkspace, workspaces, setCurrentWorkspace, fetchWorkspaces } = useWorkspaceStore()
   const { projects, loadProjects, createProject, deleteProject, isLoading } = useProjectStore()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -29,9 +38,57 @@ export default function ProjectsPage() {
   const [newProjectColor, setNewProjectColor] = useState('#6366F1')
   const [newProjectStatus, setNewProjectStatus] = useState<Project['status']>('ACTIVE')
 
+  // Drag and drop custom project ordering
+  const [projectOrder, setProjectOrder] = useState<string[]>([])
+  const [draggedProjId, setDraggedProjId] = useState<string | null>(null)
+
+  const handleProjDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedProjId(id)
+    e.dataTransfer.setData('text/plain', id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleProjDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleProjDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    const sourceId = draggedProjId || e.dataTransfer.getData('text/plain')
+    if (!sourceId || sourceId === targetId) return
+
+    setProjectOrder((prev) => {
+      const allIds = prev.length > 0 ? [...prev] : projects.map((p) => p.id)
+      const fromIndex = allIds.indexOf(sourceId)
+      const toIndex = allIds.indexOf(targetId)
+      if (fromIndex === -1 || toIndex === -1) return prev
+
+      const [moved] = allIds.splice(fromIndex, 1)
+      allIds.splice(toIndex, 0, moved)
+      return allIds
+    })
+    setDraggedProjId(null)
+  }
+
   // Custom Environment Pipeline for this project
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>(['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN'])
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  // Ensure currentWorkspace is synchronized if workspaces list exists
+  useEffect(() => {
+    if (!currentWorkspace && workspaces && workspaces.length > 0) {
+      setCurrentWorkspace(workspaces[0])
+    }
+  }, [currentWorkspace, workspaces, setCurrentWorkspace])
+
+  // If workspaces is empty and we have an active organization, fetch them
+  useEffect(() => {
+    if (currentOrg?.id && (!workspaces || workspaces.length === 0)) {
+      fetchWorkspaces(currentOrg.id)
+    }
+  }, [currentOrg?.id, workspaces, fetchWorkspaces])
 
   useEffect(() => {
     if (currentWorkspace?.id) {
@@ -57,190 +114,394 @@ export default function ProjectsPage() {
     e.preventDefault()
     if (!newProjectName.trim()) return
 
-    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    const activeWs = currentWorkspace || (workspaces && workspaces[0])
+    if (!activeWs?.id) {
+      showToast('No active workspace found. Please select or create a workspace first.')
+      return
+    }
+
     try {
-      await createProject(wsId, {
+      await createProject(activeWs.id, {
         name: newProjectName.trim(),
         description: newProjectDescription.trim() || 'Comprehensive project milestones & deliverables',
-        status: newProjectStatus,
         color: newProjectColor,
-        icon: 'folder',
-        environments: selectedEnvs.join(','),
+        status: newProjectStatus,
+        environments: JSON.stringify(selectedEnvs),
+        progress: 0,
       })
       setNewProjectName('')
       setNewProjectDescription('')
       setSelectedEnvs(['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN'])
       setIsModalOpen(false)
-      showToast('Project with custom environment pipeline saved to database!')
+      showToast('Project created with custom environments!')
     } catch (err: any) {
-      showToast(err?.message || 'Project creation failed')
+      showToast(err?.message || 'Failed to create project')
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
       await deleteProject(id)
-      showToast('Project deleted from database')
+      showToast('Project deleted')
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete project')
     }
   }
 
   const allAvailableEnvs = [
-    { id: 'DEV', name: 'DEV', desc: 'Local feature development (Required)' },
-    { id: 'SIT', name: 'SIT', desc: 'System Integration Testing' },
-    { id: 'UAT', name: 'UAT', desc: 'User Acceptance / Business Testing' },
-    { id: 'RELEASE', name: 'RELEASE', desc: 'Staging candidate verification' },
-    { id: 'MAIN', name: 'MAIN', desc: 'Production deployment (Required)' },
+    { id: 'DEV', name: 'DEV', title: 'Development', desc: 'Local feature implementation' },
+    { id: 'SIT', name: 'SIT', title: 'System Integration', desc: 'Cross-service pipeline testing' },
+    { id: 'UAT', name: 'UAT', title: 'User Acceptance', desc: 'Business & client sign-off' },
+    { id: 'RELEASE', name: 'RELEASE', title: 'Release Staging', desc: 'Staging candidate verification' },
+    { id: 'MAIN', name: 'MAIN', title: 'Production', desc: 'Live customer environment' },
   ]
 
+  const orderedProjects = [...projects].sort((a, b) => {
+    if (projectOrder.length === 0) return 0
+    const indexA = projectOrder.indexOf(a.id)
+    const indexB = projectOrder.indexOf(b.id)
+    if (indexA === -1 && indexB === -1) return 0
+    if (indexA === -1) return 1
+    if (indexB === -1) return -1
+    return indexA - indexB
+  })
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
+    <div className="space-y-8 max-w-7xl mx-auto animate-fade-in pb-12">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>
       )}
 
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <FolderKanban className="w-6 h-6 text-primary" /> Projects & Pipelines
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-primary">
+              <FolderKanban className="w-5 h-5" />
+            </div>
+            <span>Projects &amp; Roadmaps</span>
           </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Organize work across initiatives, custom environments, and automated delivery pipelines.
+          </p>
         </div>
 
-        {projects.length > 0 && (
+        <div className="flex items-center gap-3">
+          {/* View Switcher: Grid vs List */}
+          <div className="flex items-center p-1 bg-muted/80 backdrop-blur-md rounded-xl border border-border shadow-xs">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Glass Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-primary" /> Grid
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Table List View"
+            >
+              <List className="w-3.5 h-3.5 text-primary" /> List
+            </button>
+          </div>
+
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4" /> New Project
           </button>
-        )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.length === 0 ? (
-          <div className="col-span-full p-12 text-center bg-card border border-dashed border-border rounded-3xl">
-            <FolderKanban className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-foreground">No projects found</h3>
-            <p className="text-xs text-muted-foreground mt-1 mb-4">
-              Get started by creating your first project roadmap with custom environments.
-            </p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all"
-            >
-              + Create First Project
-            </button>
-          </div>
-        ) : (
-          projects.map((project) => (
+      {projects.length === 0 ? (
+        <div className="p-16 text-center bg-card/60 backdrop-blur-xl border border-dashed border-border rounded-3xl space-y-3">
+          <FolderKanban className="w-12 h-12 text-muted-foreground mx-auto" />
+          <h3 className="text-sm font-bold text-foreground">No projects found</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Get started by creating your first project roadmap with custom delivery environments.
+          </p>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-md shadow-primary/20"
+          >
+            + Create First Project
+          </button>
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* Clean Minimal Liquid Glass Grid View with Drag & Drop */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {orderedProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project as any}
               onDeleteProject={handleDelete}
+              draggable={true}
+              onDragStart={(e) => handleProjDragStart(e, project.id)}
+              onDragOver={handleProjDragOver}
+              onDrop={(e) => handleProjDrop(e, project.id)}
+              onDragEnd={() => setDraggedProjId(null)}
+              isDragging={draggedProjId === project.id}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        /* Clean Spacious Table List View with Drag & Drop */
+        <div className="rounded-3xl border border-border/80 bg-card/75 backdrop-blur-xl overflow-hidden shadow-lg">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/80 border-b border-border text-muted-foreground font-semibold">
+              <tr>
+                <th className="p-4 pl-6">Project</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Delivery Progress</th>
+                <th className="p-4">Environments</th>
+                <th className="p-4 pr-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {orderedProjects.map((p) => {
+                let envList: string[] = ['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN']
+                try {
+                  if (p.environments) envList = JSON.parse(p.environments)
+                } catch {}
 
-      {/* Interactive Modal: New Project with Custom Environments */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <FolderKanban className="w-4 h-4 text-primary" /> Create Project with Custom Environments
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProject} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Project Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Core Payment Engine"
-                  value={newProjectName}
-                  onChange={e => setNewProjectName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  autoFocus
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="Short summary of project scope..."
-                  value={newProjectDescription}
-                  onChange={e => setNewProjectDescription(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              {/* Environments Selection */}
-              <div className="space-y-2 bg-muted/30 p-3.5 rounded-2xl border border-border/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Server className="w-3.5 h-3.5 text-primary" /> Select Required Environments for this Project
-                  </label>
-                  <span className="text-[10px] text-muted-foreground font-semibold">
-                    {selectedEnvs.length} stages selected
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Pick which environments this project requires for review & testing:
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {allAvailableEnvs.map((env) => {
-                    const isSelected = selectedEnvs.includes(env.id)
-                    const isFixed = env.id === 'DEV' || env.id === 'MAIN'
-
-                    return (
-                      <div
-                        key={env.id}
-                        onClick={() => toggleEnv(env.id)}
-                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${isSelected
-                            ? 'bg-primary/10 border-primary text-primary font-bold'
-                            : 'bg-background border-border text-muted-foreground hover:border-border hover:text-foreground'
-                          } ${isFixed ? 'opacity-90' : ''}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={isFixed}
-                            onChange={() => { }}
-                            className="rounded accent-primary"
+                return (
+                  <tr
+                    key={p.id}
+                    draggable={true}
+                    onDragStart={(e) => handleProjDragStart(e, p.id)}
+                    onDragOver={handleProjDragOver}
+                    onDrop={(e) => handleProjDrop(e, p.id)}
+                    onDragEnd={() => setDraggedProjId(null)}
+                    className={`hover:bg-accent/40 transition-colors group cursor-move select-none ${
+                      draggedProjId === p.id ? 'opacity-40 bg-primary/10 border-primary border-y-2' : ''
+                    }`}
+                    title="Drag to place at any position"
+                  >
+                    <td className="p-4 pl-6">
+                      <div className="flex items-center gap-2.5">
+                        <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing p-0.5 shrink-0" title="Drag to reorder">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <Link
+                          href={`/app/projects/${p.id}`}
+                          className="flex items-center gap-3 block"
+                        >
+                          <div
+                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
+                            style={{
+                              backgroundColor: p.color || '#6366F1',
+                              boxShadow: `0 0 10px ${p.color || '#6366F1'}60`,
+                            }}
                           />
                           <div>
-                            <div className="text-xs font-bold">{env.name}</div>
-                            <div className="text-[9px] text-muted-foreground">{env.desc}</div>
-                          </div>
+                            <p
+                              className="font-bold text-sm tracking-tight transition-colors group-hover:text-primary flex items-center gap-1.5"
+                            style={{ color: p.color }}
+                          >
+                            {p.name}
+                            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-muted-foreground" />
+                          </p>
+                          {p.description && p.description !== 'Comprehensive project milestones & deliverables' && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-1">
+                              {p.description}
+                            </p>
+                          )}
+                        </div>
+                      </Link>
+                    </div>
+                  </td>
+
+                    <td className="p-4">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/25 uppercase">
+                        {p.status || 'ACTIVE'}
+                      </span>
+                    </td>
+
+                    <td className="p-4 min-w-[180px]">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-semibold">
+                          <span className="text-muted-foreground">Progress</span>
+                          <span className="font-bold" style={{ color: p.color || '#6366F1' }}>
+                            {p.progress || 0}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-muted overflow-hidden border border-border/40">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              backgroundColor: p.color || '#6366F1',
+                              width: `${p.progress || 0}%`,
+                            }}
+                          />
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
+                    </td>
+
+                    <td className="p-4">
+                      <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                        {envList.map((env) => (
+                          <span
+                            key={env}
+                            className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-muted/80 text-muted-foreground border border-border/60"
+                          >
+                            {env}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="p-4 pr-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/app/projects/${p.id}`}
+                          className="px-3 py-1.5 rounded-xl bg-card hover:bg-accent border border-border text-xs font-semibold text-foreground transition-all cursor-pointer"
+                        >
+                          View Roadmap
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Project"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Interactive Modal: New Project with Custom Environments (Rendered in Portal so backdrop covers the entire window) */}
+      {isModalOpen && (
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 animate-scale-in max-h-[90vh] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <FolderKanban className="w-4 h-4 text-primary" /> Create Project with Custom Environments
+                </h3>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleCreateProject} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Project Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Core Payment Engine"
+                    value={newProjectName}
+                    onChange={e => setNewProjectName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Description</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Short summary of project scope..."
+                    value={newProjectDescription}
+                    onChange={e => setNewProjectDescription(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Environments Selection */}
+                <div className="space-y-2.5 bg-muted/20 p-3.5 rounded-2xl border border-border/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Server className="w-3.5 h-3.5 text-primary" /> Select Required Environments for this Project
+                    </label>
+                    <span className="text-[10px] text-primary font-bold px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                      {selectedEnvs.length} stages selected
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Pick which environments this project requires for review & testing:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                    {allAvailableEnvs.map((env) => {
+                      const isSelected = selectedEnvs.includes(env.id)
+                      const isFixed = env.id === 'DEV' || env.id === 'MAIN'
+
+                      return (
+                        <div
+                          key={env.id}
+                          onClick={() => toggleEnv(env.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 select-none ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary/60 text-foreground shadow-xs'
+                              : 'bg-background/70 border-border/70 text-muted-foreground hover:border-border hover:bg-background'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border shrink-0 ${
+                                isSelected
+                                  ? 'bg-primary/20 border-primary/40 text-primary'
+                                  : 'bg-muted border-border/80 text-muted-foreground'
+                              }`}
+                            >
+                              {env.name}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold truncate flex items-center gap-1">
+                                <span>{env.title}</span>
+                                {isFixed && (
+                                  <span className="text-[8px] font-extrabold px-1 rounded bg-primary/20 text-primary uppercase">
+                                    Req
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[9px] text-muted-foreground truncate">{env.desc}</div>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected
+                                ? 'bg-primary border-primary text-primary-foreground shadow-xs'
+                                : 'border-border/80 bg-muted/40'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground">Status</label>
                   <select
                     value={newProjectStatus}
                     onChange={e => setNewProjectStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                   >
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="IN_PROGRESS">IN PROGRESS</option>
@@ -249,42 +510,72 @@ export default function ProjectsPage() {
                   </select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Brand Color</label>
-                  <div className="flex items-center gap-2 pt-1">
-                    {['#6366F1', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B'].map((c) => (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">Project Brand Color</label>
+                    <div className="flex items-center gap-1.5 text-xs font-mono font-bold" style={{ color: newProjectColor }}>
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: newProjectColor }} />
+                      <span>{newProjectColor}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-2 p-2 rounded-2xl bg-muted/30 border border-border/70">
+                    {[
+                      { name: 'Electric Indigo', hex: '#6366F1' },
+                      { name: 'Neon Violet', hex: '#8B5CF6' },
+                      { name: 'Cyber Rose', hex: '#F43F5E' },
+                      { name: 'Radiant Pink', hex: '#EC4899' },
+                      { name: 'Sunset Orange', hex: '#F97316' },
+                      { name: 'Amber Glow', hex: '#F59E0B' },
+                      { name: 'Emerald Green', hex: '#10B981' },
+                      { name: 'Liquid Teal', hex: '#14B8A6' },
+                      { name: 'Aqua Cyan', hex: '#06B6D4' },
+                      { name: 'Sky Blue', hex: '#0EA5E9' },
+                      { name: 'Royal Blue', hex: '#3B82F6' },
+                      { name: 'Magenta Luxe', hex: '#D946EF' },
+                    ].map((c) => (
                       <button
                         type="button"
-                        key={c}
-                        onClick={() => setNewProjectColor(c)}
-                        className={`w-6 h-6 rounded-full transition-transform ${newProjectColor === c ? 'scale-125 ring-2 ring-foreground ring-offset-2' : 'hover:scale-110'
-                          }`}
-                        style={{ backgroundColor: c }}
-                      />
+                        key={c.hex}
+                        onClick={() => setNewProjectColor(c.hex)}
+                        title={c.name}
+                        className={`h-7 rounded-xl transition-all flex items-center justify-center cursor-pointer ${
+                          newProjectColor === c.hex
+                            ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-background shadow-lg'
+                            : 'hover:scale-105 opacity-85 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: c.hex,
+                          boxShadow: newProjectColor === c.hex ? `0 0 14px ${c.hex}` : undefined,
+                        }}
+                      >
+                        {newProjectColor === c.hex && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
+                      </button>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-                >
-                  Save Project to DB
-                </button>
-              </div>
-            </form>
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95"
+                  >
+                    Save Project to DB
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
     </div>
   )
 }
+

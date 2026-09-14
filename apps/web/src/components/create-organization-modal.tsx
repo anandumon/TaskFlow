@@ -44,26 +44,28 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
       <div
-        className="w-full max-w-md rounded-2xl bg-card border border-border/80 shadow-2xl p-6 space-y-5 animate-scale-in"
+        className="w-full max-w-md rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-7 space-y-5 animate-scale-in transition-all relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="absolute -top-12 -right-12 w-36 h-36 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+
         {/* Modal Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-md shadow-primary/25">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-foreground">Create Organization</h3>
+              <h3 className="text-base font-bold text-foreground tracking-tight">Create Organization</h3>
               <p className="text-xs text-muted-foreground">Add a new company or tenant entity</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="w-8 h-8 rounded-xl hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

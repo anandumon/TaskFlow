@@ -41,6 +41,9 @@ interface AuthState {
   clearError: () => void
 }
 
+import { useOrgStore } from './org-store'
+import { useWorkspaceStore } from './workspace-store'
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -50,6 +53,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
     try {
+      // Clear previous user's workspace/org state to prevent cross-tenant contamination
+      useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
+      useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
+
       const cleanEmail = email.trim().toLowerCase()
       const res = await apiClient.post<any>('/api/v1/auth/login', {
         email: cleanEmail,
@@ -187,6 +194,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
       }
+      useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
+      useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
       set({ user: null, isAuthenticated: false, error: null })
     }
   },

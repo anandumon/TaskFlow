@@ -16,21 +16,21 @@ public interface RolePermissionRepository extends JpaRepository<RolePermission, 
 
     void deleteByRoleId(UUID roleId);
 
-    @Query("""
-        SELECT DISTINCT p.code FROM Permission p
-        JOIN RolePermission rp ON rp.permissionId = p.id
-        WHERE rp.roleId IN (
-            SELECT om.roleId FROM OrganizationMember om WHERE om.userId = :userId
+    @Query(value = """
+        SELECT DISTINCT p.code FROM permissions p
+        JOIN role_permissions rp ON rp.permission_id = p.id
+        WHERE rp.role_id IN (
+            SELECT om.role_id FROM organization_members om WHERE om.user_id = :userId
             UNION
-            SELECT wm.roleId FROM WorkspaceMember wm WHERE wm.userId = :userId
+            SELECT wm.role_id FROM workspace_members wm WHERE wm.user_id = :userId
         )
-    """)
-    Set<String> findPermissionCodesByUserId(UUID userId);
+    """, nativeQuery = true)
+    Set<String> findPermissionCodesByUserId(@org.springframework.data.repository.query.Param("userId") UUID userId);
 
-    @Query("""
-        SELECT DISTINCT p.code FROM Permission p
-        JOIN RolePermission rp ON rp.permissionId = p.id
-        WHERE rp.roleId = :roleId
-    """)
-    Set<String> findPermissionCodesByRoleId(UUID roleId);
+    @Query(value = """
+        SELECT DISTINCT p.code FROM permissions p
+        JOIN role_permissions rp ON rp.permission_id = p.id
+        WHERE rp.role_id = :roleId
+    """, nativeQuery = true)
+    Set<String> findPermissionCodesByRoleId(@org.springframework.data.repository.query.Param("roleId") UUID roleId);
 }

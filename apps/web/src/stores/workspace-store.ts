@@ -47,6 +47,7 @@ interface WorkspaceState {
   updateWorkspace: (orgId: string, workspaceId: string, data: { name?: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
   fetchTeams: (workspaceId: string) => Promise<Team[]>
   createTeam: (workspaceId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Team>
+  fetchMembers: (workspaceId: string) => Promise<WorkspaceMember[]>
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -58,18 +59,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   error: null,
 
   fetchWorkspaces: async (orgId: string) => {
+    if (!orgId) {
+      set({ workspaces: [], currentWorkspace: null, isLoading: false })
+      return []
+    }
     set({ isLoading: true, error: null })
     try {
       const res = await apiClient.get<Workspace[]>(`/api/v1/organizations/${orgId}/workspaces`)
       const list = res.data || []
+      const current = get().currentWorkspace
+      const validCurrent = list.find((w) => w.id === current?.id) || list[0] || null
       set({
         workspaces: list,
-        currentWorkspace: get().currentWorkspace || list[0] || null,
+        currentWorkspace: validCurrent,
         isLoading: false,
       })
       return list
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to fetch workspaces', isLoading: false })
+      set({ error: err?.message || 'Failed to fetch workspaces', isLoading: false, workspaces: [], currentWorkspace: null })
       return []
     }
   },
@@ -129,5 +136,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const res = await apiClient.post<Team>(`/api/v1/workspaces/${workspaceId}/teams`, data)
     set((state) => ({ teams: [...state.teams, res.data] }))
     return res.data
+  },
+
+  fetchMembers: async (workspaceId: string) => {
+    try {
+      const res = await apiClient.get<WorkspaceMember[]>(`/api/v1/workspaces/${workspaceId}/members`)
+      const members = res.data || []
+      set({ members })
+      return members
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to fetch workspace members' })
+      return []
+    }
   },
 }))

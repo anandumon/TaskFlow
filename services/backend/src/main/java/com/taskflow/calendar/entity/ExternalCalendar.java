@@ -45,6 +45,14 @@ public class ExternalCalendar {
     @Column(name = "sync_enabled")
     private Boolean syncEnabled;
 
+    @Builder.Default
+    @Column(name = "can_read")
+    private Boolean canRead = true;
+
+    @Builder.Default
+    @Column(name = "can_write")
+    private Boolean canWrite = true;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

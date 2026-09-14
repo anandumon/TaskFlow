@@ -30,4 +30,5 @@ public class CreateTaskRequest {
     private String filesChanged;
     private String notes;
     private String historyLogs;
+    private Integer progress;
 }

@@ -20,6 +20,7 @@ export default function AuthCallbackPage() {
       try {
         // 1. Determine mode: 'signin' (default) vs 'signup'
         let mode: 'signin' | 'signup' = 'signin'
+        let inviteToken: string | null = null
         if (typeof window !== 'undefined') {
           const urlParams = new URLSearchParams(window.location.search)
           const modeParam = urlParams.get('mode')
@@ -27,16 +28,80 @@ export default function AuthCallbackPage() {
           if (modeParam === 'signup' || storedMode === 'signup') {
             mode = 'signup'
           }
+          inviteToken = urlParams.get('invite_token') || localStorage.getItem('tf_invite_token')
           localStorage.removeItem('tf_auth_mode')
+          if (inviteToken) {
+            localStorage.removeItem('tf_invite_token')
+          }
         }
 
-        // 2. Retrieve session from Supabase
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        if (sessionError) throw sessionError
+        // 2. Retrieve session from Supabase - Immediate code exchange if code query param is present
+        const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+        
+        // Check if OAuth provider returned an explicit error (e.g. user cancelled)
+        const oauthError = urlParams?.get('error_description') || urlParams?.get('error')
+        if (oauthError) {
+          if (active) {
+            setStatus('error')
+            setErrorMessage(oauthError.replace(/\+/g, ' '))
+          }
+          return
+        }
 
-        let currentSession = session
+        const codeParam = urlParams?.get('code')
+        let currentSession: any = null
+
+        if (codeParam) {
+          try {
+            const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeParam)
+            if (!exchangeError && exchangeData?.session) {
+              currentSession = exchangeData.session
+            }
+          } catch (ex) {
+            console.debug('Code exchange fallback:', ex)
+          }
+        }
+
         if (!currentSession) {
-          // Wait for onAuthStateChange if session isn't available immediately
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          if (!sessionError && session) {
+            currentSession = session
+          }
+        }
+
+        // Support direct tokens returned in hash fragment (#access_token=...)
+        if (!currentSession && typeof window !== 'undefined' && window.location.hash) {
+          try {
+            const hashString = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash
+            const hashParams = new URLSearchParams(hashString)
+            const hashAccessToken = hashParams.get('access_token')
+            const hashRefreshToken = hashParams.get('refresh_token')
+
+            if (hashAccessToken) {
+              const { data: sessionData } = await supabase.auth.setSession({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken || '',
+              })
+              if (sessionData?.session) {
+                currentSession = sessionData.session
+              } else {
+                const { data: userData } = await supabase.auth.getUser(hashAccessToken)
+                if (userData?.user) {
+                  currentSession = {
+                    access_token: hashAccessToken,
+                    refresh_token: hashRefreshToken,
+                    user: userData.user,
+                  }
+                }
+              }
+            }
+          } catch (hashErr) {
+            console.debug('Hash parameter parsing fallback:', hashErr)
+          }
+        }
+
+        if (!currentSession) {
+          // Robust fallback: listen for auth state change up to 4s
           currentSession = await new Promise((resolve) => {
             const timeout = setTimeout(() => resolve(null), 4000)
             const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
@@ -67,112 +132,51 @@ export default function AuthCallbackPage() {
           throw new Error('Google did not provide an email address.')
         }
 
-        // 3. Evaluate Condition: "check user exist or not"
-        setStatusMessage('Checking account status...')
-        const checkRes = await apiClient.get<{ email: string; exists: boolean }>(
-          `/api/v1/auth/check-user?email=${encodeURIComponent(userEmail)}`
-        )
-        const userExists = !!checkRes.data?.exists
+        // 3. Authenticate / register seamlessly via TaskFlow backend
+        setStatusMessage('Connecting your TaskFlow account...')
+        const oauthRes = await apiClient.post<any>('/api/v1/auth/oauth', {
+          provider: 'google',
+          email: userEmail,
+          name: fullName,
+          avatarUrl,
+          providerId,
+          mode: 'signin',
+        })
 
-        // === FLOW 1: SIGN IN (initiated from /login) ===
-        if (mode === 'signin') {
-          if (!userExists) {
-            // USER DOES NOT EXIST: Branch to "account creations" (Register page)
-            await supabase.auth.signOut()
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('accessToken')
-              localStorage.removeItem('refreshToken')
-            }
-            if (active) {
-              router.push(
-                `/register?email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(fullName)}&reason=google_not_registered`
-              )
-            }
-            return
+        const authData = oauthRes.data
+        const accessToken = authData?.accessToken || currentSession.access_token
+        apiClient.setAccessToken(accessToken)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', accessToken)
+          if (authData?.refreshToken) {
+            localStorage.setItem('refreshToken', authData.refreshToken)
           }
+        }
 
-          // USER EXISTS: Authenticate via TaskFlow backend -> Dashboard
-          setStatusMessage('Signing in to your dashboard...')
-          const oauthRes = await apiClient.post<any>('/api/v1/auth/oauth', {
-            provider: 'google',
-            email: userEmail,
-            name: fullName,
-            avatarUrl,
-            providerId,
-            mode: 'signin',
+        if (authData?.user) {
+          useAuthStore.setState({
+            user: authData.user,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
           })
+        }
 
-          const authData = oauthRes.data
-          const accessToken = authData?.accessToken || currentSession.access_token
-          apiClient.setAccessToken(accessToken)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('accessToken', accessToken)
-            if (authData?.refreshToken) {
-              localStorage.setItem('refreshToken', authData.refreshToken)
-            }
-          }
-
-          if (authData?.user) {
-            useAuthStore.setState({
-              user: authData.user,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-            })
-          }
-
-          if (active) {
-            setStatus('success')
+        if (active) {
+          setStatus('success')
+          if (inviteToken) {
+            setStatusMessage('Google authentication verified! Opening project invite...')
+            setTimeout(() => {
+              router.push(`/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`)
+            }, 150)
+          } else {
             setStatusMessage('Authentication successful! Opening dashboard...')
             setTimeout(() => {
               router.push('/app/home')
-            }, 600)
+            }, 150)
           }
-          return
         }
-
-        // === FLOW 2: SIGN UP / "google s" (initiated from /register) ===
-        if (mode === 'signup') {
-          if (userExists) {
-            // User is already registered -> Redirect to login page
-            await supabase.auth.signOut()
-            if (active) {
-              router.push(
-                `/login?email=${encodeURIComponent(userEmail)}&reason=already_registered`
-              )
-            }
-            return
-          }
-
-          // User does not exist -> Create account via backend, send confirmation, redirect to login
-          setStatusMessage('Creating your TaskFlow account...')
-          await apiClient.post<any>('/api/v1/auth/oauth', {
-            provider: 'google',
-            email: userEmail,
-            name: fullName,
-            avatarUrl,
-            providerId,
-            mode: 'signup',
-          })
-
-          // As specified in diagram: account creations -> send email & save to DB -> redirect to login
-          await supabase.auth.signOut()
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-          }
-
-          if (active) {
-            setStatus('success')
-            setStatusMessage('Account created successfully! Redirecting to sign in...')
-            setTimeout(() => {
-              router.push(
-                `/login?email=${encodeURIComponent(userEmail)}&google_registered=true`
-              )
-            }, 800)
-          }
-          return
-        }
+        return
       } catch (err: any) {
         if (active) {
           setStatus('error')

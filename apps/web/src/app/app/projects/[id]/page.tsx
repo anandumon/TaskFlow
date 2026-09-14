@@ -27,7 +27,15 @@ import {
   Clock,
   Sliders,
   X,
+  UserPlus,
+  Mail,
+  Loader2,
+  Bell,
+  ArrowUp,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
@@ -72,7 +80,47 @@ export default function ProjectDetailsPage() {
   const [editStatus, setEditStatus] = useState<TaskStatus>('todo')
   const [editEnv, setEditEnv] = useState<TaskEnvironment>('DEV')
 
+  // Invite Modal State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting, setInviting] = useState(false)
+
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [dispatchingAlertId, setDispatchingAlertId] = useState<string | null>(null)
+
+  const handleSendDueAlert = async (task: Task) => {
+    try {
+      setDispatchingAlertId(task.id)
+      const res = await useTaskStore.getState().dispatchDueAlert(task.id)
+      showToast(`🔔 Due date alert sent to ${res.recipientEmail || 'assignee'}!`)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to dispatch due alert')
+    } finally {
+      setDispatchingAlertId(null)
+    }
+  }
+
+  const getDueStatus = (dueDateStr?: string) => {
+    if (!dueDateStr) return { isToday: false, isNear: false, isOverdue: false, text: '' }
+    const cleaned = dueDateStr.trim()
+    if (cleaned.toLowerCase() === 'today') return { isToday: true, isNear: true, isOverdue: false, text: 'Due Today' }
+    if (cleaned.toLowerCase() === 'tomorrow') return { isToday: false, isNear: true, isOverdue: false, text: 'Due Tomorrow' }
+
+    try {
+      const now = new Date()
+      now.setHours(0, 0, 0, 0)
+      const due = new Date(cleaned)
+      due.setHours(0, 0, 0, 0)
+      const diffDays = Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (diffDays < 0) return { isToday: false, isNear: true, isOverdue: true, text: `${Math.abs(diffDays)}d overdue` }
+      if (diffDays === 0) return { isToday: true, isNear: true, isOverdue: false, text: 'Due Today' }
+      if (diffDays <= 3) return { isToday: false, isNear: true, isOverdue: false, text: `${diffDays}d left` }
+      return { isToday: false, isNear: false, isOverdue: false, text: `${diffDays}d left` }
+    } catch {
+      return { isToday: false, isNear: false, isOverdue: false, text: cleaned }
+    }
+  }
 
   useEffect(() => {
     if (currentWorkspace?.id) {
@@ -84,6 +132,25 @@ export default function ProjectDetailsPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inviteEmail.trim() || !projectId) return
+    setInviting(true)
+    try {
+      await apiClient.post(`/api/v1/projects/${projectId}/invitations`, {
+        email: inviteEmail.trim().toLowerCase(),
+        role: 'MEMBER',
+      })
+      showToast(`Invitation sent to ${inviteEmail}!`)
+      setInviteEmail('')
+      setIsInviteModalOpen(false)
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || err?.message || 'Failed to send invitation')
+    } finally {
+      setInviting(false)
+    }
   }
 
   const project = projects.find((p) => p.id === projectId)
@@ -444,9 +511,27 @@ export default function ProjectDetailsPage() {
                           </div>
 
                           <div className="flex items-center gap-1">
+                            {/* Bell Button: Send Due Alert Email */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSendDueAlert(t)
+                              }}
+                              disabled={dispatchingAlertId === t.id}
+                              title={`Send due date alert email for "${t.title}" now`}
+                              className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors relative cursor-pointer"
+                            >
+                              {dispatchingAlertId === t.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                              ) : (
+                                <Bell className="w-3 h-3" />
+                              )}
+                            </button>
+
                             <button
                               onClick={() => openEditModal(t)}
-                              className="p-1 text-muted-foreground hover:text-primary transition-colors rounded"
+                              className="p-1 text-muted-foreground hover:text-primary transition-colors rounded cursor-pointer"
                               title="Edit task"
                             >
                               <Edit2 className="w-3 h-3" />
@@ -570,15 +655,28 @@ export default function ProjectDetailsPage() {
                     <td className="p-3.5 pr-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          type="button"
+                          onClick={() => handleSendDueAlert(t)}
+                          disabled={dispatchingAlertId === t.id}
+                          className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors relative cursor-pointer"
+                          title="Send due date alert email"
+                        >
+                          {dispatchingAlertId === t.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                          ) : (
+                            <Bell className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
                           onClick={() => openEditModal(t)}
-                          className="p-1 text-muted-foreground hover:text-primary rounded transition-colors"
+                          className="p-1 text-muted-foreground hover:text-primary rounded transition-colors cursor-pointer"
                           title="Edit task"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDelete(t.id)}
-                          className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                          className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
                           title="Delete task"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -634,6 +732,15 @@ export default function ProjectDetailsPage() {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+              title="Invite a team member to this project via email"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-primary" />
+              <span>Invite</span>
+            </button>
+
             <button
               onClick={() => setStatusModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
@@ -1098,6 +1205,86 @@ export default function ProjectDetailsPage() {
         workspaceId={currentWorkspace?.id || 'default'}
         spaceName={project?.name || 'Project'}
       />
+
+      {/* Invite Member to Project Modal */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/10 rounded-full blur-xl pointer-events-none" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-border relative z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Invite Member to Project</h3>
+                  <p className="text-[11px] text-muted-foreground">Collaborate on {project?.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsInviteModalOpen(false)}
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendInvite} className="space-y-4 relative z-10">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="colleague@example.com"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-accent/30 border border-border/50 text-[11px] text-muted-foreground leading-relaxed space-y-1">
+                <div className="font-semibold text-foreground flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-primary" /> Automatic Setup Included
+                </div>
+                <p>
+                  When they open the invite link, if they don't have an account, they can sign up and the organization, workspace, and project will be automatically attached for them.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviting || !inviteEmail.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-md shadow-primary/25 disabled:opacity-50 cursor-pointer"
+                >
+                  {inviting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Sending Invitation...
+                    </>
+                  ) : (
+                    <>
+                      Send Invitation Email
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

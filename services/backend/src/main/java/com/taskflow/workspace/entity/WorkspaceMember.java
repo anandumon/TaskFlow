@@ -12,6 +12,7 @@ public class WorkspaceMember {
     @Column(name = "workspace_id", nullable = false) private UUID workspaceId;
     @Column(name = "user_id", nullable = false) private UUID userId;
     @Column(name = "role_id") private UUID roleId;
+    @Column(name = "status", nullable = false) @Builder.Default private String status = "ACTIVE";
     @Column(name = "joined_at") @Builder.Default private Instant joinedAt = Instant.now();
     @Column(name = "created_at", updatable = false) private Instant createdAt;
     @Column(name = "updated_at") private Instant updatedAt;

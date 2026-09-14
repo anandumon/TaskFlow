@@ -23,14 +23,55 @@ export interface OrgMember {
   joinedAt: string
 }
 
+export interface ProjectResource {
+  id: string
+  name: string
+  slug: string
+  color?: string
+  icon?: string
+  status?: string
+  role?: string
+}
+
+export interface WorkspaceResource {
+  id: string
+  name: string
+  slug: string
+  color?: string
+  icon?: string
+  role?: string
+  projects: ProjectResource[]
+}
+
+export interface OrgResource {
+  id: string
+  name: string
+  slug: string
+  logoUrl?: string
+  role: string
+  isOwner: boolean
+  workspaces: WorkspaceResource[]
+}
+
+export interface UserResourceTree {
+  personalSpace?: {
+    id: string
+    name: string
+    description?: string
+  }
+  organizations: OrgResource[]
+}
+
 interface OrgState {
   organizations: Organization[]
   currentOrg: Organization | null
   members: OrgMember[]
+  resourceTree: UserResourceTree | null
   isLoading: boolean
   error: string | null
 
   fetchOrganizations: () => Promise<Organization[]>
+  fetchUserResources: () => Promise<UserResourceTree | null>
   setCurrentOrg: (org: Organization | null) => void
   createOrganization: (name: string) => Promise<Organization>
   fetchMembers: (orgId: string) => Promise<OrgMember[]>
@@ -42,22 +83,37 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   organizations: [],
   currentOrg: null,
   members: [],
+  resourceTree: null,
   isLoading: false,
   error: null,
+
+  fetchUserResources: async () => {
+    try {
+      const res = await apiClient.get<UserResourceTree>('/api/v1/me/resources')
+      const tree = res.data || null
+      set({ resourceTree: tree })
+      return tree
+    } catch (err: any) {
+      console.warn('Failed to fetch user resource tree', err)
+      return null
+    }
+  },
 
   fetchOrganizations: async () => {
     set({ isLoading: true, error: null })
     try {
       const res = await apiClient.get<Organization[]>('/api/v1/organizations')
       const orgs = res.data || []
+      const current = get().currentOrg
+      const validCurrent = orgs.find((o) => o.id === current?.id) || orgs[0] || null
       set({
         organizations: orgs,
-        currentOrg: get().currentOrg || orgs[0] || null,
+        currentOrg: validCurrent,
         isLoading: false,
       })
       return orgs
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to fetch organizations', isLoading: false })
+      set({ error: err?.message || 'Failed to fetch organizations', isLoading: false, organizations: [], currentOrg: null })
       return []
     }
   },

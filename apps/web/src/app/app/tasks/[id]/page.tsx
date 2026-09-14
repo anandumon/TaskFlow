@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban, Lock } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { useOrgStore } from '@/stores/org-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { useTaskStore, TaskStatus, TaskEnvironment, Subtask, FileChange } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore } from '@/stores/status-store'
@@ -21,6 +23,8 @@ export default function TaskDetailsPage() {
   const taskId = params.id as string
 
   const { currentWorkspace } = useWorkspaceStore()
+  const { currentOrg, members: orgMembers } = useOrgStore()
+  const { user } = useAuthStore()
   const {
     tasks,
     loadTasks,
@@ -83,38 +87,89 @@ export default function TaskDetailsPage() {
     filesChanged = []
   }
 
+  const canEdit = Boolean(
+    task &&
+    user &&
+    (
+      (currentOrg?.ownerId && currentOrg.ownerId === user.id) ||
+      orgMembers?.some((m: any) =>
+        (m.userId === user.id || m.id === user.id || (m.email && m.email.toLowerCase() === user.email?.toLowerCase())) &&
+        (m.role?.toLowerCase() === 'owner' || m.role?.toLowerCase() === 'admin')
+      ) ||
+      (task.createdBy && task.createdBy === user.id) ||
+      (task.assigneeId && task.assigneeId === user.id) ||
+      (() => {
+        const myName = (user.displayName || `${user.firstName || ''} ${user.lastName || ''}`).trim().toLowerCase()
+        const myEmail = (user.email || '').toLowerCase()
+        const aName = (task.assigneeName || '').trim().toLowerCase()
+        if (aName && (aName === myName || aName === myEmail || aName === 'you')) return true
+        const allAssignees = (task.assignees || '').toLowerCase()
+        if (allAssignees && ((myEmail && allAssignees.includes(myEmail)) || (myName && allAssignees.includes(myName)))) return true
+        return false
+      })()
+    )
+  )
+
   const handleSaveMainBranch = async (branchToSave: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     await updateTask(task.id, { branchName: branchToSave.trim() })
     showToast('Branch name saved to database!')
   }
 
   const handleToggleSubtask = async (subtaskId: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     await toggleSubtask(task.id, subtaskId)
   }
 
   const handleAddSubtask = async (title: string, branchName?: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     await addSubtask(task.id, title, branchName)
     showToast('Subtask added!')
   }
 
   const handleSaveSubtaskBranch = async (subtaskId: string, branch: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     await updateSubtaskBranch(task.id, subtaskId, branch)
     showToast('Subtask branch updated!')
   }
 
   const handleUpdateSubtaskDetails = async (subtaskId: string, updatedFields: Partial<Subtask>) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, ...updatedFields } : s))
     await updateTask(task.id, { subtasks: JSON.stringify(updated) })
     showToast('Subtask details updated!')
   }
 
   const handleDeleteSubtask = async (subtaskId: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     const updated = subtasks.filter((s) => s.id !== subtaskId)
     await updateTask(task.id, { subtasks: JSON.stringify(updated) })
     showToast('Subtask removed')
   }
 
   const handleAddFileChange = async (newFile: FileChange) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     const updated = [...filesChanged, newFile]
     await updateTask(task.id, { filesChanged: JSON.stringify(updated) })
     showToast('File change logged!')
@@ -126,6 +181,10 @@ export default function TaskDetailsPage() {
   }
 
   const handleStatusUpdate = async (newStatus: TaskStatus) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     await updateStatus(task.id, newStatus)
     loadProjects(wsId)
@@ -133,6 +192,10 @@ export default function TaskDetailsPage() {
   }
 
   const handleEnvUpdate = async (newEnv: TaskEnvironment) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     if (newEnv === 'MAIN') {
       await updateStatus(task.id, 'done', 'MAIN')
@@ -180,7 +243,14 @@ export default function TaskDetailsPage() {
                 <span>Standalone</span>
               )}
             </div>
-            <h1 className="text-xl font-bold text-foreground mt-0.5">{task.title}</h1>
+            <h1 className="text-xl font-bold text-foreground mt-0.5 flex items-center gap-2">
+              <span>{task.title}</span>
+              {!canEdit && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                  <Lock className="w-3 h-3" /> View Only
+                </span>
+              )}
+            </h1>
           </div>
         </div>
 
@@ -190,8 +260,9 @@ export default function TaskDetailsPage() {
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Status:</span>
             <select
               value={task.status}
+              disabled={!canEdit}
               onChange={(e) => handleStatusUpdate(e.target.value as TaskStatus)}
-              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {useStatusStore.getState().getStatuses(currentWorkspace?.id || 'default').map((st) => (
                 <option key={st.id} value={st.id}>
@@ -205,9 +276,9 @@ export default function TaskDetailsPage() {
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Env:</span>
             <select
               value={task.environment || 'DEV'}
-              disabled={task.status === 'done'}
+              disabled={!canEdit || task.status === 'done'}
               onChange={(e) => handleEnvUpdate(e.target.value as TaskEnvironment)}
-              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="DEV">DEV</option>
               <option value="SIT">SIT</option>
@@ -217,18 +288,27 @@ export default function TaskDetailsPage() {
             </select>
           </div>
 
-          <button
-            onClick={async () => {
-              await deleteTask(task.id)
-              router.push('/app/tasks')
-            }}
-            className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            title="Delete Task"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {canEdit && (
+            <button
+              onClick={async () => {
+                await deleteTask(task.id)
+                router.push('/app/tasks')
+              }}
+              className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              title="Delete Task"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
+
+      {!canEdit && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2.5 text-xs text-amber-500 font-semibold shadow-xs">
+          <Lock className="w-4 h-4 shrink-0" />
+          <span>View-Only Deliverable: You can review details and discussions, but only assigned members or workspace administrators can modify status, branches, or files.</span>
+        </div>
+      )}
 
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

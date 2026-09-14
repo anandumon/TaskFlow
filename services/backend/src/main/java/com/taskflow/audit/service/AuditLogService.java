@@ -42,6 +42,29 @@ public class AuditLogService {
         log(action, entityType, entityId, null, null, null, null);
     }
 
+    public void logAction(UUID orgId, UUID userId, String action, String entityType, UUID entityId,
+                          String beforeState, Object metadata) {
+        String metadataJson = "{}";
+        if (metadata != null) {
+            try {
+                metadataJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(metadata);
+            } catch (Exception e) {
+                log.debug("Failed to serialize audit metadata: {}", e.getMessage());
+            }
+        }
+        AuditLog entry = AuditLog.builder()
+                .organizationId(orgId)
+                .userId(userId)
+                .action(action)
+                .entityType(entityType)
+                .entityId(entityId)
+                .beforeState(beforeState)
+                .metadata(metadataJson)
+                .build();
+        repository.save(entry);
+        log.debug("Audit: {} {} {} for user {} in org {}", action, entityType, entityId, userId, orgId);
+    }
+
     public Page<AuditLog> getByOrganization(UUID orgId, int page, int size) {
         return repository.findByOrganizationIdOrderByCreatedAtDesc(orgId, PageRequest.of(page, size));
     }

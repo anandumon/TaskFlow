@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface RoleRepository extends JpaRepository<Role, UUID> {
     List<Role> findByOrganizationIdIsNullOrOrganizationId(UUID organizationId);
     List<Role> findByIsSystemTrue();
+    java.util.Optional<Role> findByNameIgnoreCaseAndOrganizationIdIsNull(String name);
+    java.util.Optional<Role> findByNameIgnoreCaseAndOrganizationId(String name, UUID organizationId);
 }

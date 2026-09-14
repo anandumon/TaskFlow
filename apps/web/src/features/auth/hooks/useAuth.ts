@@ -229,31 +229,23 @@ export function useAuth() {
     }
   }, [])
 
-  // Continue with Google via Supabase OAuth
-  const signInWithGoogle = useCallback(async (mode: 'signin' | 'signup' = 'signin') => {
+  // Continue with Google via Supabase OAuth (Instant 0ms redirect)
+  const signInWithGoogle = useCallback((mode: 'signin' | 'signup' = 'signin') => {
     setError(null)
     const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
     if (typeof window !== 'undefined') {
       localStorage.setItem('tf_auth_mode', mode)
     }
-    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${redirectOrigin}/auth/callback?mode=${mode}`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    })
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
+    const callbackUrl = `${redirectOrigin}/auth/callback?mode=${mode}`
 
-    if (oauthError) {
-      const friendly = mapSupabaseError(oauthError)
-      setError(friendly)
-      throw new Error(friendly)
-    }
+    const authUrl = new URL(`${supabaseUrl}/auth/v1/authorize`)
+    authUrl.searchParams.set('provider', 'google')
+    authUrl.searchParams.set('redirect_to', callbackUrl)
+    authUrl.searchParams.set('access_type', 'offline')
+    authUrl.searchParams.set('prompt', 'consent')
 
-    return data
+    window.location.assign(authUrl.toString())
   }, [])
 
   // Sign out via Supabase Auth

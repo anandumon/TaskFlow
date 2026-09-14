@@ -3,15 +3,14 @@
 import React, { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAuth } from '@/features/auth/hooks/useAuth'
+import { apiClient } from '@/lib/api-client'
 import { SocialAuthButtons } from '@/features/auth/components/SocialAuthButtons'
 import { AuthMarketingPanel } from '@/features/auth/components/AuthMarketingPanel'
-import { Eye, EyeOff, Loader2, ArrowLeft, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signUp, error, clearError } = useAuth()
 
   const [form, setForm] = useState({
     firstName: '',
@@ -25,19 +24,27 @@ function RegisterContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [emailExists, setEmailExists] = useState(false)
   const [notFoundNotice, setNotFoundNotice] = useState(false)
   const [googleNotFoundNotice, setGoogleNotFoundNotice] = useState(false)
 
   useEffect(() => {
-    clearError()
+    setValidationError(null)
+    setServerError(null)
+    setEmailExists(false)
+
     const qEmail = searchParams.get('email')
     const qName = searchParams.get('name')
     const qReason = searchParams.get('reason')
+
     if (qEmail) {
-      setForm((prev) => ({ ...prev, email: qEmail }))
+      // Decode and clean malformed %10 to @
+      const cleanEmail = decodeURIComponent(qEmail).replace(/%10|\x10/g, '@').trim()
+      setForm((prev) => ({ ...prev, email: cleanEmail }))
     }
     if (qName) {
-      const parts = qName.trim().split(' ')
+      const parts = decodeURIComponent(qName).trim().split(' ')
       setForm((prev) => ({
         ...prev,
         firstName: parts[0] || prev.firstName,
@@ -50,48 +57,79 @@ function RegisterContent() {
     if (qReason === 'google_not_registered') {
       setGoogleNotFoundNotice(true)
     }
-  }, [searchParams, clearError])
+  }, [searchParams])
 
-  // Password criteria validation
+  // Password criteria checks
   const passwordChecks = [
     { label: 'At least 8 characters', met: form.password.length >= 8 },
     { label: 'Contains a number or symbol', met: /[0-9!@#$%^&*(),.?":{}|<>]/.test(form.password) },
   ]
   const isPasswordValid = passwordChecks.every((c) => c.met)
-  const passwordsMatch = form.password && form.password === form.confirmPassword
+  const passwordsMatch = form.password.length > 0 && form.password === form.confirmPassword
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setValidationError(null)
-    clearError()
+    setServerError(null)
+    setEmailExists(false)
 
-    if (!isPasswordValid) {
-      setValidationError('Please choose a password meeting the security requirements.')
+    const cleanFirst = form.firstName.trim()
+    const cleanLast = form.lastName.trim()
+    const cleanEmail = form.email.trim().toLowerCase().replace(/%10|\x10/g, '@')
+
+    if (!cleanFirst) {
+      setValidationError('Please enter your first name.')
       return
     }
 
-    if (!passwordsMatch) {
-      setValidationError('Passwords do not match. Please re-enter your password.')
+    if (!cleanLast) {
+      setValidationError('Please enter your last name.')
+      return
+    }
+
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setValidationError('Please enter a valid email address.')
+      return
+    }
+
+    if (form.password.length < 8) {
+      setValidationError('Password must be at least 8 characters long.')
+      return
+    }
+
+    if (!/[0-9!@#$%^&*(),.?":{}|<>]/.test(form.password)) {
+      setValidationError('Password must contain at least one number or special symbol.')
+      return
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setValidationError('Passwords do not match. Please verify both password fields.')
       return
     }
 
     try {
       setIsSubmitting(true)
-      const res = await signUp({
-        email: form.email,
+
+      const res = await apiClient.post<any>('/api/v1/auth/register', {
+        email: cleanEmail,
         password: form.password,
-        firstName: form.firstName,
-        lastName: form.lastName,
+        firstName: cleanFirst,
+        lastName: cleanLast,
       })
 
-      // If signup created the user and requires email verification (session === null)
-      if (res.requiresVerification || !res.session) {
-        router.push(`/verify-email?email=${encodeURIComponent(form.email.trim())}`)
-      } else {
-        router.push('/app/home')
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('pending_verify_email', cleanEmail)
       }
-    } catch {
-      // Error handled by useAuth hook and exposed via error
+
+      router.push(`/verify-email?email=${encodeURIComponent(cleanEmail)}`)
+    } catch (err: any) {
+      const msg = err?.message || err?.error?.message || 'Registration failed. Please try again.'
+      if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('email_exists')) {
+        setEmailExists(true)
+        setServerError('An account with this email already exists.')
+      } else {
+        setServerError(msg)
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -154,24 +192,32 @@ function RegisterContent() {
               <div>
                 <p className="font-semibold">No TaskFlow account found for this Google email.</p>
                 <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-                  Please click &ldquo;Continue with Google&rdquo; above to sign up with Google, or fill out the form below.
+                  Click &ldquo;Continue with Google&rdquo; above to sign up with Google, or fill out the form below.
                 </p>
               </div>
             </div>
           )}
 
           {/* Error Banner */}
-          {(error || validationError) && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+          {(serverError || validationError) && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p className="font-semibold">{error || validationError}</p>
+              <div className="space-y-1">
+                <p className="font-semibold">{serverError || validationError}</p>
+                {emailExists && (
+                  <Link
+                    href={`/login?email=${encodeURIComponent(form.email)}`}
+                    className="inline-block font-bold underline hover:text-foreground transition-colors text-[11px]"
+                  >
+                    Click here to sign in with this email →
+                  </Link>
+                )}
               </div>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Name Fields */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
@@ -223,6 +269,7 @@ function RegisterContent() {
                 onChange={(e) => {
                   setForm({ ...form, email: e.target.value })
                   setValidationError(null)
+                  setServerError(null)
                 }}
                 className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                 required
@@ -242,13 +289,13 @@ function RegisterContent() {
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Create a strong password"
                   value={form.password}
                   onChange={(e) => {
                     setForm({ ...form, password: e.target.value })
                     setValidationError(null)
                   }}
-                  className="flex h-10 w-full rounded-xl border border-border bg-background pl-3 pr-10 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  className="flex h-10 w-full rounded-xl border border-border bg-background pl-3 pr-10 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
                   required
                   autoComplete="new-password"
                 />
@@ -267,8 +314,8 @@ function RegisterContent() {
                 {passwordChecks.map((check, idx) => (
                   <span
                     key={idx}
-                    className={`text-[10px] flex items-center gap-1 ${
-                      check.met ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-muted-foreground'
+                    className={`text-[10px] flex items-center gap-1 transition-colors ${
+                      check.met ? 'text-emerald-500 font-medium' : 'text-muted-foreground'
                     }`}
                   >
                     <span>{check.met ? '✓' : '•'}</span>
@@ -287,15 +334,17 @@ function RegisterContent() {
                 <input
                   id="confirmPassword"
                   type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Re-enter password"
                   value={form.confirmPassword}
                   onChange={(e) => {
                     setForm({ ...form, confirmPassword: e.target.value })
                     setValidationError(null)
                   }}
-                  className={`flex h-10 w-full rounded-xl border bg-background pl-3 pr-10 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
-                    form.confirmPassword && !passwordsMatch
+                  className={`flex h-10 w-full rounded-xl border bg-background pl-3 pr-10 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all font-mono ${
+                    form.confirmPassword.length > 0 && !passwordsMatch
                       ? 'border-destructive focus:ring-destructive'
+                      : form.confirmPassword.length > 0 && passwordsMatch
+                      ? 'border-emerald-500/80 focus:ring-emerald-500'
                       : 'border-border focus:ring-primary'
                   }`}
                   required
@@ -310,9 +359,24 @@ function RegisterContent() {
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {form.confirmPassword && !passwordsMatch && (
-                <p className="text-[10px] text-destructive font-medium">
-                  Passwords do not match.
+
+              {form.confirmPassword.length > 0 && (
+                <p
+                  className={`text-[10px] font-medium flex items-center gap-1 pt-0.5 ${
+                    passwordsMatch ? 'text-emerald-500' : 'text-destructive'
+                  }`}
+                >
+                  {passwordsMatch ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Passwords match</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Passwords do not match</span>
+                    </>
+                  )}
                 </p>
               )}
             </div>
@@ -320,16 +384,16 @@ function RegisterContent() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitting || !isPasswordValid || (!!form.confirmPassword && !passwordsMatch)}
-              className="w-full h-10 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-98 cursor-pointer mt-2"
+              disabled={isSubmitting}
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-[0.99] cursor-pointer mt-3"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating account...
+                  <span>Creating your account...</span>
                 </>
               ) : (
-                'Create account'
+                <span>Create account</span>
               )}
             </button>
           </form>

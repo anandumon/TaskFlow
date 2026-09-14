@@ -31,12 +31,14 @@ public class WorkspaceService {
     private final OrganizationMemberRepository orgMemberRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final com.taskflow.rbac.service.AuthorizationService authorizationService;
 
-    private static final UUID MEMBER_ROLE_ID = UUID.fromString("a0000000-0000-0000-0000-000000000004");
+    private static final UUID WORKSPACE_ADMIN_ROLE_ID = UUID.fromString("b0000000-0000-0000-0000-000000000001");
+    private static final UUID WORKSPACE_MEMBER_ROLE_ID = UUID.fromString("b0000000-0000-0000-0000-000000000002");
 
     @Transactional
     public WorkspaceResponse create(UUID orgId, UUID userId, CreateWorkspaceRequest request) {
-        assertOrgMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_CREATE);
         String slug = generateSlug(orgId, request.getName());
 
         Workspace ws = Workspace.builder()
@@ -50,36 +52,40 @@ public class WorkspaceService {
                 .build();
         ws = workspaceRepository.save(ws);
 
-        // Add creator as member
+        // Add creator as Workspace Admin
         WorkspaceMember member = WorkspaceMember.builder()
                 .workspaceId(ws.getId())
                 .userId(userId)
-                .roleId(MEMBER_ROLE_ID)
+                .roleId(WORKSPACE_ADMIN_ROLE_ID)
+                .status("ACTIVE")
                 .build();
         memberRepository.save(member);
 
-        log.info("Workspace created: {} in org: {}", ws.getName(), orgId);
+        log.info("Workspace created: {} in org: {} by user: {}", ws.getName(), orgId, userId);
         return mapToResponse(ws);
     }
 
     @Transactional(readOnly = true)
     public List<WorkspaceResponse> listByOrg(UUID orgId, UUID userId) {
-        assertOrgMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_VIEW);
         return workspaceRepository.findByOrganizationIdAndDeletedFalse(orgId)
-                .stream().map(this::mapToResponse).toList();
+                .stream()
+                .filter(ws -> authorizationService.hasWorkspacePermission(userId, ws.getId(), com.taskflow.rbac.domain.PermissionCode.WORKSPACE_VIEW))
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public WorkspaceResponse getById(UUID wsId, UUID userId) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_VIEW);
         return mapToResponse(ws);
     }
 
     @Transactional
     public WorkspaceResponse update(UUID wsId, UUID userId, UpdateWorkspaceRequest request) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_UPDATE);
 
         if (request.getName() != null) ws.setName(request.getName().trim());
         if (request.getDescription() != null) ws.setDescription(request.getDescription());
@@ -93,7 +99,7 @@ public class WorkspaceService {
     @Transactional
     public void delete(UUID wsId, UUID userId) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_DELETE);
         ws.softDelete();
         workspaceRepository.save(ws);
         log.info("Workspace deleted: {} by user: {}", wsId, userId);
@@ -102,7 +108,7 @@ public class WorkspaceService {
     @Transactional(readOnly = true)
     public List<WorkspaceMemberResponse> listMembers(UUID wsId, UUID userId) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_VIEW);
 
         return memberRepository.findByWorkspaceId(wsId).stream().map(m -> {
             User user = userRepository.findByIdAndDeletedFalse(m.getUserId()).orElse(null);
@@ -120,7 +126,7 @@ public class WorkspaceService {
     @Transactional
     public void addMember(UUID wsId, UUID userId, UUID targetUserId, UUID roleId) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_MEMBERS_MANAGE);
 
         if (memberRepository.existsByWorkspaceIdAndUserId(wsId, targetUserId)) {
             throw AppException.conflict("MEMBER_EXISTS", "User is already a member of this workspace");
@@ -128,14 +134,16 @@ public class WorkspaceService {
 
         WorkspaceMember member = WorkspaceMember.builder()
                 .workspaceId(wsId).userId(targetUserId)
-                .roleId(roleId != null ? roleId : MEMBER_ROLE_ID).build();
+                .roleId(roleId != null ? roleId : WORKSPACE_MEMBER_ROLE_ID)
+                .status("ACTIVE")
+                .build();
         memberRepository.save(member);
     }
 
     @Transactional
     public void removeMember(UUID wsId, UUID userId, UUID memberId) {
         Workspace ws = findOrThrow(wsId);
-        assertOrgMember(ws.getOrganizationId(), userId);
+        authorizationService.requireWorkspacePermission(userId, wsId, com.taskflow.rbac.domain.PermissionCode.WORKSPACE_MEMBERS_MANAGE);
         WorkspaceMember member = memberRepository.findById(memberId)
                 .orElseThrow(() -> AppException.notFound("Member", memberId));
         memberRepository.delete(member);

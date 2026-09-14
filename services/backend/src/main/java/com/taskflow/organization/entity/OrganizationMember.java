@@ -28,6 +28,10 @@ public class OrganizationMember {
     @Column(name = "role_id")
     private UUID roleId;
 
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private String status = "ACTIVE";
+
     @Column(name = "joined_at")
     @Builder.Default
     private Instant joinedAt = Instant.now();

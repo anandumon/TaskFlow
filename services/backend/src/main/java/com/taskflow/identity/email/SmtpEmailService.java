@@ -19,7 +19,7 @@ public class SmtpEmailService implements EmailService {
     private final EmailTemplateService emailTemplateService;
     private final EmailVerificationProperties emailVerificationProperties;
 
-    @Value("${spring.mail.username:noreply@taskflow.dev}")
+    @Value("${spring.mail.username:anandu2109@gmail.com}")
     private String fromEmail;
 
     @Value("${taskflow.app.url:http://localhost:3000}")
@@ -32,6 +32,13 @@ public class SmtpEmailService implements EmailService {
         this.mailSender = mailSender;
         this.emailTemplateService = emailTemplateService;
         this.emailVerificationProperties = emailVerificationProperties;
+    }
+
+    private String getSenderEmail() {
+        if (fromEmail != null && !fromEmail.isBlank() && !fromEmail.contains("noreply")) {
+            return fromEmail.trim();
+        }
+        return "anandu2109@gmail.com";
     }
 
     @Async
@@ -58,7 +65,7 @@ public class SmtpEmailService implements EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            String sender = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "noreply@taskflow.dev";
+            String sender = getSenderEmail();
             helper.setFrom(sender, "TaskFlow Security");
             helper.setTo(recipientEmail);
             helper.setSubject("Verify your TaskFlow email address");
@@ -69,8 +76,8 @@ public class SmtpEmailService implements EmailService {
             mailSender.send(message);
             log.info("✔ [EMAIL DISPATCH] Verification email successfully transmitted via SMTP for: {}", maskedEmail);
         } catch (Exception e) {
-            log.warn("⚠ [EMAIL DISPATCH] SMTP server unavailable ({}). Use the 6-digit OTP code logged above to complete verification.",
-                    e.getMessage());
+            log.error("⚠ [EMAIL DISPATCH] SMTP transmission failed: {} (Fallback: OTP is active for 2 mins: {})",
+                    e.getMessage(), otp, e);
         }
     }
 
@@ -96,7 +103,7 @@ public class SmtpEmailService implements EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            String sender = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "noreply@taskflow.dev";
+            String sender = getSenderEmail();
             helper.setFrom(sender, "TaskFlow");
             helper.setTo(recipientEmail);
             helper.setSubject("Confirm your email address - TaskFlow");
@@ -107,8 +114,7 @@ public class SmtpEmailService implements EmailService {
             mailSender.send(message);
             log.info("✔ [EMAIL DISPATCH] Confirmation link successfully transmitted via SMTP for: {}", maskedEmail);
         } catch (Exception e) {
-            log.warn("⚠ [EMAIL DISPATCH] SMTP server unavailable ({}). Use the confirmation link logged above to complete verification.",
-                    e.getMessage());
+            log.error("⚠ [EMAIL DISPATCH] SMTP confirmation transmission failed: {}", e.getMessage(), e);
         }
     }
 
@@ -137,7 +143,7 @@ public class SmtpEmailService implements EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            String sender = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "noreply@taskflow.dev";
+            String sender = getSenderEmail();
             helper.setFrom(sender, "TaskFlow");
             helper.setTo(recipientEmail);
             helper.setSubject("Account Created Successfully - Welcome to TaskFlow!");
@@ -148,8 +154,145 @@ public class SmtpEmailService implements EmailService {
             mailSender.send(message);
             log.info("✔ [EMAIL DISPATCH] Account creation success email transmitted via SMTP for: {}", maskedEmail);
         } catch (Exception e) {
-            log.warn("⚠ [EMAIL DISPATCH] Failed to transmit account creation success email to {}: {}",
-                    maskedEmail, e.getMessage());
+            log.error("⚠ [EMAIL DISPATCH] Failed to transmit account creation success email to {}: {}",
+                    maskedEmail, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendProjectInvitationEmail(String recipientEmail, String inviterName, String orgName, String workspaceName, String projectName, String inviteUrl) {
+        String maskedEmail = maskEmail(recipientEmail);
+
+        log.info("\n" +
+                "======================================================================\n" +
+                "📩 [TASKFLOW EMAIL DISPATCH] PROJECT INVITATION\n" +
+                "To           : {}\n" +
+                "Invited By   : {}\n" +
+                "Project      : {}\n" +
+                "Workspace    : {}\n" +
+                "Organization : {}\n" +
+                "Invite Link  : {}\n" +
+                "======================================================================",
+                recipientEmail, inviterName, projectName, workspaceName, orgName, inviteUrl);
+
+        if (mailSender == null) {
+            log.info("ℹ Local mode: JavaMailSender bean unavailable. Click or copy the Invite Link logged above to join.");
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            String sender = getSenderEmail();
+            helper.setFrom(sender, "TaskFlow");
+            helper.setTo(recipientEmail);
+            helper.setSubject("You've been invited to join " + projectName + " on TaskFlow");
+
+            String htmlBody = emailTemplateService.renderProjectInvitationTemplate(inviterName, orgName, workspaceName, projectName, inviteUrl);
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            log.info("✔ [EMAIL DISPATCH] Project invitation email transmitted via SMTP for: {}", maskedEmail);
+        } catch (Exception e) {
+            log.error("⚠ [EMAIL DISPATCH] Failed to transmit project invitation email to {}: {}",
+                    maskedEmail, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendTaskDueAlertEmail(String recipientEmail, String recipientName, String taskTitle, String projectName,
+                                     String workspaceName, String dueDate, String timeRemainingText, String dueBanner,
+                                     String badgeClass, String statusText, String priorityText, String taskUrl) {
+        String maskedEmail = maskEmail(recipientEmail);
+
+        log.info("\n" +
+                "======================================================================\n" +
+                "🔔 [TASKFLOW EMAIL DISPATCH] TASK DUE ALERT\n" +
+                "To             : {}\n" +
+                "Recipient      : {}\n" +
+                "Task Title     : {}\n" +
+                "Project        : {}\n" +
+                "Workspace      : {}\n" +
+                "Due Date       : {}\n" +
+                "Time Remaining : {}\n" +
+                "Alert Banner   : {}\n" +
+                "Task URL       : {}\n" +
+                "======================================================================",
+                recipientEmail, recipientName, taskTitle, projectName, workspaceName, dueDate, timeRemainingText, dueBanner, taskUrl);
+
+        if (mailSender == null) {
+            log.info("ℹ Local mode: JavaMailSender bean unavailable. Due alert logged above.");
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            String sender = getSenderEmail();
+            helper.setFrom(sender, "TaskFlow Alerts");
+            helper.setTo(recipientEmail);
+            helper.setSubject("🔔 " + dueBanner + ": \"" + taskTitle + "\" in " + projectName);
+
+            String htmlBody = emailTemplateService.renderTaskDueAlertTemplate(
+                    recipientName, taskTitle, projectName, workspaceName,
+                    dueDate, timeRemainingText, dueBanner, badgeClass,
+                    statusText, priorityText, taskUrl
+            );
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            log.info("✔ [EMAIL DISPATCH] Task due alert email transmitted via SMTP for: {}", maskedEmail);
+        } catch (Exception e) {
+            log.error("⚠ [EMAIL DISPATCH] Failed to transmit task due alert email to {}: {}",
+                    maskedEmail, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendDateDueAlertDigestEmail(String recipientEmail, String recipientName, String selectedDate,
+                                           int taskCount, String taskListHtml, String workspaceUrl) {
+        String maskedEmail = maskEmail(recipientEmail);
+
+        log.info("\n" +
+                "======================================================================\n" +
+                "🔔 [TASKFLOW EMAIL DISPATCH] DATE DUE ALERT DIGEST\n" +
+                "To             : {}\n" +
+                "Recipient      : {}\n" +
+                "Selected Date  : {}\n" +
+                "Task Count     : {}\n" +
+                "Workspace URL  : {}\n" +
+                "======================================================================",
+                recipientEmail, recipientName, selectedDate, taskCount, workspaceUrl);
+
+        if (mailSender == null) {
+            log.info("ℹ Local mode: JavaMailSender bean unavailable. Date due alert digest logged above.");
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            String sender = getSenderEmail();
+            helper.setFrom(sender, "TaskFlow Alerts");
+            helper.setTo(recipientEmail);
+            helper.setSubject("🔔 Due Date Alert Digest: " + taskCount + " Task(s) Due " + selectedDate);
+
+            String htmlBody = emailTemplateService.renderDateDueAlertDigestTemplate(
+                    recipientName, selectedDate, taskCount, taskListHtml, workspaceUrl
+            );
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            log.info("✔ [EMAIL DISPATCH] Date due alert digest email transmitted via SMTP for: {}", maskedEmail);
+        } catch (Exception e) {
+            log.error("⚠ [EMAIL DISPATCH] Failed to transmit date due alert digest email to {}: {}",
+                    maskedEmail, e.getMessage(), e);
         }
     }
 

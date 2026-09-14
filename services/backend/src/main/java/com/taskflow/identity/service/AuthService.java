@@ -349,7 +349,15 @@ public class AuthService {
 
         user.resetFailedLogins();
         user.setLastLoginAt(Instant.now());
-        userRepository.save(user);
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (Exception e) {
+            log.warn("Concurrent update on user login: {}. Refetching latest entity.", e.getMessage());
+            user = userRepository.findById(user.getId()).orElse(user);
+            user.resetFailedLogins();
+            user.setLastLoginAt(Instant.now());
+            user = userRepository.save(user);
+        }
 
         log.info("User logged in: {}", user.getEmail());
 
@@ -368,13 +376,9 @@ public class AuthService {
         Optional<User> existingUserOpt = userRepository.findByEmailAndDeletedFalse(email);
 
         if (existingUserOpt.isEmpty()) {
-            // If in signin mode, do NOT auto-create! Reject with 404 to redirect to signup page!
-            if (!"signup".equalsIgnoreCase(request.getMode())) {
-                log.info("Social sign-in rejected for non-existent user: {}. Redirecting to signup flow.", email);
-                throw AppException.notFound("No TaskFlow account found for " + email + ". Please sign up to create your account.");
-            }
+            // New user via Google/OAuth: Automatically create the account, activate it, and sign them in
+            log.info("Creating new account via social OAuth for: {} ({})", email, provider);
 
-            // In signup mode: authenticate with Google, create user in DB, and assign to organization
             String name = request.getName() != null && !request.getName().isBlank()
                     ? request.getName().trim()
                     : Character.toUpperCase(provider.charAt(0)) + provider.substring(1) + " User";
@@ -424,7 +428,11 @@ public class AuthService {
             log.info("✔ Google user signed up and saved to database: {}", savedUser.getEmail());
 
             // Send Account Creation Success welcome email
-            emailVerificationService.sendAccountCreationSuccessEmail(savedUser.getEmail(), savedUser.getFirstName());
+            try {
+                emailVerificationService.sendAccountCreationSuccessEmail(savedUser.getEmail(), savedUser.getFirstName());
+            } catch (Exception e) {
+                log.warn("Could not send welcome email for social login: {}", e.getMessage());
+            }
 
             return generateAuthResponse(savedUser);
         }
@@ -432,12 +440,14 @@ public class AuthService {
         // 2. User exists: verify status and email verification
         User user = existingUserOpt.get();
 
-        if (user.isDeleted() || !"ACTIVE".equalsIgnoreCase(user.getStatus())) {
-            throw AppException.unauthorized("Your account is disabled. Please contact your workspace administrator.");
+        if (user.isDeleted()) {
+            throw AppException.unauthorized("Your account has been deleted. Please contact support.");
         }
 
-        if (!user.isEmailVerified()) {
-            throw AppException.unauthorized("Please verify your email address to complete registration before signing in.");
+        // Google OAuth confirms email ownership; activate account if pending
+        if (!"ACTIVE".equalsIgnoreCase(user.getStatus()) || !user.isEmailVerified()) {
+            user.setStatus("ACTIVE");
+            user.setEmailVerified(true);
         }
 
         if (user.isLocked()) {
@@ -453,10 +463,21 @@ public class AuthService {
                 user.setProviderId(request.getProviderId());
             }
         }
+        if ((user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) && request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl());
+        }
 
         user.resetFailedLogins();
         user.setLastLoginAt(Instant.now());
-        user = userRepository.save(user);
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (Exception e) {
+            log.warn("Concurrent update on social login: {}. Refetching latest entity.", e.getMessage());
+            user = userRepository.findById(user.getId()).orElse(user);
+            user.resetFailedLogins();
+            user.setLastLoginAt(Instant.now());
+            user = userRepository.save(user);
+        }
 
         log.info("OAuth user logged in: {} via {}", user.getEmail(), provider);
         return generateAuthResponse(user);

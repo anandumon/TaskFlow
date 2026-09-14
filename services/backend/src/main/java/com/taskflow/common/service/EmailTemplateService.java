@@ -75,6 +75,49 @@ public class EmailTemplateService {
                 .replace("{{loginUrl}}", loginUrl);
     }
 
+    public String renderProjectInvitationTemplate(String inviterName, String orgName, String workspaceName, String projectName, String inviteUrl) {
+        String template = loadTemplate("templates/email/project-invitation.html");
+        String safeInviter = (inviterName != null && !inviterName.isBlank()) ? inviterName.trim() : "A team member";
+        return template
+                .replace("{{inviterName}}", escapeHtml(safeInviter))
+                .replace("{{orgName}}", escapeHtml(orgName != null ? orgName : "Organization"))
+                .replace("{{workspaceName}}", escapeHtml(workspaceName != null ? workspaceName : "Workspace"))
+                .replace("{{projectName}}", escapeHtml(projectName != null ? projectName : "Project"))
+                .replace("{{inviteUrl}}", inviteUrl);
+    }
+
+    public String renderTaskDueAlertTemplate(String recipientName, String taskTitle, String projectName,
+                                            String workspaceName, String dueDate, String timeRemainingText,
+                                            String dueBanner, String badgeClass, String statusText,
+                                            String priorityText, String taskUrl) {
+        String template = loadTemplate("templates/email/task-due-alert.html");
+        String safeName = (recipientName != null && !recipientName.isBlank()) ? recipientName.trim() : "there";
+        return template
+                .replace("{{recipientName}}", escapeHtml(safeName))
+                .replace("{{taskTitle}}", escapeHtml(taskTitle != null ? taskTitle : "Untitled Task"))
+                .replace("{{projectName}}", escapeHtml(projectName != null ? projectName : "Project"))
+                .replace("{{workspaceName}}", escapeHtml(workspaceName != null ? workspaceName : "Workspace"))
+                .replace("{{dueDate}}", escapeHtml(dueDate != null ? dueDate : "Today"))
+                .replace("{{timeRemainingText}}", escapeHtml(timeRemainingText != null ? timeRemainingText : "Due soon"))
+                .replace("{{dueBanner}}", escapeHtml(dueBanner != null ? dueBanner : "TASK DUE ALERT"))
+                .replace("{{badgeClass}}", badgeClass != null ? badgeClass : "due-near")
+                .replace("{{statusText}}", escapeHtml(statusText != null ? statusText : "In Progress"))
+                .replace("{{priorityText}}", escapeHtml(priorityText != null ? priorityText : "Medium"))
+                .replace("{{taskUrl}}", taskUrl != null ? taskUrl : "#");
+    }
+
+    public String renderDateDueAlertDigestTemplate(String recipientName, String selectedDate, int taskCount,
+                                                  String taskListHtml, String workspaceUrl) {
+        String template = loadTemplate("templates/email/date-due-alert-digest.html");
+        String safeName = (recipientName != null && !recipientName.isBlank()) ? recipientName.trim() : "there";
+        return template
+                .replace("{{recipientName}}", escapeHtml(safeName))
+                .replace("{{selectedDate}}", escapeHtml(selectedDate))
+                .replace("{{taskCount}}", String.valueOf(taskCount))
+                .replace("{{taskListHtml}}", taskListHtml)
+                .replace("{{workspaceUrl}}", workspaceUrl != null ? workspaceUrl : "#");
+    }
+
     private String loadTemplate(String templatePath) {
         return templateCache.computeIfAbsent(templatePath, path -> {
             try {

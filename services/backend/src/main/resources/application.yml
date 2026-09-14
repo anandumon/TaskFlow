@@ -39,8 +39,8 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    username: ${MAIL_USERNAME:anandu2109@gmail.com}
+    password: ${MAIL_PASSWORD:ebmqvzdkzxyabsij}
     properties:
       mail:
         smtp:
@@ -74,7 +74,7 @@ management:
 taskflow:
   jwt:
     secret: ${JWT_SECRET:taskflow-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}
-    access-token-expiration: ${JWT_ACCESS_EXPIRATION:900000}     # 15 minutes
+    access-token-expiration: ${JWT_ACCESS_EXPIRATION:604800000}     # 7 days
     refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
   
   cors:
@@ -90,6 +90,14 @@ taskflow:
     password: ${ADMIN_PASSWORD:Admin@TaskFlow2026}
     first-name: ${ADMIN_FIRST_NAME:Admin}
     last-name: ${ADMIN_LAST_NAME:User}
+
+  calendar:
+    google:
+      client-id: ${TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID:${GOOGLE_CLIENT_ID:}}
+      client-secret: ${TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET:${GOOGLE_CLIENT_SECRET:}}
+    microsoft:
+      client-id: ${TASKFLOW_CALENDAR_MICROSOFT_CLIENT_ID:${MICROSOFT_CLIENT_ID:${AZURE_CLIENT_ID:}}}
+      client-secret: ${TASKFLOW_CALENDAR_MICROSOFT_CLIENT_SECRET:${MICROSOFT_CLIENT_SECRET:${AZURE_CLIENT_SECRET:}}}
 
 app:
   email-verification:

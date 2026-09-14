@@ -82,4 +82,18 @@ public class Task extends BaseEntity {
     @Builder.Default
     @Column(name = "history_logs", columnDefinition = "TEXT")
     private String historyLogs = "[]";
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer position = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer progress = 0;
+
+    @Column(name = "last_due_alert_at")
+    private java.time.Instant lastDueAlertAt;
+
+    @Column(name = "created_by")
+    private UUID createdBy;
 }

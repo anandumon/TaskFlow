@@ -19,6 +19,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isResending, setIsResending] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
   const [resendNotice, setResendNotice] = useState<string | null>(null)
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
   const [verifiedBanner, setVerifiedBanner] = useState(false)
@@ -27,6 +28,7 @@ function LoginContent() {
 
   useEffect(() => {
     clearError()
+    setLocalError(null)
     const qEmail = searchParams.get('email')
     const qVerified = searchParams.get('verified')
     const qGoogleRegistered = searchParams.get('google_registered')
@@ -47,13 +49,30 @@ function LoginContent() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || isSubmitting) return
+    if (isSubmitting) return
 
-    const cleanEmail = email.trim().toLowerCase()
-    setIsSubmitting(true)
+    setLocalError(null)
     clearError()
     setResendNotice(null)
     setUnconfirmedEmail(null)
+
+    const cleanEmail = email.trim().toLowerCase()
+    if (!cleanEmail) {
+      setLocalError('Please enter your email address.')
+      return
+    }
+
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setLocalError('Please enter a valid email address.')
+      return
+    }
+
+    if (!password) {
+      setLocalError('Please enter your password.')
+      return
+    }
+
+    setIsSubmitting(true)
 
     try {
       // 1. First check if user exists
@@ -64,12 +83,6 @@ function LoginContent() {
       if (!checkRes.data?.exists) {
         // User does not exist -> redirect to signup / register page
         router.push(`/register?email=${encodeURIComponent(cleanEmail)}&reason=not_found`)
-        return
-      }
-
-      // 2. User exists -> validate credentials
-      if (!password) {
-        setIsSubmitting(false)
         return
       }
 
@@ -84,6 +97,8 @@ function LoginContent() {
       const errMsg = err.message || ''
       if (errMsg.toLowerCase().includes('verify your email')) {
         setUnconfirmedEmail(cleanEmail)
+      } else {
+        setLocalError(errMsg || 'Invalid email or password.')
       }
     } finally {
       setIsSubmitting(false)
@@ -97,15 +112,14 @@ function LoginContent() {
     try {
       await resendVerification(unconfirmedEmail)
       setResendNotice('Verification email sent! Check your inbox.')
-      setTimeout(() => {
-        router.push(`/verify-email?email=${encodeURIComponent(unconfirmedEmail)}`)
-      }, 1200)
     } catch (err: any) {
       setResendNotice(err.message || 'Failed to resend verification email.')
     } finally {
       setIsResending(false)
     }
   }
+
+  const displayedError = localError || error
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -161,49 +175,50 @@ function LoginContent() {
             </div>
           )}
 
-          {/* Unverified Email Alert */}
+          {/* Unverified Email Warning Banner with Resend Button */}
           {unconfirmedEmail && (
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs space-y-2">
-              <div className="flex items-center gap-2 font-semibold">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                Please verify your email address before signing in.
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Email verification required</p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                    Your email address has not been verified yet. Please check your inbox for the
+                    verification link, or request a new one below.
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] leading-relaxed text-amber-700/80 dark:text-amber-400/80">
-                A confirmation email was sent to your address. Click the link in the email or enter your 6-digit code.
-              </p>
-              <div className="flex items-center gap-3 pt-1">
+              <div className="pt-1 flex items-center gap-3">
                 <button
                   type="button"
                   onClick={handleResendForUnverified}
                   disabled={isResending}
-                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-semibold text-[11px] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {isResending ? 'Sending...' : 'Resend verification email'}
+                  {isResending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Sending link...
+                    </>
+                  ) : (
+                    'Resend verification email'
+                  )}
                 </button>
-                <Link
-                  href={`/verify-email?email=${encodeURIComponent(unconfirmedEmail)}`}
-                  className="text-[11px] font-bold underline hover:text-foreground"
-                >
-                  Enter 6-digit code
-                </Link>
+                {resendNotice && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    {resendNotice}
+                  </span>
+                )}
               </div>
             </div>
           )}
 
-          {/* Resend Notice */}
-          {resendNotice && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{resendNotice}</span>
-            </div>
-          )}
-
           {/* Error Banner */}
-          {error && !unconfirmedEmail && (
+          {displayedError && !unconfirmedEmail && (
             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <p className="font-semibold">{error}</p>
+                <p className="font-semibold">{displayedError}</p>
               </div>
             </div>
           )}
@@ -218,15 +233,15 @@ function LoginContent() {
               <input
                 id="email"
                 type="email"
-                placeholder="name@example.com"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
+                  setLocalError(null)
                   clearError()
                   setUnconfirmedEmail(null)
                 }}
                 className="flex h-10 w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
-                required
                 autoComplete="email"
               />
             </div>
@@ -248,15 +263,15 @@ function LoginContent() {
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value)
+                    setLocalError(null)
                     clearError()
                     setUnconfirmedEmail(null)
                   }}
                   className="flex h-10 w-full rounded-xl border border-border bg-background pl-3 pr-10 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all shadow-inner"
-                  required
                   autoComplete="current-password"
                 />
                 <button
@@ -272,8 +287,9 @@ function LoginContent() {
 
             {/* Primary CTA */}
             <button
+              id="signin-submit-btn"
               type="submit"
-              disabled={isSubmitting || !email || !password}
+              disabled={isSubmitting}
               className="w-full h-10 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-98 cursor-pointer mt-1"
             >
               {isSubmitting ? (
@@ -287,13 +303,34 @@ function LoginContent() {
             </button>
           </form>
 
-          {/* Switch to Signup */}
-          <p className="text-center text-xs text-muted-foreground pt-0.5">
-            Don&apos;t have a TaskFlow account?{' '}
-            <Link href="/register" className="text-primary font-bold hover:underline">
+          {/* Switch to Signup / Create Account */}
+          <div className="pt-2 space-y-2.5">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/50" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase">
+                <span className="bg-background px-3 text-muted-foreground font-medium tracking-wider">
+                  New to TaskFlow?
+                </span>
+              </div>
+            </div>
+
+            <Link
+              id="create-account-btn"
+              href="/register"
+              className="w-full h-10 rounded-xl border border-primary/35 hover:border-primary/70 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow active:scale-98"
+            >
               Create account
             </Link>
-          </p>
+
+            <p className="text-center text-xs text-muted-foreground pt-0.5">
+              Don&apos;t have a TaskFlow account?{' '}
+              <Link href="/register" className="text-primary font-bold hover:underline">
+                Sign up
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
 

@@ -62,4 +62,39 @@ public class TaskController {
         taskService.deleteTask(id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
+
+    @PostMapping("/tasks/{id}/due-alert")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> dispatchDueAlert(@PathVariable UUID id) {
+        java.util.Map<String, Object> result = taskService.dispatchDueAlert(id);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/tasks/due-alerts/check-all")
+    public ResponseEntity<ApiResponse<String>> triggerDailyDueAlertCheck() {
+        taskService.dispatchScheduledDueAlerts();
+        return ResponseEntity.ok(ApiResponse.success("Scheduled due alert check dispatched successfully"));
+    }
+
+    @PostMapping("/workspaces/{workspaceId}/tasks/due-alerts/dispatch-date")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> dispatchDateDueAlerts(
+            @PathVariable UUID workspaceId,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String email) {
+        java.util.Map<String, Object> result = taskService.dispatchDateDueAlerts(workspaceId, date, email);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/workspaces/{workspaceId}/tasks/due-alerts/dispatch-upcoming")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> dispatchUpcomingDueAlerts(
+            @PathVariable UUID workspaceId,
+            @RequestParam(required = false) String email) {
+        java.util.Map<String, Object> result = taskService.dispatchUpcomingDueAlerts(workspaceId, email);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/workspaces/{workspaceId}/tasks/due-alerts/dispatch-weekly-overdue")
+    public ResponseEntity<ApiResponse<String>> triggerWeeklyOverdueAlertCheck(@PathVariable UUID workspaceId) {
+        taskService.dispatchWeeklyOverdueAlerts();
+        return ResponseEntity.ok(ApiResponse.success("Weekly overdue alert check triggered successfully"));
+    }
 }

@@ -9,7 +9,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Slf4j
-@Service
+@Deprecated
 public class EmailService {
 
     private final JavaMailSender mailSender;

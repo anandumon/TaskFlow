@@ -28,4 +28,6 @@ public class UpdateTaskRequest {
     private String filesChanged;
     private String notes;
     private String historyLogs;
+    private Integer position;
+    private Integer progress;
 }

@@ -10,6 +10,10 @@ import com.taskflow.identity.entity.User;
 import com.taskflow.identity.repository.UserRepository;
 import com.taskflow.rbac.entity.Role;
 import com.taskflow.rbac.repository.RoleRepository;
+import com.taskflow.workspace.entity.Workspace;
+import com.taskflow.workspace.entity.WorkspaceMember;
+import com.taskflow.workspace.repository.WorkspaceMemberRepository;
+import com.taskflow.workspace.repository.WorkspaceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,8 +33,14 @@ public class OrganizationService {
     private final OrganizationMemberRepository memberRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final com.taskflow.project.repository.ProjectRepository projectRepository;
+    private final com.taskflow.project.repository.ProjectMemberRepository projectMemberRepository;
+    private final com.taskflow.rbac.service.AuthorizationService authorizationService;
 
     private static final UUID OWNER_ROLE_ID = UUID.fromString("a0000000-0000-0000-0000-000000000001");
+    private static final UUID WORKSPACE_ADMIN_ROLE_ID = UUID.fromString("b0000000-0000-0000-0000-000000000001");
     private static final UUID MEMBER_ROLE_ID = UUID.fromString("a0000000-0000-0000-0000-000000000004");
 
     @Transactional
@@ -50,6 +60,7 @@ public class OrganizationService {
                 .organizationId(org.getId())
                 .userId(userId)
                 .roleId(OWNER_ROLE_ID)
+                .status("ACTIVE")
                 .build();
         memberRepository.save(ownerMember);
 
@@ -57,10 +68,55 @@ public class OrganizationService {
         return mapToResponse(org);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<OrganizationResponse> listByUser(UUID userId) {
-        return organizationRepository.findAllByMemberUserId(userId)
-                .stream()
+        List<Organization> orgs = organizationRepository.findAllByMemberUserId(userId);
+        if (orgs.isEmpty()) {
+            User user = userRepository.findByIdAndDeletedFalse(userId).orElse(null);
+            String orgName = (user != null && user.getDisplayName() != null && !user.getDisplayName().isBlank())
+                    ? user.getDisplayName().trim() + "'s Organization"
+                    : "My Organization";
+
+            Organization org = Organization.builder()
+                    .name(orgName)
+                    .slug(generateSlug(orgName))
+                    .ownerId(userId)
+                    .build();
+            org = organizationRepository.save(org);
+
+            OrganizationMember ownerMember = OrganizationMember.builder()
+                    .organizationId(org.getId())
+                    .userId(userId)
+                    .roleId(OWNER_ROLE_ID)
+                    .status("ACTIVE")
+                    .build();
+            memberRepository.save(ownerMember);
+
+            String wsName = "Primary Workspace";
+            Workspace ws = Workspace.builder()
+                    .organizationId(org.getId())
+                    .name(wsName)
+                    .slug(generateSlug(wsName))
+                    .description("Default workspace for your projects and tasks")
+                    .color("#6366F1")
+                    .icon("briefcase")
+                    .createdBy(userId)
+                    .build();
+            ws = workspaceRepository.save(ws);
+
+            WorkspaceMember wsMember = WorkspaceMember.builder()
+                    .workspaceId(ws.getId())
+                    .userId(userId)
+                    .roleId(WORKSPACE_ADMIN_ROLE_ID)
+                    .status("ACTIVE")
+                    .build();
+            workspaceMemberRepository.save(wsMember);
+
+            log.info("Auto-provisioned default organization '{}' and workspace '{}' for user {}", org.getName(), ws.getName(), userId);
+            orgs = List.of(org);
+        }
+
+        return orgs.stream()
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -68,14 +124,14 @@ public class OrganizationService {
     @Transactional(readOnly = true)
     public OrganizationResponse getById(UUID orgId, UUID userId) {
         Organization org = findOrgOrThrow(orgId);
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_VIEW);
         return mapToResponse(org);
     }
 
     @Transactional
     public OrganizationResponse update(UUID orgId, UUID userId, UpdateOrganizationRequest request) {
         Organization org = findOrgOrThrow(orgId);
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_UPDATE);
 
         if (request.getName() != null) {
             org.setName(request.getName().trim());
@@ -92,9 +148,7 @@ public class OrganizationService {
     @Transactional
     public void delete(UUID orgId, UUID userId) {
         Organization org = findOrgOrThrow(orgId);
-        if (!org.getOwnerId().equals(userId)) {
-            throw AppException.forbidden("Only the organization owner can delete the organization");
-        }
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_DELETE);
         org.softDelete();
         organizationRepository.save(org);
         log.info("Organization deleted: {} by user: {}", orgId, userId);
@@ -102,7 +156,7 @@ public class OrganizationService {
 
     @Transactional(readOnly = true)
     public List<MemberResponse> listMembers(UUID orgId, UUID userId) {
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_VIEW);
         List<OrganizationMember> members = memberRepository.findByOrganizationId(orgId);
 
         return members.stream().map(member -> {
@@ -125,7 +179,7 @@ public class OrganizationService {
 
     @Transactional
     public MemberResponse addMember(UUID orgId, UUID userId, UUID targetUserId, UUID roleId) {
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_MEMBERS_MANAGE);
 
         if (memberRepository.existsByOrganizationIdAndUserId(orgId, targetUserId)) {
             throw AppException.conflict("MEMBER_EXISTS", "User is already a member of this organization");
@@ -137,6 +191,7 @@ public class OrganizationService {
                 .organizationId(orgId)
                 .userId(targetUserId)
                 .roleId(effectiveRoleId)
+                .status("ACTIVE")
                 .build();
         member = memberRepository.save(member);
 
@@ -162,7 +217,7 @@ public class OrganizationService {
     @Transactional
     public void removeMember(UUID orgId, UUID userId, UUID memberId) {
         Organization org = findOrgOrThrow(orgId);
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_MEMBERS_MANAGE);
 
         OrganizationMember member = memberRepository.findById(memberId)
                 .orElseThrow(() -> AppException.notFound("Member", memberId));
@@ -172,12 +227,23 @@ public class OrganizationService {
         }
 
         memberRepository.delete(member);
+
+        // Cascade remove workspace and project memberships in this organization
+        List<Workspace> workspaces = workspaceRepository.findByOrganizationIdAndDeletedFalse(orgId);
+        for (Workspace w : workspaces) {
+            workspaceMemberRepository.deleteByWorkspaceIdAndUserId(w.getId(), member.getUserId());
+            List<com.taskflow.project.entity.Project> projects = projectRepository.findByWorkspaceIdAndDeletedFalseOrderByCreatedAtDesc(w.getId());
+            for (com.taskflow.project.entity.Project p : projects) {
+                projectMemberRepository.deleteByProjectIdAndUserId(p.getId(), member.getUserId());
+            }
+        }
+
         log.info("Member removed from org {}: member {}", orgId, memberId);
     }
 
     @Transactional
     public void updateMemberRole(UUID orgId, UUID userId, UUID memberId, UUID newRoleId) {
-        assertMember(orgId, userId);
+        authorizationService.requireOrganizationPermission(userId, orgId, com.taskflow.rbac.domain.PermissionCode.ORGANIZATION_MEMBERS_MANAGE);
 
         OrganizationMember member = memberRepository.findById(memberId)
                 .orElseThrow(() -> AppException.notFound("Member", memberId));

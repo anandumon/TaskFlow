@@ -5,12 +5,19 @@ import com.taskflow.project.dto.CreateProjectRequest;
 import com.taskflow.project.dto.ProjectResponse;
 import com.taskflow.project.dto.UpdateProjectRequest;
 import com.taskflow.project.entity.Project;
+import com.taskflow.project.entity.ProjectMember;
+import com.taskflow.project.repository.ProjectMemberRepository;
 import com.taskflow.project.repository.ProjectRepository;
+import com.taskflow.rbac.domain.PermissionCode;
+import com.taskflow.rbac.service.AuthorizationService;
 import com.taskflow.task.entity.Task;
 import com.taskflow.task.repository.TaskRepository;
+import com.taskflow.workspace.entity.Workspace;
 import com.taskflow.workspace.repository.WorkspaceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,14 +35,29 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final WorkspaceRepository workspaceRepository;
     private final TaskRepository taskRepository;
+    private final ProjectMemberRepository projectMemberRepository;
+    private final AuthorizationService authorizationService;
 
+    private static final UUID PROJECT_ADMIN_ROLE_ID = UUID.fromString("c0000000-0000-0000-0000-000000000001");
     private static final Pattern NON_LATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
 
+    private UUID getAuthenticatedUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.taskflow.common.security.UserPrincipal up) {
+            return up.getId();
+        }
+        return null;
+    }
+
     @Transactional
     public ProjectResponse createProject(UUID workspaceId, CreateProjectRequest request) {
-        if (!workspaceRepository.existsByIdAndDeletedFalse(workspaceId)) {
-            throw AppException.notFound("Workspace not found");
+        Workspace ws = workspaceRepository.findByIdAndDeletedFalse(workspaceId)
+                .orElseThrow(() -> AppException.notFound("Workspace not found"));
+
+        UUID userId = getAuthenticatedUserId();
+        if (userId != null) {
+            authorizationService.requireWorkspacePermission(userId, workspaceId, PermissionCode.PROJECT_CREATE);
         }
 
         String slug = toSlug(request.getName());
@@ -59,18 +81,38 @@ public class ProjectService {
                 .color(request.getColor() != null ? request.getColor() : "#6366F1")
                 .icon(request.getIcon() != null ? request.getIcon() : "folder")
                 .environments(envs)
+                .createdBy(userId)
                 .build();
 
         project = projectRepository.save(project);
-        log.info("Project created: {} [envs: {}] in workspace: {}", project.getName(), project.getEnvironments(), workspaceId);
 
+        // Assign Project Admin membership to creator
+        if (userId != null) {
+            projectMemberRepository.save(ProjectMember.builder()
+                    .projectId(project.getId())
+                    .userId(userId)
+                    .roleId(PROJECT_ADMIN_ROLE_ID)
+                    .status("ACTIVE")
+                    .build());
+        }
+
+        log.info("Project created: {} [envs: {}] in workspace: {}", project.getName(), project.getEnvironments(), workspaceId);
         return toResponse(project);
     }
 
     @Transactional(readOnly = true)
     public List<ProjectResponse> getProjectsByWorkspace(UUID workspaceId) {
+        workspaceRepository.findByIdAndDeletedFalse(workspaceId)
+                .orElseThrow(() -> AppException.notFound("Workspace not found"));
+
+        UUID userId = getAuthenticatedUserId();
+        if (userId != null) {
+            authorizationService.requireWorkspacePermission(userId, workspaceId, PermissionCode.WORKSPACE_VIEW);
+        }
+
         return projectRepository.findByWorkspaceIdAndDeletedFalseOrderByCreatedAtDesc(workspaceId)
                 .stream()
+                .filter(p -> userId == null || authorizationService.hasProjectPermission(userId, p.getId(), PermissionCode.PROJECT_VIEW))
                 .map(this::toResponse)
                 .toList();
     }
@@ -79,6 +121,12 @@ public class ProjectService {
     public ProjectResponse getProjectById(UUID id) {
         Project project = projectRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> AppException.notFound("Project not found"));
+
+        UUID userId = getAuthenticatedUserId();
+        if (userId != null) {
+            authorizationService.requireProjectPermission(userId, id, PermissionCode.PROJECT_VIEW);
+        }
+
         return toResponse(project);
     }
 
@@ -86,6 +134,11 @@ public class ProjectService {
     public ProjectResponse updateProject(UUID id, UpdateProjectRequest request) {
         Project project = projectRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> AppException.notFound("Project not found"));
+
+        UUID userId = getAuthenticatedUserId();
+        if (userId != null) {
+            authorizationService.requireProjectPermission(userId, id, PermissionCode.PROJECT_UPDATE);
+        }
 
         if (request.getName() != null && !request.getName().isBlank()) {
             project.setName(request.getName().trim());
@@ -117,6 +170,12 @@ public class ProjectService {
     public void deleteProject(UUID id) {
         Project project = projectRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> AppException.notFound("Project not found"));
+
+        UUID userId = getAuthenticatedUserId();
+        if (userId != null) {
+            authorizationService.requireProjectPermission(userId, id, PermissionCode.PROJECT_DELETE);
+        }
+
         project.setDeleted(true);
         projectRepository.save(project);
         log.info("Project soft-deleted: {}", id);

@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -71,24 +72,35 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Seeding system roles and permissions...");
 
             List<String> permissionCodes = List.of(
-                    "workspace.view", "workspace.edit", "workspace.delete",
+                    // Dot notation
+                    "organization.view", "organization.edit", "organization.delete",
+                    "workspace.view", "workspace.create", "workspace.edit", "workspace.delete",
                     "space.view", "space.create", "space.edit", "space.delete",
                     "project.view", "project.create", "project.edit", "project.delete",
                     "task.view", "task.create", "task.edit", "task.delete", "task.assign", "task.comment", "task.move", "task.archive",
                     "dashboard.view", "dashboard.edit", "document.view", "document.edit",
                     "automation.view", "automation.manage", "billing.view", "billing.manage",
-                    "users.invite", "users.remove", "audit.view", "team.create", "team.edit", "team.delete"
+                    "users.invite", "users.remove", "audit.view", "team.create", "team.edit", "team.delete",
+                    // Uppercase notation
+                    "ORGANIZATION_VIEW", "ORGANIZATION_UPDATE", "ORGANIZATION_DELETE", "ORGANIZATION_INVITE", "ORGANIZATION_REMOVE_MEMBER", "ORGANIZATION_MANAGE_ROLES",
+                    "WORKSPACE_VIEW", "WORKSPACE_CREATE", "WORKSPACE_UPDATE", "WORKSPACE_DELETE", "WORKSPACE_INVITE", "WORKSPACE_REMOVE_MEMBER",
+                    "PROJECT_VIEW", "PROJECT_CREATE", "PROJECT_UPDATE", "PROJECT_DELETE", "PROJECT_INVITE", "PROJECT_REMOVE_MEMBER", "PROJECT_MANAGE_ROLES",
+                    "TASK_VIEW", "TASK_CREATE", "TASK_UPDATE", "TASK_DELETE", "TASK_ASSIGN", "TASK_COMMENT", "TASK_COMPLETE", "TASK_REOPEN", "TASK_MOVE"
             );
 
+            Map<String, Permission> permMap = new java.util.HashMap<>();
             for (String code : permissionCodes) {
-                Permission p = Permission.builder()
-                        .code(code)
-                        .name(code.replace('.', ' ').toUpperCase())
-                        .category(code.split("\\.")[0])
-                        .build();
-                permissionRepository.save(p);
+                Permission p = permissionRepository.findByCode(code).orElseGet(() ->
+                    permissionRepository.save(Permission.builder()
+                            .code(code)
+                            .name(code.replace('.', '_').replace('_', ' ').toUpperCase())
+                            .category(code.contains(".") ? code.split("\\.")[0] : code.split("_")[0].toLowerCase())
+                            .build())
+                );
+                permMap.put(code, p);
             }
 
+            // 1. Organization Roles
             Role owner = Role.builder()
                     .id(OWNER_ROLE_ID)
                     .name("Owner")
@@ -114,12 +126,61 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
             roleRepository.save(member);
 
-            List<Permission> allPermissions = permissionRepository.findAll();
-            for (Permission p : allPermissions) {
-                rolePermissionRepository.save(RolePermission.builder()
-                        .roleId(OWNER_ROLE_ID)
-                        .permissionId(p.getId())
-                        .build());
+            // 2. Workspace Roles
+            UUID wsAdminId = UUID.fromString("b0000000-0000-0000-0000-000000000001");
+            UUID wsMemberId = UUID.fromString("b0000000-0000-0000-0000-000000000002");
+            UUID wsViewerId = UUID.fromString("b0000000-0000-0000-0000-000000000003");
+
+            roleRepository.save(Role.builder().id(wsAdminId).name("Workspace Admin").description("Full control over workspace and projects").isSystem(true).build());
+            roleRepository.save(Role.builder().id(wsMemberId).name("Workspace Member").description("Can view workspace and edit projects and tasks").isSystem(true).isDefault(true).build());
+            roleRepository.save(Role.builder().id(wsViewerId).name("Workspace Viewer").description("Read-only access to workspace and projects").isSystem(true).build());
+
+            // 3. Project Roles
+            UUID projAdminId = UUID.fromString("c0000000-0000-0000-0000-000000000001");
+            UUID projEditorId = UUID.fromString("c0000000-0000-0000-0000-000000000002");
+            UUID projCommenterId = UUID.fromString("c0000000-0000-0000-0000-000000000003");
+            UUID projViewerId = UUID.fromString("c0000000-0000-0000-0000-000000000004");
+
+            roleRepository.save(Role.builder().id(projAdminId).name("Project Admin").description("Full control over project").isSystem(true).build());
+            roleRepository.save(Role.builder().id(projEditorId).name("Project Editor").description("Can manage tasks within project").isSystem(true).isDefault(true).build());
+            roleRepository.save(Role.builder().id(projCommenterId).name("Project Commenter").description("Can view and comment").isSystem(true).build());
+            roleRepository.save(Role.builder().id(projViewerId).name("Project Viewer").description("Read-only access to project and tasks").isSystem(true).build());
+
+            // Assign permissions
+            // Owner & Admin gets all permissions
+            for (Permission p : permMap.values()) {
+                rolePermissionRepository.save(RolePermission.builder().roleId(OWNER_ROLE_ID).permissionId(p.getId()).build());
+                rolePermissionRepository.save(RolePermission.builder().roleId(ADMIN_ROLE_ID).permissionId(p.getId()).build());
+                rolePermissionRepository.save(RolePermission.builder().roleId(wsAdminId).permissionId(p.getId()).build());
+                rolePermissionRepository.save(RolePermission.builder().roleId(projAdminId).permissionId(p.getId()).build());
+            }
+
+            // Member / Editor roles
+            List<String> editorCodes = List.of(
+                    "workspace.view", "project.view", "project.create", "task.view", "task.create", "task.edit", "task.assign", "task.comment", "task.move",
+                    "WORKSPACE_VIEW", "PROJECT_VIEW", "PROJECT_CREATE", "TASK_VIEW", "TASK_CREATE", "TASK_UPDATE", "TASK_ASSIGN", "TASK_COMMENT", "TASK_COMPLETE", "TASK_MOVE"
+            );
+            for (String code : editorCodes) {
+                Permission p = permMap.get(code);
+                if (p != null) {
+                    rolePermissionRepository.save(RolePermission.builder().roleId(MEMBER_ROLE_ID).permissionId(p.getId()).build());
+                    rolePermissionRepository.save(RolePermission.builder().roleId(wsMemberId).permissionId(p.getId()).build());
+                    rolePermissionRepository.save(RolePermission.builder().roleId(projEditorId).permissionId(p.getId()).build());
+                }
+            }
+
+            // Viewer roles
+            List<String> viewerCodes = List.of(
+                    "workspace.view", "project.view", "task.view",
+                    "WORKSPACE_VIEW", "PROJECT_VIEW", "TASK_VIEW"
+            );
+            for (String code : viewerCodes) {
+                Permission p = permMap.get(code);
+                if (p != null) {
+                    rolePermissionRepository.save(RolePermission.builder().roleId(wsViewerId).permissionId(p.getId()).build());
+                    rolePermissionRepository.save(RolePermission.builder().roleId(projViewerId).permissionId(p.getId()).build());
+                    rolePermissionRepository.save(RolePermission.builder().roleId(projCommenterId).permissionId(p.getId()).build());
+                }
             }
             log.info("RBAC seeded successfully.");
         }

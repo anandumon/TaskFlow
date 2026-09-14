@@ -8,7 +8,7 @@ import java.util.UUID;
 @Table(name = "permissions")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Permission {
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    @Id
     private UUID id;
 
     @Column(nullable = false, unique = true)
@@ -21,4 +21,11 @@ public class Permission {
 
     @Column(nullable = false)
     private String category;
+
+    @PrePersist
+    protected void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+    }
 }

@@ -9,47 +9,27 @@ import {
   Zap,
   Building2,
   Briefcase,
-  Layers,
   ArrowRight,
   ArrowLeft,
   Check,
   Loader2,
   Sparkles,
-  FolderGit2,
-  Users,
-  Target,
-  Rocket,
+  Layers,
+  FolderKanban,
+  CheckCircle2,
 } from 'lucide-react'
 
 interface OnboardingWizardModalProps {
   onComplete?: () => void
 }
 
-const WORKSPACE_TYPES = [
-  {
-    id: 'product',
-    label: 'Product / Software',
-    desc: 'Roadmaps, sprints, releases, and feature tracking',
-    icon: Rocket,
-  },
-  {
-    id: 'team',
-    label: 'Team / Department',
-    desc: 'Daily workflows for engineering, marketing, or ops',
-    icon: Users,
-  },
-  {
-    id: 'client',
-    label: 'Client / Agency Work',
-    desc: 'Client deliverables, external projects, and timelines',
-    icon: Briefcase,
-  },
-  {
-    id: 'personal',
-    label: 'Personal Projects',
-    desc: 'Side ventures, everyday tasks, and goal planning',
-    icon: Target,
-  },
+const PRESET_WORKSPACE_COLORS = [
+  { value: '#6366F1', label: 'Indigo' },
+  { value: '#8B5CF6', label: 'Purple' },
+  { value: '#EC4899', label: 'Pink' },
+  { value: '#10B981', label: 'Emerald' },
+  { value: '#F59E0B', label: 'Amber' },
+  { value: '#06B6D4', label: 'Cyan' },
 ]
 
 export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps) {
@@ -58,19 +38,19 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   const { createOrganization, setCurrentOrg } = useOrgStore()
   const { createWorkspace, setCurrentWorkspace } = useWorkspaceStore()
 
-  // Step 1: Organisation Name -> Step 2: Workspace / Product Name
   const [step, setStep] = useState<1 | 2>(1)
   const [orgName, setOrgName] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
-  const [workspaceType, setWorkspaceType] = useState('product')
+  const [workspaceColor, setWorkspaceColor] = useState('#6366F1')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Pre-fill sensible defaults based on user's identity
   useEffect(() => {
     if (user?.firstName) {
-      setOrgName(`${user.firstName.trim()}'s Organization`)
-      setWorkspaceName(`${user.firstName.trim()}'s Workspace`)
+      const first = user.firstName.trim()
+      setOrgName(`${first}'s Organization`)
+      setWorkspaceName(`${first}'s Workspace`)
     } else {
       setOrgName('My Organization')
       setWorkspaceName('Main Workspace')
@@ -80,7 +60,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault()
     if (!orgName.trim()) {
-      setError('Please enter your organisation name')
+      setError('Please enter an organization name.')
       return
     }
     setError(null)
@@ -90,7 +70,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   const handleFinish = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!orgName.trim() || !workspaceName.trim()) {
-      setError('Please fill in both organisation and workspace names')
+      setError('Please provide both organization and workspace names.')
       return
     }
 
@@ -98,21 +78,20 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
     setError(null)
 
     try {
-      // 1. Create the new Organisation
+      // 1. Create the new Organization
       const org = await createOrganization(orgName.trim())
       setCurrentOrg(org)
 
-      // 2. Create the first Workspace / Product under this Organisation
-      const typeObj = WORKSPACE_TYPES.find((t) => t.id === workspaceType)
+      // 2. Create the first Workspace under this Organization
       const ws = await createWorkspace(org.id, {
         name: workspaceName.trim(),
-        description: typeObj ? `${typeObj.label} • ${typeObj.desc}` : 'Primary workspace',
-        color: '#6366f1',
+        description: 'Primary workspace for team projects, tasks, and sprints',
+        color: workspaceColor,
         icon: 'folder',
       })
       setCurrentWorkspace(ws)
 
-      // 3. Mark onboarding as completed for this user
+      // 3. Mark onboarding as completed
       if (user?.id) {
         localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
       }
@@ -124,12 +103,12 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
         router.push('/app/home')
       }
     } catch (err: any) {
-      console.error('Onboarding creation failed:', err)
+      console.error('Onboarding setup failed:', err)
       setError(
         err?.response?.data?.error?.message ||
           err?.response?.data?.message ||
           err?.message ||
-          'Failed to setup organisation and workspace. Please try again.'
+          'Failed to setup organization and workspace. Please try again.'
       )
     } finally {
       setIsSubmitting(false)
@@ -137,174 +116,187 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-fade-in">
       {/* Modal Card */}
-      <div className="relative w-full max-w-xl min-h-[500px] rounded-3xl bg-[#121217]/95 border border-white/10 shadow-2xl shadow-black/80 flex flex-col justify-between overflow-hidden backdrop-blur-2xl">
+      <div className="relative w-full max-w-lg rounded-3xl bg-[#0f1015]/95 border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-col justify-between overflow-hidden">
         
         {/* Subtle Ambient Radial Glow */}
-        <div className="absolute -top-10 left-1/4 w-96 h-48 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -top-12 left-1/3 w-80 h-40 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Top Header */}
-        <div className="pt-6 px-7 flex items-center justify-between z-10">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 flex items-center justify-center text-white shadow-md shadow-primary/30">
-              <Zap className="w-4 h-4 fill-white" />
+        {/* Modal Header */}
+        <div className="p-6 sm:p-7 pb-0 z-10 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 flex items-center justify-center text-white shadow-md shadow-primary/25">
+                <Zap className="w-4 h-4 fill-white" />
+              </div>
+              <span className="text-base font-black tracking-tight text-white">TaskFlow</span>
             </div>
-            <span className="text-lg font-black tracking-tight text-white">TaskFlow</span>
+
+            {/* Stepper Pill Indicator */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-medium text-white/70">
+              <span className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full transition-all ${step === 1 ? 'bg-primary ring-2 ring-primary/30' : 'bg-emerald-500'}`} />
+                <span className="text-white font-semibold">{step}</span> of 2
+              </span>
+              <span className="text-white/30">•</span>
+              <span className="text-primary font-semibold">
+                {step === 1 ? 'Organization' : 'Workspace'}
+              </span>
+            </div>
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-semibold text-white/70">
-            <span>Step {step} of 2</span>
-            <span>&bull;</span>
-            <span className="text-primary font-bold">
-              {step === 1 ? 'Organisation' : 'Workspace / Product'}
-            </span>
+          {/* Stepper Progress Line */}
+          <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary to-indigo-500 transition-all duration-300 ease-out"
+              style={{ width: step === 1 ? '50%' : '100%' }}
+            />
           </div>
         </div>
 
-        {/* Form Body */}
-        <div className="px-7 py-6 flex-1 flex flex-col justify-center z-10">
+        {/* Modal Body */}
+        <div className="p-6 sm:p-7 z-10">
           
-          {/* STEP 1: CREATE ORGANISATION */}
+          {/* STEP 1: CREATE ORGANIZATION */}
           {step === 1 && (
             <form onSubmit={handleNextStep} className="space-y-5 animate-scale-in">
               <div className="space-y-1.5">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-semibold border border-primary/20">
-                  <Building2 className="w-3.5 h-3.5" /> Top-Level Entity
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  Name your Organisation
+                <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  Name your Organization
                 </h1>
-                <p className="text-xs text-white/60 leading-relaxed max-w-lg">
-                  An <strong>organisation</strong> represents your overall company, enterprise, or parent team.
-                  Inside it, you can create and organize multiple separate <strong>workspaces or products</strong>.
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Organizations represent your company, agency, or team entity. Workspaces live inside your organization.
                 </p>
               </div>
 
-              {/* Intuitive Architecture Explainer Card */}
-              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2 text-xs">
-                <div className="text-white/80 font-semibold flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  <span>How TaskFlow is structured:</span>
+              {/* Minimal Architecture Structure Preview Card */}
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-white/70">
+                  <span className="flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-primary" />
+                    <span>Hierarchy Overview</span>
+                  </span>
+                  <span className="text-[10px] text-white/40 font-mono">2-Tier Setup</span>
                 </div>
-                <div className="space-y-1 pl-5 border-l-2 border-primary/40 font-mono text-[11px] text-white/60">
-                  <div className="text-white font-semibold flex items-center gap-1">
-                    🏢 {orgName || 'Your Organisation'}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 space-y-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-primary">Parent Entity</div>
+                    <div className="text-xs font-semibold text-white truncate">{orgName || 'Organization'}</div>
                   </div>
-                  <div className="text-white/70 pl-3 flex items-center gap-1">
-                    ├── 🚀 Workspace or Product 1 (e.g. Mobile App)
-                  </div>
-                  <div className="text-white/70 pl-3 flex items-center gap-1">
-                    ├── 📦 Workspace or Product 2 (e.g. Web Platform)
-                  </div>
-                  <div className="text-white/70 pl-3 flex items-center gap-1">
-                    └── 📊 Workspace or Product 3 (e.g. Operations)
+                  <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] space-y-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-white/50">Next Step</div>
+                    <div className="text-xs font-semibold text-white/80 truncate">Workspace & Projects</div>
                   </div>
                 </div>
               </div>
 
-              {/* Organisation Name Input */}
+              {/* Input Field */}
               <div className="space-y-1.5">
-                <label htmlFor="orgName" className="text-xs font-semibold text-white/90">
-                  Organisation Name
+                <label htmlFor="orgName" className="text-xs font-semibold text-white/90 flex items-center justify-between">
+                  <span>Organization Name</span>
+                  <span className="text-[10px] text-white/40 font-normal">e.g. Acme Corp or Studio Labs</span>
                 </label>
-                <input
-                  id="orgName"
-                  type="text"
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="e.g. Acme Corporation or Anandu Technologies"
-                  className="w-full h-12 rounded-2xl bg-white/5 border border-white/15 px-4 text-sm font-semibold text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
-                  autoFocus
-                  required
-                />
+                <div className="relative">
+                  <input
+                    id="orgName"
+                    type="text"
+                    value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    placeholder="e.g. Acme Corporation"
+                    className="w-full h-11 rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/20 px-3.5 text-xs font-medium text-white placeholder:text-white/30 transition-all outline-none"
+                    autoFocus
+                    required
+                  />
+                </div>
               </div>
 
               {error && (
-                <div className="p-2.5 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-medium">
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium animate-fade-in">
                   {error}
                 </div>
               )}
 
+              {/* Submit Action */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full h-11 rounded-2xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer active:scale-98"
+                  className="w-full h-11 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                 >
-                  Continue to Workspace &amp; Product Setup <ArrowRight className="w-4 h-4" />
+                  <span>Continue to Workspace Setup</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             </form>
           )}
 
-          {/* STEP 2: CREATE WORKSPACE OR PRODUCT */}
+          {/* STEP 2: CREATE WORKSPACE */}
           {step === 2 && (
             <form onSubmit={handleFinish} className="space-y-5 animate-scale-in">
               <div className="space-y-1.5">
-                {/* Visual Parent Organisation Badge */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 border border-primary/25 text-xs font-semibold text-primary">
-                  <Building2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Organisation: <strong>{orgName}</strong></span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-medium border border-primary/20 mb-1">
+                  <Building2 className="w-3 h-3" />
+                  <span>In: <strong className="font-semibold text-white">{orgName}</strong></span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  Create your first Workspace or Product
+                <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  Create your first Workspace
                 </h1>
-                <p className="text-xs text-white/60 leading-relaxed max-w-lg">
-                  Each workspace or product keeps its tasks, boards, docs, and sprints neatly isolated
-                  under <strong>{orgName}</strong>. You can add more at any time.
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Workspaces contain your projects, tasks, sprints, and team members within {orgName}.
                 </p>
               </div>
 
-              {/* Workspace / Product Name Input */}
+              {/* Workspace Input */}
               <div className="space-y-1.5">
-                <label htmlFor="wsName" className="text-xs font-semibold text-white/90">
-                  Workspace or Product Name
+                <label htmlFor="wsName" className="text-xs font-semibold text-white/90 flex items-center justify-between">
+                  <span>Workspace Name</span>
+                  <span className="text-[10px] text-white/40 font-normal">e.g. Core App, Operations, Sprints</span>
                 </label>
-                <input
-                  id="wsName"
-                  type="text"
-                  value={workspaceName}
-                  onChange={(e) => setWorkspaceName(e.target.value)}
-                  placeholder="e.g. Core SaaS Product, Client Deliverables, Mobile App"
-                  className="w-full h-12 rounded-2xl bg-white/5 border border-white/15 px-4 text-sm font-semibold text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
-                  autoFocus
-                  required
-                />
+                <div className="relative">
+                  <input
+                    id="wsName"
+                    type="text"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder="e.g. Main Workspace"
+                    className="w-full h-11 rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/20 px-3.5 text-xs font-medium text-white placeholder:text-white/30 transition-all outline-none"
+                    autoFocus
+                    required
+                  />
+                </div>
               </div>
 
-              {/* Workspace Type Selector */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-white/80">
-                  Select primary focus / type:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {WORKSPACE_TYPES.map((type) => {
-                    const Icon = type.icon
-                    const isSelected = workspaceType === type.id
+              {/* Workspace Brand Accent Color Picker */}
+              <div className="space-y-2 pt-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white/90">Workspace Brand Color</span>
+                  <span
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1.5"
+                    style={{ color: workspaceColor }}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: workspaceColor }} />
+                    <span>{PRESET_WORKSPACE_COLORS.find(c => c.value === workspaceColor)?.label || 'Custom'}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {PRESET_WORKSPACE_COLORS.map((c) => {
+                    const isSelected = workspaceColor === c.value
                     return (
                       <button
-                        key={type.id}
+                        key={c.value}
                         type="button"
-                        onClick={() => setWorkspaceType(type.id)}
-                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                          isSelected
-                            ? 'bg-primary/20 border-primary shadow-sm shadow-primary/20 text-white'
-                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/75'
+                        onClick={() => setWorkspaceColor(c.value)}
+                        className={`w-8 h-8 rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                          isSelected ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0f1015] shadow-lg' : 'hover:scale-105 opacity-80 hover:opacity-100'
                         }`}
+                        style={{
+                          backgroundColor: c.value,
+                          boxShadow: isSelected ? `0 2px 10px ${c.value}80` : undefined,
+                        }}
+                        title={c.label}
                       >
-                        <div
-                          className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
-                            isSelected ? 'bg-primary text-white' : 'bg-white/10 text-white/70'
-                          }`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white truncate">{type.label}</div>
-                          <div className="text-[11px] text-white/50 leading-tight line-clamp-1">
-                            {type.desc}
-                          </div>
-                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-white drop-shadow" />}
                       </button>
                     )
                   })}
@@ -312,51 +304,43 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
               </div>
 
               {error && (
-                <div className="p-2.5 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-medium">
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium animate-fade-in">
                   {error}
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 pt-2">
+              {/* Symmetrical Aligned Actions */}
+              <div className="flex items-center gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
                   disabled={isSubmitting}
-                  className="px-4 h-11 rounded-2xl text-xs font-semibold text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="h-11 px-4 rounded-xl border border-white/10 hover:bg-white/[0.06] text-white/70 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <ArrowLeft className="w-4 h-4" /> Back
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
                 </button>
 
                 <button
                   type="submit"
                   disabled={isSubmitting || !workspaceName.trim()}
-                  className="flex-1 h-11 rounded-2xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/25 cursor-pointer active:scale-98"
+                  className="flex-1 h-11 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Creating Organisation &amp; Workspace...
+                      <span>Setting up Workspace...</span>
                     </>
                   ) : (
                     <>
-                      Complete Setup &amp; Launch Dashboard <Check className="w-4 h-4 stroke-[2.5]" />
+                      <span>Complete Setup &amp; Launch</span>
+                      <CheckCircle2 className="w-4 h-4" />
                     </>
                   )}
                 </button>
               </div>
             </form>
           )}
-        </div>
-
-        {/* Bottom Progress Indicator */}
-        <div className="px-7 pb-5">
-          <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-primary via-indigo-500 to-white transition-all duration-300"
-              style={{ width: step === 1 ? '50%' : '100%' }}
-            />
-          </div>
         </div>
       </div>
     </div>

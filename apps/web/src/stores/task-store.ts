@@ -55,6 +55,9 @@ export interface Task {
   filesChanged?: string
   notes?: string
   historyLogs?: string
+  progress?: number
+  order?: number
+  createdBy?: string
   createdAt: string
   updatedAt: string
 }
@@ -68,11 +71,16 @@ interface TaskState {
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task>
   updateStatus: (id: string, newStatus: TaskStatus, newEnv?: TaskEnvironment) => Promise<void>
   updateEnvironment: (id: string, newEnv: TaskEnvironment) => Promise<void>
+  moveTask: (workspaceId: string, taskId: string, targetStatus: TaskStatus, targetIndex: number, newEnv?: TaskEnvironment) => Promise<void>
+  reorderTasks: (workspaceId: string, newTasks: Task[]) => void
   toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>
   addSubtask: (taskId: string, subtaskTitle: string, branchName?: string) => Promise<void>
   updateSubtaskBranch: (taskId: string, subtaskId: string, branchName: string) => Promise<void>
   addNote: (taskId: string, noteText: string) => Promise<void>
   deleteTask: (id: string) => Promise<void>
+  dispatchDueAlert: (taskId: string) => Promise<{ success: boolean; recipientEmail: string; dueDate: string }>
+  dispatchDateDueAlerts: (workspaceId: string, date?: string) => Promise<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>
+  dispatchUpcomingDueAlerts: (workspaceId: string) => Promise<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -84,7 +92,22 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const res = await apiClient.get<Task[]>(`/api/v1/workspaces/${workspaceId}/tasks`)
-      set({ tasks: res.data || [], isLoading: false })
+      let list = res.data || []
+      if (typeof window !== 'undefined') {
+        const savedOrderStr = localStorage.getItem(`taskflow_task_order_${workspaceId}`)
+        if (savedOrderStr) {
+          try {
+            const savedOrderMap: Record<string, number> = JSON.parse(savedOrderStr)
+            list = list
+              .map((t) => ({
+                ...t,
+                order: savedOrderMap[t.id] !== undefined ? savedOrderMap[t.id] : t.order ?? 0,
+              }))
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          } catch {}
+        }
+      }
+      set({ tasks: list, isLoading: false })
     } catch (err: any) {
       set({ error: err?.message || 'Failed to load tasks', isLoading: false })
     }
@@ -151,6 +174,113 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }))
     } catch (err: any) {
       set({ error: err?.message || 'Failed to update environment' })
+      throw err
+    }
+  },
+
+  moveTask: async (workspaceId: string, taskId: string, targetStatus: TaskStatus, targetIndex: number, newEnv?: TaskEnvironment) => {
+    const currentTasks = [...get().tasks]
+    const taskIndex = currentTasks.findIndex((t) => t.id === taskId)
+    if (taskIndex === -1) return
+
+    const [movedTask] = currentTasks.splice(taskIndex, 1)
+    let env = newEnv || movedTask.environment
+    if (targetStatus === 'done') {
+      env = 'MAIN'
+    } else if (targetStatus === 'in_review' && (!env || env === 'MAIN')) {
+      env = 'DEV'
+    }
+
+    const updatedTask = {
+      ...movedTask,
+      status: targetStatus,
+      environment: env,
+    }
+
+    // Filter tasks belonging to the target status column
+    const columnTasks = currentTasks.filter((t) => t.status === targetStatus)
+    const clampedIndex = Math.max(0, Math.min(targetIndex, columnTasks.length))
+    columnTasks.splice(clampedIndex, 0, updatedTask)
+
+    // Reassign order & position to column tasks
+    columnTasks.forEach((t, idx) => {
+      t.order = idx
+    })
+
+    // Now reconstruct all tasks: keep other tasks, place this column's tasks
+    const otherTasks = currentTasks.filter((t) => t.status !== targetStatus)
+    const allUpdatedTasks = [...otherTasks, ...columnTasks]
+
+    // Save order map in localStorage for persistence
+    if (typeof window !== 'undefined') {
+      const orderMap: Record<string, number> = {}
+      allUpdatedTasks.forEach((t) => {
+        orderMap[t.id] = t.order ?? 0
+      })
+      localStorage.setItem(`taskflow_task_order_${workspaceId}`, JSON.stringify(orderMap))
+    }
+
+    set({ tasks: allUpdatedTasks })
+
+    // Sync to backend: status, env, and position
+    try {
+      await apiClient.patch(`/api/v1/tasks/${taskId}`, {
+        status: targetStatus,
+        environment: env,
+        position: clampedIndex,
+      })
+    } catch (err: any) {
+      console.error('Failed to sync moved task to server:', err)
+    }
+  },
+
+  reorderTasks: (workspaceId: string, newTasks: Task[]) => {
+    const updated = newTasks.map((t, idx) => ({ ...t, order: idx }))
+    if (typeof window !== 'undefined') {
+      const orderMap: Record<string, number> = {}
+      updated.forEach((t, idx) => {
+        orderMap[t.id] = idx
+      })
+      localStorage.setItem(`taskflow_task_order_${workspaceId}`, JSON.stringify(orderMap))
+    }
+    set({ tasks: updated })
+  },
+
+  dispatchDueAlert: async (taskId: string) => {
+    try {
+      const res = await apiClient.post<{ success: boolean; recipientEmail: string; dueDate: string }>(
+        `/api/v1/tasks/${taskId}/due-alert`,
+        {}
+      )
+      return res.data
+    } catch (err: any) {
+      throw err
+    }
+  },
+
+  dispatchDateDueAlerts: async (workspaceId: string, date?: string) => {
+    try {
+      const url = date
+        ? `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-date?date=${encodeURIComponent(date)}`
+        : `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-date`
+      const res = await apiClient.post<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>(
+        url,
+        {}
+      )
+      return res.data
+    } catch (err: any) {
+      throw err
+    }
+  },
+
+  dispatchUpcomingDueAlerts: async (workspaceId: string) => {
+    try {
+      const res = await apiClient.post<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>(
+        `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-upcoming`,
+        {}
+      )
+      return res.data
+    } catch (err: any) {
       throw err
     }
   },

@@ -69,6 +69,7 @@ bin/
 
 # Scratch & ad-hoc scripts
 apply-*.cjs
+scratch/
 
 # Keys & Certificates
 *.pem

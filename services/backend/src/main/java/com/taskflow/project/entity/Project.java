@@ -44,4 +44,7 @@ public class Project extends BaseEntity {
     @Builder.Default
     @Column(nullable = false)
     private String environments = "DEV,SIT,UAT,RELEASE,MAIN";
+
+    @Column(name = "created_by")
+    private UUID createdBy;
 }

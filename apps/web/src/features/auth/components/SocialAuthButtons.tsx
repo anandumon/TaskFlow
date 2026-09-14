@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { mapSupabaseError } from '@/lib/supabase/errors'
 import { Loader2 } from 'lucide-react'
 
 interface SocialAuthButtonsProps {
@@ -14,54 +13,83 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
-  const handleGoogleLogin = async () => {
-    try {
-      setIsGoogleLoading(true)
-      setAuthError(null)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+  const callbackUrl = `${origin}/auth/callback?mode=${mode}`
+  const directOAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`
 
-      const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      if (typeof window !== 'undefined') {
+  const handleGoogleLogin = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Set immediate loading state
+    setIsGoogleLoading(true)
+    setAuthError(null)
+
+    if (typeof window !== 'undefined') {
+      try {
         localStorage.setItem('tf_auth_mode', mode)
+      } catch {
+        // ignore
       }
-      const { error } = await supabase.auth.signInWithOAuth({
+    }
+
+    // Try Supabase client SDK first; if not navigating within 250ms, force direct navigation
+    try {
+      const fallbackTimer = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = directOAuthUrl
+        }
+      }, 250)
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${redirectOrigin}/auth/callback?mode=${mode}`,
+          redirectTo: callbackUrl,
           queryParams: {
             access_type: 'offline',
-            prompt: 'consent',
-            ...(email ? { login_hint: email.trim() } : {}),
+            prompt: 'select_account',
+            ...(email && email.trim() ? { login_hint: email.trim() } : {}),
           },
         },
       })
 
+      clearTimeout(fallbackTimer)
+
       if (error) {
-        throw error
+        if (typeof window !== 'undefined') {
+          window.location.href = directOAuthUrl
+        }
+        return
       }
-    } catch (err: any) {
-      setAuthError(mapSupabaseError(err))
-      setIsGoogleLoading(false)
+
+      if (data?.url && typeof window !== 'undefined') {
+        window.location.href = data.url
+      } else if (typeof window !== 'undefined') {
+        window.location.href = directOAuthUrl
+      }
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.location.href = directOAuthUrl
+      }
     }
   }
 
   return (
     <div className="w-full space-y-2">
       {authError && (
-        <div className="p-2 rounded-lg bg-destructive/10 text-destructive text-xs text-center font-medium">
+        <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs text-center font-medium">
           {authError}
         </div>
       )}
 
-      <button
-        type="button"
+      <a
+        id="google-auth-btn"
+        href={directOAuthUrl}
         onClick={handleGoogleLogin}
-        disabled={isGoogleLoading}
-        className="w-full h-10 rounded-xl border border-border bg-card hover:bg-muted/50 text-foreground font-semibold text-xs transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow active:scale-98 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full h-10 rounded-xl border border-border bg-card hover:bg-muted/50 active:bg-muted text-foreground font-semibold text-xs transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow active:scale-[0.99] cursor-pointer select-none no-underline"
       >
         {isGoogleLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
         ) : (
-          <svg className="w-4 h-4" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
             <path
               fill="#4285F4"
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -81,7 +109,7 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
           </svg>
         )}
         <span>{isGoogleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
-      </button>
+      </a>
     </div>
   )
 }

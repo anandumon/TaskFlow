@@ -9,7 +9,7 @@ import java.util.UUID;
 @Table(name = "roles")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Role {
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    @Id
     private UUID id;
 
     @Column(name = "organization_id")
@@ -33,7 +33,13 @@ public class Role {
     private Instant updatedAt;
 
     @PrePersist
-    protected void onCreate() { createdAt = Instant.now(); updatedAt = Instant.now(); }
+    protected void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+        if (createdAt == null) createdAt = Instant.now();
+        if (updatedAt == null) updatedAt = Instant.now();
+    }
 
     @PreUpdate
     protected void onUpdate() { updatedAt = Instant.now(); }

@@ -2,6 +2,24 @@ export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | string
 export type TaskEnvironment = 'DEV' | 'SIT' | 'UAT' | 'RELEASE' | 'MAIN'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
+export interface TaskAttachment {
+  id: string
+  name: string
+  size: number
+  type: string
+  dataUrl: string
+  uploadedAt: string
+}
+
+export interface TaskComment {
+  id: string
+  authorName: string
+  authorEmail?: string
+  authorAvatar?: string
+  content: string
+  createdAt: string
+}
+
 export interface Subtask {
   id: string
   title: string
@@ -14,6 +32,7 @@ export interface Subtask {
   historyLogs?: string
   createdAt?: string
   dueDate?: string
+  attachments?: TaskAttachment[]
 }
 
 export interface FileChange {
@@ -51,6 +70,7 @@ export interface Task {
   filesChanged?: string
   notes?: string
   historyLogs?: string
+  progress?: number
   createdAt: string
   updatedAt: string
 }

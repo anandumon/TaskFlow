@@ -55,6 +55,15 @@ public class CalendarConnection {
     @Column(name = "last_sync_at")
     private Instant lastSyncAt;
 
+    @Column(name = "last_successful_sync_at")
+    private Instant lastSuccessfulSyncAt;
+
+    @Column(name = "last_sync_started_at")
+    private Instant lastSyncStartedAt;
+
+    @Column(name = "last_sync_error", columnDefinition = "TEXT")
+    private String lastSyncError;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

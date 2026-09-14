@@ -15,11 +15,15 @@ public interface OrganizationMemberRepository extends JpaRepository<Organization
     List<OrganizationMember> findByOrganizationId(UUID organizationId);
 
     Optional<OrganizationMember> findByOrganizationIdAndUserId(UUID organizationId, UUID userId);
+    Optional<OrganizationMember> findByOrganizationIdAndUserIdAndStatus(UUID organizationId, UUID userId, String status);
 
     boolean existsByOrganizationIdAndUserId(UUID organizationId, UUID userId);
+    boolean existsByOrganizationIdAndUserIdAndStatus(UUID organizationId, UUID userId, String status);
 
     long countByOrganizationId(UUID organizationId);
 
-    @Query("SELECT om.organizationId FROM OrganizationMember om WHERE om.userId = :userId")
+    @Query("SELECT om.organizationId FROM OrganizationMember om WHERE om.userId = :userId AND om.status = 'ACTIVE'")
     List<UUID> findOrganizationIdsByUserId(UUID userId);
+
+    List<OrganizationMember> findByUserIdAndStatus(UUID userId, String status);
 }

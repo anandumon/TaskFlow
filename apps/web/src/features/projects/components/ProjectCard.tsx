@@ -1,14 +1,29 @@
 import Link from 'next/link'
-import { FolderKanban, Trash2, Layers, ArrowRight } from 'lucide-react'
+import { FolderKanban, Trash2, Layers, ArrowRight, GripVertical } from 'lucide-react'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 
 interface ProjectCardProps {
   project: Project
   onDeleteProject: (id: string) => Promise<void>
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent) => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent) => void
+  onDragEnd?: () => void
+  isDragging?: boolean
 }
 
-export function ProjectCard({ project, onDeleteProject }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  onDeleteProject,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragging,
+}: ProjectCardProps) {
   let projectEnvs: string[] = [...ALL_ENVIRONMENTS]
   try {
     if (project.environments) {
@@ -60,38 +75,50 @@ export function ProjectCard({ project, onDeleteProject }: ProjectCardProps) {
 
   return (
     <div
-      className="p-6 rounded-3xl border shadow-sm hover:shadow-xl transition-all space-y-4 relative overflow-hidden group flex flex-col justify-between"
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`p-6 rounded-3xl border transition-all space-y-4 relative overflow-hidden group flex flex-col justify-between backdrop-blur-xl shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:scale-[1.01] ${
+        draggable ? 'cursor-move select-none' : ''
+      } ${isDragging ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : ''}`}
       style={{
-        backgroundColor: `${projColor}12`,
-        borderColor: `${projColor}55`,
-        boxShadow: `0 4px 24px -2px ${projColor}20`,
+        backgroundColor: `${projColor}14`,
+        borderColor: `${projColor}50`,
+        boxShadow: `0 8px 32px -4px ${projColor}25`,
       }}
+      title={draggable ? 'Drag to reorder project position' : undefined}
     >
-      {/* Top Accent Strip */}
-      <div
-        className="absolute top-0 left-0 right-0 h-1 rounded-t-3xl"
-        style={{ backgroundColor: projColor }}
-      />
+      {/* Top Glass Gloss Shine */}
+      <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Link
-            href={`/app/projects/${project.id}`}
-            className="group-hover:underline transition-all block"
-          >
-            <h3
-              className="text-lg font-bold transition-colors tracking-tight flex items-center gap-1.5"
-              style={{ color: projColor }}
+          <div className="flex items-center gap-2">
+            {draggable && (
+              <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing p-0.5 shrink-0" title="Drag to reorder">
+                <GripVertical className="w-4 h-4" />
+              </div>
+            )}
+            <Link
+              href={`/app/projects/${project.id}`}
+              className="transition-all block"
             >
-              {project.name}
-              <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </h3>
-            {project.description && project.description !== 'Comprehensive project milestones & deliverables' ? (
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                {project.description}
-              </p>
-            ) : null}
-          </Link>
+              <h3
+                className="text-lg font-bold transition-colors tracking-tight flex items-center gap-1.5"
+                style={{ color: projColor }}
+              >
+                {project.name}
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </h3>
+              {project.description && project.description !== 'Comprehensive project milestones & deliverables' ? (
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                  {project.description}
+                </p>
+              ) : null}
+            </Link>
+          </div>
 
           <button
             onClick={(e) => {
