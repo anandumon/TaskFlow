@@ -1,0 +1,28 @@
+# fly.toml app configuration file for TaskFlow Backend
+
+app = "taskflow-backend"
+primary_region = "sin" # Singapore or iad / sjc / ams depending on preference
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  SPRING_PROFILES_ACTIVE = "supabase"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
