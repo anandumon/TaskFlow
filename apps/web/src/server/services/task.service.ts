@@ -300,7 +300,7 @@ export async function dispatchDueAlert(
 
   if (task.assignee_id) {
     const assignee = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [task.assignee_id])
-    if (assignee?.email) {
+    if (assignee?.email && !assignee.email.includes('taskflow.dev')) {
       recipientEmail = assignee.email
       recipientName = `${assignee.first_name || ''} ${assignee.last_name || ''}`.trim() || assignee.email
     }
@@ -308,13 +308,13 @@ export async function dispatchDueAlert(
 
   if (!recipientEmail && workspace?.created_by) {
     const creator = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [workspace.created_by])
-    if (creator?.email) {
+    if (creator?.email && !creator.email.includes('taskflow.dev')) {
       recipientEmail = creator.email
       recipientName = `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || creator.email
     }
   }
 
-  if (!recipientEmail) {
+  if (!recipientEmail || recipientEmail.includes('taskflow.dev')) {
     recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
   }
 
@@ -367,13 +367,21 @@ export async function dispatchDateDueAlerts(
     [workspaceId]
   )
 
+  // Filter tasks that are overdue, due today/present date, or due in 1 or 2 days
   const matchingTasks = tasks.filter((t: any) => {
     if (!t.due_date || !t.due_date.trim()) return false
+    const dueInfo = parseDueDate(t.due_date)
     const d = t.due_date.trim()
+    if (dueInfo.daysLeft <= 2) return true
     if (d.toLowerCase() === targetDate.toLowerCase()) return true
-    if (d.toLowerCase() === 'today' && targetDate === todayStr) return true
-    if (d.toLowerCase() === 'tomorrow' && targetDate === tomorrowStr) return true
     return false
+  })
+
+  // Sort by urgency: most overdue first, then today, then upcoming
+  matchingTasks.sort((a: any, b: any) => {
+    const da = parseDueDate(a.due_date).daysLeft
+    const db = parseDueDate(b.due_date).daysLeft
+    return da - db
   })
 
   let recipientEmail = overrideEmail || ''
@@ -381,13 +389,13 @@ export async function dispatchDateDueAlerts(
 
   if (!recipientEmail && workspace.created_by) {
     const creator = await queryOne(`SELECT email, first_name, last_name FROM users WHERE id = $1`, [workspace.created_by])
-    if (creator?.email) {
+    if (creator?.email && !creator.email.includes('taskflow.dev')) {
       recipientEmail = creator.email
       recipientName = `${creator.first_name || ''} ${creator.last_name || ''}`.trim() || creator.email
     }
   }
 
-  if (!recipientEmail) {
+  if (!recipientEmail || recipientEmail.includes('taskflow.dev')) {
     recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
   }
 
@@ -400,7 +408,7 @@ export async function dispatchDateDueAlerts(
       taskCount: 0,
       recipientEmail,
       selectedDate: targetDate,
-      message: `No tasks found due on ${targetDate}`,
+      message: `No overdue or upcoming tasks found in this workspace`,
     }
   }
 
@@ -412,15 +420,31 @@ export async function dispatchDateDueAlerts(
       if (p?.name) projName = p.name
     }
 
+    const dueInfo = parseDueDate(t.due_date)
+    let badgeStyle = 'background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3);'
+    let badgeIcon = '📅'
+    if (dueInfo.daysLeft < 0) {
+      badgeStyle = 'background: rgba(244,63,94,0.15); color: #fb7185; border: 1px solid rgba(244,63,94,0.4);'
+      badgeIcon = '⚠️'
+    } else if (dueInfo.daysLeft === 0) {
+      badgeStyle = 'background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4);'
+      badgeIcon = '⚡'
+    }
+
     taskListHtml += `
-      <div class="task-card">
-        <h3 class="task-title">${escapeHtml(t.title)}</h3>
-        <div class="task-meta">
-          <span>📁 <strong>${escapeHtml(projName)}</strong></span>
-          <span class="tag-badge">${escapeHtml(t.tag || 'Task')}</span>
-          <span class="priority-badge">${escapeHtml((t.priority || 'Medium').toUpperCase())}</span>
-          <span>👤 ${escapeHtml(t.assignee_name || 'You')}</span>
-          <span>⚙️ ${escapeHtml((t.status || 'todo').toUpperCase())}</span>
+      <div class="task-card" style="background-color: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: #a5b4fc;">📁 ${escapeHtml(projName)}</span>
+          <span style="${badgeStyle} padding: 4px 10px; border-radius: 9999px; font-weight: 800; font-size: 11px; text-transform: uppercase;">
+            ${badgeIcon} ${escapeHtml(dueInfo.bannerText)}
+          </span>
+        </div>
+        <h3 class="task-title" style="margin: 4px 0 8px 0; font-size: 15px; font-weight: 700; color: #ffffff;">${escapeHtml(t.title)}</h3>
+        <div class="task-meta" style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #94a3b8;">
+          <span>📅 Due: <strong style="color: #f3f4f6;">${escapeHtml(t.due_date)}</strong> (${escapeHtml(dueInfo.timeRemainingText)})</span>
+          <span>👤 Assignee: <strong>${escapeHtml(t.assignee_name || 'You')}</strong></span>
+          <span>Priority: <strong>${escapeHtml((t.priority || 'Medium').toUpperCase())}</strong></span>
+          <span>Status: <strong>${escapeHtml((t.status || 'todo').toUpperCase())}</strong></span>
         </div>
       </div>
     `

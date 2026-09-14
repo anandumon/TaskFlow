@@ -328,3 +328,78 @@ export async function resendVerificationOtp(email: string): Promise<void> {
   // Dispatch OTP email
   await sendEmailVerificationOtp(normalizedEmail, user?.first_name || cached?.firstName || 'there', rawOtp, 10)
 }
+
+interface ResetTokenEntry {
+  email: string
+  userId?: string
+  expiresAt: number
+}
+
+const passwordResetTokens = new Map<string, ResetTokenEntry>()
+
+export async function requestPasswordReset(email: string): Promise<{ token: string }> {
+  const normalizedEmail = email.toLowerCase().trim()
+  const user = await queryOne(
+    `SELECT id, first_name, email FROM users WHERE email = $1 AND (deleted = false OR deleted IS NULL)`,
+    [normalizedEmail]
+  )
+
+  const token = crypto.randomBytes(32).toString('hex')
+  const expiresAt = Date.now() + 60 * 60 * 1000 // 1 hour
+
+  passwordResetTokens.set(token, {
+    email: normalizedEmail,
+    userId: user?.id,
+    expiresAt,
+  })
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const resetUrl = `${appUrl}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`
+
+  const { sendPasswordResetEmail } = await import('./email.service')
+  await sendPasswordResetEmail(normalizedEmail, user?.first_name || 'there', resetUrl)
+
+  return { token }
+}
+
+export async function performPasswordReset(token: string, newPassword: string): Promise<void> {
+  if (!token || !newPassword) {
+    throw new Error('Reset token and new password are required')
+  }
+
+  if (newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters long')
+  }
+
+  const cleanToken = token.trim()
+  const entry = passwordResetTokens.get(cleanToken)
+  if (!entry || entry.expiresAt < Date.now()) {
+    throw new Error('Password reset token is invalid or has expired. Please request a new one.')
+  }
+
+  const email = entry.email
+  const passwordHash = bcrypt.hashSync(newPassword, 10)
+
+  // 1. Update password in public.users
+  await query(
+    `UPDATE users SET password_hash = $1, failed_login_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE email = $2`,
+    [passwordHash, email]
+  )
+
+  // 2. Update password in Supabase Auth
+  try {
+    const { data: suUser } = await supabaseAdmin.auth.admin.getUserByEmail(email)
+    if (suUser?.user) {
+      await supabaseAdmin.auth.admin.updateUserById(suUser.user.id, {
+        password: newPassword,
+      })
+    }
+  } catch (err) {
+    console.warn('[auth.service] Non-fatal supabase password update:', err)
+  }
+
+  // Invalidate token
+  passwordResetTokens.delete(cleanToken)
+  console.log(`✔ [auth.service] Password successfully reset for: ${email}`)
+}
+

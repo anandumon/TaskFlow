@@ -694,13 +694,14 @@ export default function TasksPage() {
   const handleDispatchDateDueAlerts = async (targetDate?: string) => {
     const dateToUse = targetDate || selectedAlertDate || todayStr
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    const currentUserEmail = user?.email || 'anandu2109@gmail.com'
     try {
       setIsDispatchingDateAlert(true)
-      const res = await useTaskStore.getState().dispatchDateDueAlerts(wsId, dateToUse)
+      const res = await useTaskStore.getState().dispatchDateDueAlerts(wsId, dateToUse, currentUserEmail)
       if (res && res.taskCount > 0) {
-        showToast(`🔔 Dispatched due alert email for ${res.taskCount} task(s) due ${dateToUse} to ${res.recipientEmail}!`)
+        showToast(`🔔 Dispatched due alert email for ${res.taskCount} task(s) to ${res.recipientEmail}!`)
       } else {
-        showToast(res?.message || `ℹ️ No tasks due on ${dateToUse} found in this workspace.`)
+        showToast(res?.message || `ℹ️ No overdue or upcoming tasks found in this workspace.`)
       }
     } catch (err: any) {
       showToast(err?.response?.data?.message || err?.message || 'Failed to dispatch due alerts')

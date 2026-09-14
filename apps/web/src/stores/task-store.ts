@@ -258,13 +258,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  dispatchDateDueAlerts: async (workspaceId: string, date?: string) => {
+  dispatchDateDueAlerts: async (workspaceId: string, date?: string, email?: string) => {
     try {
-      const url = date
-        ? `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-date?date=${encodeURIComponent(date)}`
-        : `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-date`
+      const params = new URLSearchParams()
+      if (date) params.set('date', date)
+      if (email) params.set('email', email)
+      const q = params.toString() ? `?${params.toString()}` : ''
       const res = await apiClient.post<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>(
-        url,
+        `/api/v1/workspaces/${workspaceId}/tasks/due-alerts/dispatch-date${q}`,
         {}
       )
       return res.data

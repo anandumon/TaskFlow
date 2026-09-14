@@ -340,7 +340,7 @@ export async function sendDateDueAlertDigestEmail(
     await transporter.sendMail({
       from: `"TaskFlow Alerts" <${MAIL_USERNAME}>`,
       to: recipientEmail,
-      subject: `🔔 Due Date Alert Digest: ${taskCount} Task(s) Due ${selectedDate}`,
+      subject: `🔔 Task Due Date & Overdue Alert Digest: ${taskCount} Task(s)`,
       html,
     })
     console.log(`✔ [EMAIL] Date due alert digest sent to: ${recipientEmail}`)
@@ -408,4 +408,68 @@ export async function sendSignInNotificationEmail(
     return false
   }
 }
+
+export async function sendPasswordResetEmail(
+  recipientEmail: string,
+  recipientName: string,
+  resetUrl: string
+): Promise<boolean> {
+  const safeRecipient = escapeHtml(recipientName || 'there')
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reset Your TaskFlow Password</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0c0817; color: #f3f4f6; margin: 0; padding: 32px 16px; }
+    .container { max-width: 520px; margin: 0 auto; background: linear-gradient(135deg, #161129 0%, #1a1435 100%); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 20px; padding: 36px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); }
+    .brand-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+    .brand-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #a855f7); border-radius: 10px; display: inline-block; text-align: center; line-height: 36px; color: #ffffff; font-size: 20px; font-weight: bold; }
+    .brand-title { font-size: 22px; font-weight: 800; color: #ffffff; }
+    .security-badge { display: inline-block; font-size: 11px; font-weight: 700; color: #fbbf24; background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.25); padding: 4px 12px; border-radius: 9999px; margin-bottom: 16px; }
+    .headline { font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 12px; }
+    .description { font-size: 14px; color: #9ca3af; line-height: 1.6; margin-bottom: 24px; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 14px 36px; border-radius: 12px; box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); }
+    .footer { font-size: 11px; color: #4b5563; text-align: center; margin-top: 28px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand-header">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-title">TaskFlow</div>
+    </div>
+    <div class="security-badge">🔒 Password Reset Request</div>
+    <div class="headline">Reset Your Password</div>
+    <div class="description">
+      Hello <strong>${safeRecipient}</strong>,<br>
+      We received a request to reset the password for your TaskFlow workspace account. Click the button below to choose a new password:
+    </div>
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${resetUrl}" class="btn">Set New Password &rarr;</a>
+    </div>
+    <div class="description" style="font-size: 12px; color: #6b7280;">
+      This password reset link will expire in <strong>60 minutes</strong>. If you did not request a password reset, you can safely ignore this email; your account remains secure.
+    </div>
+    <div class="footer">&copy; 2026 TaskFlow Inc. All rights reserved.</div>
+  </div>
+</body>
+</html>`
+
+  try {
+    await transporter.sendMail({
+      from: `"TaskFlow Security" <${MAIL_USERNAME}>`,
+      to: recipientEmail,
+      subject: '🔐 Reset your TaskFlow password',
+      html,
+    })
+    console.log(`✔ [EMAIL] Password reset link sent to: ${recipientEmail}`)
+    return true
+  } catch (err: any) {
+    console.error(`⚠ [EMAIL] Failed to send password reset email:`, err?.message || err)
+    return false
+  }
+}
+
 
