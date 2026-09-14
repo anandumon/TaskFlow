@@ -98,8 +98,10 @@ export async function POST(req: NextRequest) {
         displayName: name || `${firstName} ${lastName}`,
         avatarUrl,
         emailVerified: true,
+        isNewUser: !existingUser,
       },
     })
+
 
     res.cookies.set('accessToken', accessToken, {
       path: '/',

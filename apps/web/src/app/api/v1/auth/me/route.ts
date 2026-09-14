@@ -36,7 +36,9 @@ export async function GET(req: NextRequest) {
       emailVerified: userRow ? !!userRow.email_verified : true,
       avatarUrl: userRow?.avatar_url || null,
       status: userRow?.status || 'ACTIVE',
+      isNewUser: false,
     })
+
   } catch (err: any) {
     console.error('[API /auth/me] Error:', err)
     return apiError(err.message || 'Failed to get user profile', 500)

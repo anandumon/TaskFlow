@@ -23,12 +23,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
-    if (user && user.id && user.email !== 'admin@taskflow.dev') {
+    // Only show onboarding modal for newly registered users (isNewUser === true)
+    // If a user exists in DB and logs in, NEVER show the organization/workspace creation modal!
+    if (user && user.id && user.isNewUser === true) {
       const completed = localStorage.getItem(`taskflow_onboarding_completed_${user.id}`)
       if (!completed) {
         setShowOnboarding(true)
+        return
       }
     }
+    setShowOnboarding(false)
   }, [user])
 
   useEffect(() => {
@@ -55,7 +59,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     fetchOrganizations()
       .then((orgs) => {
         if (!orgs || orgs.length === 0) {
-          router.push('/onboarding')
+          // ONLY newly created users without organizations should go to onboarding
+          if (user?.isNewUser === true) {
+            router.push('/onboarding')
+          } else {
+            // Existing user in DB: NEVER route to onboarding or show creation modal
+            setInitialLoaded(true)
+          }
         } else {
           const org = orgs[0]
           fetchWorkspaces(org.id)
@@ -71,7 +81,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         console.error('Error fetching orgs in layout:', err)
         setInitialLoaded(true)
       })
-  }, [authChecked, isLoading, isAuthenticated, router, fetchOrganizations, fetchWorkspaces])
+  }, [authChecked, isLoading, isAuthenticated, router, fetchOrganizations, fetchWorkspaces, user])
+
 
   useEffect(() => {
     if (currentOrg) {

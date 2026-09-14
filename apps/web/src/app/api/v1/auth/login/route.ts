@@ -125,8 +125,10 @@ export async function POST(req: NextRequest) {
         lastName,
         displayName,
         emailVerified: true,
+        isNewUser: false,
       },
     })
+
 
     // Also attach cookie for browser requests
     res.cookies.set('accessToken', accessToken, {

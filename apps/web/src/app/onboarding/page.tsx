@@ -1,15 +1,25 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/stores/auth-store'
 import { OnboardingWizardModal } from '@/features/onboarding/components/OnboardingWizardModal'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { user } = useAuthStore()
+
+  useEffect(() => {
+    const isNew = typeof window !== 'undefined' ? localStorage.getItem('taskflow_is_new_user') : null
+    if (isNew === 'false' || (user && user.isNewUser === false)) {
+      router.replace('/app/tasks')
+    }
+  }, [user, router])
 
   const handleComplete = () => {
     router.push('/app/home')
   }
+
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#0c0c0e]">

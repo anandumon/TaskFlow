@@ -13,7 +13,9 @@ export interface User {
   displayName?: string
   avatarUrl?: string
   emailVerified: boolean
+  isNewUser?: boolean
 }
+
 
 export interface RegisterResult {
   requiresVerification: boolean
@@ -69,14 +71,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       apiClient.setAccessToken(authData.accessToken)
+      const u = authData.user
       if (typeof window !== 'undefined') {
         localStorage.setItem('accessToken', authData.accessToken)
         if (authData.refreshToken) {
           localStorage.setItem('refreshToken', authData.refreshToken)
         }
+        localStorage.setItem('taskflow_is_new_user', 'false')
+        if (u?.id) {
+          localStorage.setItem(`taskflow_onboarding_completed_${u.id}`, 'true')
+        }
+        localStorage.setItem('taskflow_onboarding_completed', 'true')
       }
 
-      const u = authData.user
       set({
         user: {
           id: u?.id || '',
@@ -86,6 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           displayName: u?.displayName || `${u?.firstName || ''} ${u?.lastName || ''}`.trim() || cleanEmail,
           emailVerified: !!u?.emailVerified,
           avatarUrl: u?.avatarUrl,
+          isNewUser: false,
         },
         isAuthenticated: true,
         isLoading: false,
@@ -108,6 +116,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
       })
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('taskflow_is_new_user', 'true')
+      }
 
       set({ isLoading: false })
       return {
@@ -142,6 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           if (authData.refreshToken) {
             localStorage.setItem('refreshToken', authData.refreshToken)
           }
+          localStorage.setItem('taskflow_is_new_user', 'true')
         }
       }
 
@@ -156,17 +169,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || cleanEmail,
             emailVerified: true,
             avatarUrl: u.avatarUrl,
+            isNewUser: true,
           },
           isAuthenticated: true,
           isLoading: false,
+          error: null,
         })
       } else {
         set({ isLoading: false })
       }
 
-      return 'Email verified successfully!'
+      return authData?.accessToken || 'verified'
     } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || 'Verification failed. Please check the code.'
+      const errMsg = err?.response?.data?.message || err?.message || 'Verification failed. Please try again.'
       set({ error: errMsg, isLoading: false })
       throw new Error(errMsg)
     }
@@ -209,6 +224,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const res = await apiClient.get<any>('/api/v1/auth/me')
           if (res.data) {
             const u = res.data
+            const isNew = u.isNewUser === true || (typeof window !== 'undefined' && localStorage.getItem('taskflow_is_new_user') === 'true')
+
             set({
               user: {
                 id: u.id,
@@ -218,12 +235,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'User',
                 emailVerified: !!u.emailVerified,
                 avatarUrl: u.avatarUrl,
+                isNewUser: isNew,
               },
               isAuthenticated: true,
               isLoading: false,
             })
             return
           }
+
         } catch {
           // Token expired or invalid, continue to fallback or clear
         }

@@ -265,8 +265,10 @@ export async function verifyEmailOtp(input: {
       lastName: user?.last_name || cached?.lastName || '',
       displayName: user?.display_name || `${firstName}`.trim(),
       emailVerified: true,
+      isNewUser: true,
     },
   }
+
 
 }
 
