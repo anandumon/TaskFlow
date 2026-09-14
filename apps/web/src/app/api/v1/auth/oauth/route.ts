@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
 import { supabaseAdmin } from '@/server/db/supabase-admin'
 import crypto from 'crypto'
+import { createTaskFlowJwt, createRefreshToken } from '@/server/utils/jwt'
 
 export async function POST(req: NextRequest) {
   try {
@@ -77,9 +78,18 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return apiSuccess({
-      accessToken: `taskflow_jwt_${userId}_${Date.now()}`,
-      refreshToken: `taskflow_ref_${userId}_${Date.now()}`,
+    const accessToken = createTaskFlowJwt({
+      id: userId,
+      email: cleanEmail,
+      firstName,
+      lastName,
+      fullName: name || `${firstName} ${lastName}`,
+    })
+    const refreshToken = createRefreshToken(userId)
+
+    const res = apiSuccess({
+      accessToken,
+      refreshToken,
       user: {
         id: userId,
         email: cleanEmail,
@@ -90,8 +100,18 @@ export async function POST(req: NextRequest) {
         emailVerified: true,
       },
     })
+
+    res.cookies.set('accessToken', accessToken, {
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+    })
+
+    return res
   } catch (err: any) {
     console.error('[auth/oauth] Error:', err)
+
     return apiError(err.message || 'OAuth authentication failed', 500)
   }
 }

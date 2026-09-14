@@ -72,50 +72,128 @@ async function ensureDbUser(authId: string, email: string, fullName?: string): P
   }
 }
 
+import { verifyTaskFlowJwt } from './jwt'
+
 /**
  * Extracts and verifies the authenticated user from the Authorization header,
- * guaranteeing the returned user.id exists in the public.users table.
+ * cookies, or query parameters, guaranteeing the returned user.id exists in the public.users table.
  */
 export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
+  let token = ''
+
+  // 1. Check Authorization header
   const authHeader = req.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.replace('Bearer ', '').trim()
   }
 
-  const token = authHeader.replace('Bearer ', '').trim()
+  // 2. Check cookies if no Bearer token
+  if (!token) {
+    const cookieToken =
+      req.cookies.get('accessToken')?.value ||
+      req.cookies.get('token')?.value ||
+      req.cookies.get('taskflow_token')?.value
+    if (cookieToken) {
+      token = cookieToken.trim()
+    }
+  }
+
+  // 3. Check query param (useful for dev / direct testing)
+  if (!token) {
+    const queryToken = req.nextUrl.searchParams.get('token')
+    if (queryToken) {
+      token = queryToken.trim()
+    }
+  }
+
   if (!token) return null
 
   try {
-    // Check with Supabase Auth
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
-    if (user && !error) {
-      const email = user.email || ''
-      const fullName =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        (user.email ? user.email.split('@')[0] : 'User')
-      const canonicalId = await ensureDbUser(user.id, email, fullName)
-
+    // 1. TaskFlow Native HS256 JWT
+    const nativePayload = verifyTaskFlowJwt(token)
+    if (nativePayload && nativePayload.sub) {
+      const canonicalId = await ensureDbUser(
+        nativePayload.sub,
+        nativePayload.email,
+        nativePayload.name
+      )
       return {
         id: canonicalId,
-        email,
-        fullName,
+        email: nativePayload.email,
+        fullName: nativePayload.name,
       }
     }
 
-    // Fallback: If JWT decoding reveals user payload
+    // 2. Supabase Auth token
+    if (token.startsWith('eyJ')) {
+      try {
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+        if (user && !error) {
+          const email = user.email || ''
+          const fullName =
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            (user.email ? user.email.split('@')[0] : 'User')
+          const canonicalId = await ensureDbUser(user.id, email, fullName)
+
+          return {
+            id: canonicalId,
+            email,
+            fullName,
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Fallback: Parse 3-part JWT payload directly
     const parts = token.split('.')
     if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'))
-      const sub = payload.sub || payload.userId || payload.id
-      const email = payload.email || ''
-      const fullName = payload.name || payload.firstName || email.split('@')[0] || 'User'
-      if (sub || email) {
-        const canonicalId = await ensureDbUser(sub, email, fullName)
+      try {
+        const payloadStr = Buffer.from(parts[1], 'base64url').toString('utf8')
+        const payload = JSON.parse(payloadStr)
+        const sub = payload.sub || payload.userId || payload.id
+        const email = payload.email || ''
+        const fullName = payload.name || payload.firstName || email.split('@')[0] || 'User'
+        if (sub || email) {
+          const canonicalId = await ensureDbUser(sub, email, fullName)
+          return {
+            id: canonicalId,
+            email,
+            fullName,
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Fallback: Legacy taskflow_jwt_${userId}_... token
+    if (token.startsWith('taskflow_jwt_')) {
+      const rawId = token.replace('taskflow_jwt_', '').split('_')[0]
+      if (isUuid(rawId)) {
+        const dbUser = await queryOne(
+          `SELECT id, email, display_name FROM users WHERE id = $1 LIMIT 1`,
+          [rawId]
+        )
+        if (dbUser) {
+          return {
+            id: dbUser.id,
+            email: dbUser.email,
+            fullName: dbUser.display_name,
+          }
+        }
+      }
+    }
+
+    // 5. Fallback: Direct UUID token
+    if (isUuid(token)) {
+      const dbUser = await queryOne(
+        `SELECT id, email, display_name FROM users WHERE id = $1 LIMIT 1`,
+        [token]
+      )
+      if (dbUser) {
         return {
-          id: canonicalId,
-          email,
-          fullName,
+          id: dbUser.id,
+          email: dbUser.email,
+          fullName: dbUser.display_name,
         }
       }
     }
@@ -125,3 +203,4 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
 
   return null
 }
+

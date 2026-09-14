@@ -7,6 +7,7 @@ import {
 } from './email.service'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { createTaskFlowJwt, createRefreshToken } from '../utils/jwt'
 
 // In-memory fast OTP cache (email -> { otp, expiresAt, firstName, lastName, passwordHash })
 interface PendingEntry {
@@ -243,27 +244,22 @@ export async function verifyEmailOtp(input: {
     console.warn('[auth.service] supabase confirm error:', err)
   }
 
-  // Generate sign-in session for immediate authentication
-  let accessToken = ''
-  let refreshToken = ''
-  try {
-    const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-    })
-    accessToken = linkData?.properties?.action_link || crypto.randomUUID()
-    refreshToken = crypto.randomUUID()
-  } catch {
-    accessToken = crypto.randomUUID()
-    refreshToken = crypto.randomUUID()
-  }
+  const effectiveUserId = user?.id || crypto.randomUUID()
+  const accessToken = createTaskFlowJwt({
+    id: effectiveUserId,
+    email,
+    firstName: user?.first_name || cached?.firstName || '',
+    lastName: user?.last_name || cached?.lastName || '',
+    fullName: user?.display_name || `${firstName}`.trim(),
+  })
+  const refreshToken = createRefreshToken(effectiveUserId)
 
   return {
     success: true,
     accessToken,
     refreshToken,
     user: {
-      id: user?.id || crypto.randomUUID(),
+      id: effectiveUserId,
       email,
       firstName: user?.first_name || cached?.firstName || '',
       lastName: user?.last_name || cached?.lastName || '',
@@ -271,6 +267,7 @@ export async function verifyEmailOtp(input: {
       emailVerified: true,
     },
   }
+
 }
 
 export async function resendVerificationOtp(email: string): Promise<void> {

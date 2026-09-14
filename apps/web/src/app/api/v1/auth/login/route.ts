@@ -5,6 +5,7 @@ import { query, queryOne } from '@/server/db/postgres'
 import { sendSignInNotificationEmail } from '@/server/services/email.service'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { createTaskFlowJwt, createRefreshToken } from '@/server/utils/jwt'
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,8 +76,13 @@ export async function POST(req: NextRequest) {
       } catch {}
 
       if (!accessToken) {
-        accessToken = crypto.randomUUID()
-        refreshToken = crypto.randomUUID()
+        accessToken = createTaskFlowJwt({
+          id: dbUser.id,
+          email: dbUser.email,
+          firstName: dbUser.first_name,
+          lastName: dbUser.last_name,
+        })
+        refreshToken = createRefreshToken(dbUser.id)
       }
 
       authUser = {
@@ -107,7 +113,7 @@ export async function POST(req: NextRequest) {
       console.warn('[API /auth/login] Sign-in email notice error:', err)
     )
 
-    return apiSuccess({
+    const res = apiSuccess({
       accessToken,
       refreshToken,
       tokenType: 'Bearer',
@@ -121,6 +127,17 @@ export async function POST(req: NextRequest) {
         emailVerified: true,
       },
     })
+
+    // Also attach cookie for browser requests
+    res.cookies.set('accessToken', accessToken, {
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+    })
+
+    return res
+
   } catch (err: any) {
     console.error('[API /auth/login] Error:', err)
     return apiError(err.message || 'Login failed', 500)
