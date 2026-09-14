@@ -1310,8 +1310,12 @@ export default function TasksPage() {
 
                   let subtaskList: any[] = []
                   try {
-                    if (task.subtasks) subtaskList = JSON.parse(task.subtasks)
+                    if (task.subtasks) {
+                      const parsed = JSON.parse(task.subtasks)
+                      subtaskList = Array.isArray(parsed) ? parsed : [parsed]
+                    }
                   } catch {}
+                  if (!Array.isArray(subtaskList)) subtaskList = []
 
                   const doneCount = subtaskList.filter((s: any) => s.completed).length
 
@@ -1722,8 +1726,12 @@ export default function TasksPage() {
 
                               let subtaskList: any[] = []
                               try {
-                                if (t.subtasks) subtaskList = JSON.parse(t.subtasks)
+                                if (t.subtasks) {
+                                  const parsed = JSON.parse(t.subtasks)
+                                  subtaskList = Array.isArray(parsed) ? parsed : [parsed]
+                                }
                               } catch {}
+                              if (!Array.isArray(subtaskList)) subtaskList = []
 
                               let attachmentsList: any[] = []
                               try {
@@ -1984,8 +1992,12 @@ export default function TasksPage() {
 
                   let subtaskList: any[] = []
                   try {
-                    if (t.subtasks) subtaskList = JSON.parse(t.subtasks)
+                    if (t.subtasks) {
+                      const parsed = JSON.parse(t.subtasks)
+                      subtaskList = Array.isArray(parsed) ? parsed : [parsed]
+                    }
                   } catch {}
+                  if (!Array.isArray(subtaskList)) subtaskList = []
 
                   let attachmentsList: any[] = []
                   try {

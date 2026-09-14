@@ -28,6 +28,22 @@ export interface TaskDto {
   updatedAt: string
 }
 
+function ensureJsonArrayString(val: any): string {
+  if (!val) return '[]'
+  if (Array.isArray(val)) return JSON.stringify(val)
+  if (typeof val === 'object') return JSON.stringify([val])
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (!trimmed || trimmed === '[]') return '[]'
+    try {
+      const p = JSON.parse(trimmed)
+      if (Array.isArray(p)) return JSON.stringify(p)
+      if (p && typeof p === 'object') return JSON.stringify([p])
+    } catch {}
+  }
+  return '[]'
+}
+
 function mapTask(row: any): TaskDto {
   return {
     id: String(row.id),
@@ -43,13 +59,13 @@ function mapTask(row: any): TaskDto {
     assigneeId: row.assignee_id ? String(row.assignee_id) : undefined,
     assigneeName: row.assignee_name || row.assigneeName || 'You',
     dueDate: row.due_date || row.dueDate || 'Tomorrow',
-    subtasks: typeof row.subtasks === 'string' ? row.subtasks : JSON.stringify(row.subtasks || []),
+    subtasks: ensureJsonArrayString(row.subtasks),
     assignees: row.assignees || 'You',
     reviewerName: row.reviewer_name || row.reviewerName || 'Lead Reviewer',
     branchName: row.branch_name || row.branchName || '',
-    filesChanged: typeof row.files_changed === 'string' ? row.files_changed : JSON.stringify(row.files_changed || []),
+    filesChanged: ensureJsonArrayString(row.files_changed),
     notes: row.notes || '',
-    historyLogs: typeof row.history_logs === 'string' ? row.history_logs : JSON.stringify(row.history_logs || []),
+    historyLogs: ensureJsonArrayString(row.history_logs),
     position: Number(row.position ?? 0),
     progress: Number(row.progress ?? 0),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
