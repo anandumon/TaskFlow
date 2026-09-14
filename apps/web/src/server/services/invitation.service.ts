@@ -1,0 +1,187 @@
+import { query, queryOne } from '../db/postgres'
+import crypto from 'crypto'
+
+export interface InvitationDto {
+  id: string
+  email: string
+  organizationId?: string
+  organizationName?: string
+  workspaceId?: string
+  workspaceName?: string
+  projectId?: string
+  projectName?: string
+  scope: string
+  role: string
+  token: string
+  status: string
+  expiresAt: string
+  createdAt: string
+}
+
+function mapInvitation(row: any): InvitationDto {
+  return {
+    id: String(row.id),
+    email: row.email,
+    organizationId: row.organization_id ? String(row.organization_id) : undefined,
+    organizationName: row.organization_name || 'Organization',
+    workspaceId: row.workspace_id ? String(row.workspace_id) : undefined,
+    workspaceName: row.workspace_name || 'Workspace',
+    projectId: row.project_id ? String(row.project_id) : undefined,
+    projectName: row.project_name || 'Project',
+    scope: row.scope || 'ORGANIZATION',
+    role: row.role || 'MEMBER',
+    token: row.token,
+    status: row.status || 'PENDING',
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : new Date().toISOString(),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+  }
+}
+
+export async function createInvitation(
+  creatorId: string,
+  input: {
+    email: string
+    role?: string
+    scope?: string
+    organizationId?: string
+    workspaceId?: string
+    projectId?: string
+  }
+): Promise<InvitationDto> {
+  const id = crypto.randomUUID()
+  const token = crypto.randomBytes(24).toString('hex')
+  const now = new Date()
+  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000)
+
+  let orgName = 'Organization'
+  if (input.organizationId) {
+    const o = await queryOne(`SELECT name FROM organizations WHERE id = $1`, [input.organizationId])
+    if (o) orgName = o.name
+  }
+
+  let wsName = 'Workspace'
+  if (input.workspaceId) {
+    const w = await queryOne(`SELECT name FROM workspaces WHERE id = $1`, [input.workspaceId])
+    if (w) wsName = w.name
+  }
+
+  let prjName = 'Project'
+  if (input.projectId) {
+    const p = await queryOne(`SELECT name FROM projects WHERE id = $1`, [input.projectId])
+    if (p) prjName = p.name
+  }
+
+  const row = await queryOne(
+    `INSERT INTO invitations (
+      id, email, role, scope, organization_id, organization_name,
+      workspace_id, workspace_name, project_id, project_name,
+      token, status, invited_by, expires_at, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING', $12, $13, $14, $14)
+    RETURNING *`,
+    [
+      id,
+      input.email.toLowerCase().trim(),
+      input.role || 'MEMBER',
+      input.scope || 'ORGANIZATION',
+      input.organizationId || null,
+      orgName,
+      input.workspaceId || null,
+      wsName,
+      input.projectId || null,
+      prjName,
+      token,
+      creatorId,
+      expiresAt,
+      now,
+    ]
+  )
+
+  return mapInvitation(row)
+}
+
+export async function getPendingInvitationsForUser(email: string): Promise<InvitationDto[]> {
+  if (!email) return []
+  try {
+    const rows = await query(
+      `SELECT * FROM invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING'`,
+      [email.trim()]
+    )
+    return rows.map(mapInvitation)
+  } catch (err) {
+    console.warn('[invitation.service] getPendingInvitationsForUser error:', err)
+    return []
+  }
+}
+
+export async function getInvitationByToken(token: string): Promise<InvitationDto | null> {
+  const row = await queryOne(`SELECT * FROM invitations WHERE token = $1`, [token])
+  if (!row) return null
+  return mapInvitation(row)
+}
+
+export async function getInvitationsForResource(
+  scope: string,
+  resourceId: string
+): Promise<InvitationDto[]> {
+  try {
+    let sql = `SELECT * FROM invitations WHERE status = 'PENDING'`
+    const params = [resourceId]
+
+    if (scope === 'ORGANIZATION') {
+      sql += ` AND organization_id = $1`
+    } else if (scope === 'WORKSPACE') {
+      sql += ` AND workspace_id = $1`
+    } else if (scope === 'PROJECT') {
+      sql += ` AND project_id = $1`
+    }
+
+    const rows = await query(sql, params)
+    return rows.map(mapInvitation)
+  } catch (err) {
+    return []
+  }
+}
+
+export async function acceptInvitation(
+  userId: string,
+  tokenOrId: string
+): Promise<InvitationDto> {
+  const isId = tokenOrId.length === 36 && tokenOrId.includes('-')
+  const inv = await queryOne(
+    `SELECT * FROM invitations WHERE ${isId ? 'id = $1' : 'token = $1'}`,
+    [tokenOrId]
+  )
+
+  if (!inv) throw new Error('Invitation not found or expired')
+
+  const now = new Date()
+  await query(`UPDATE invitations SET status = 'ACCEPTED', updated_at = $1 WHERE id = $2`, [now, inv.id])
+
+  if (inv.workspace_id) {
+    await query(
+      `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)
+       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
+      [crypto.randomUUID(), inv.workspace_id, userId, inv.role || 'MEMBER', now]
+    )
+  }
+
+  if (inv.organization_id) {
+    await query(
+      `INSERT INTO organization_members (id, organization_id, user_id, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)
+       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
+      [crypto.randomUUID(), inv.organization_id, userId, inv.role || 'MEMBER', now]
+    )
+  }
+
+  return mapInvitation({ ...inv, status: 'ACCEPTED' })
+}
+
+export async function declineInvitation(tokenOrId: string): Promise<void> {
+  const isId = tokenOrId.length === 36 && tokenOrId.includes('-')
+  await query(
+    `UPDATE invitations SET status = 'DECLINED', updated_at = $1 WHERE ${isId ? 'id = $2' : 'token = $2'}`,
+    [new Date(), tokenOrId]
+  )
+}

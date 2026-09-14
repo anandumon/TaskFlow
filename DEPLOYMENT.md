@@ -44,17 +44,20 @@ Whenever you push to `main` or create a pull request, GitHub Actions automatical
 
 ---
 
-## 2. Deploying the Frontend (Vercel)
+## 2. Deploying Full-Stack Next.js (Vercel — 100% Free Forever, Zero Backend Servers Needed!)
 
-1. Go to [Vercel](https://vercel.com) and click **Add New Project**.
-2. Import the GitHub repository: `anandumon/TaskFlow`.
-3. Set **Root Directory** to: `apps/web`.
-4. In **Environment Variables**, add:
-   - `NEXT_PUBLIC_API_URL`: Your deployed backend URL
-   - `NEXT_PUBLIC_SUPABASE_URL`: `https://dxrcfczdfstnymbeicmq.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anon key
-   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`: Your Google OAuth client ID
-5. Click **Deploy**.
+The entire TaskFlow application (frontend + REST APIs) is now fully native in **Next.js** using Serverless Route Handlers (`apps/web/src/app/api/v1/...`). You do **not** need to deploy any separate Java or Docker container!
+
+1. Go to [Vercel](https://vercel.com) and open your project (or import `anandumon/TaskFlow`).
+2. Set **Root Directory** to: `apps/web`.
+3. In **Environment Variables**, add:
+   - `DATABASE_URL`: Your Supabase Pooler PostgreSQL URL
+   - `NEXT_PUBLIC_SUPABASE_URL`: `https://YOUR_PROJECT_REF.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anon public key
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`: Your Google OAuth Client ID
+   - `GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret
+   - `NEXT_PUBLIC_API_URL`: *(Leave empty! The app self-hosts its own API routes at `/api/v1` on the same domain)*
+4. Click **Deploy**. Vercel will deploy your complete full-stack web application in under 1 minute!
 
 ---
 
