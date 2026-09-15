@@ -73,7 +73,7 @@ interface OrgState {
   fetchOrganizations: () => Promise<Organization[]>
   fetchUserResources: () => Promise<UserResourceTree | null>
   setCurrentOrg: (org: Organization | null) => void
-  createOrganization: (name: string) => Promise<Organization>
+  createOrganization: (name: string, workspaceName?: string, workspaceColor?: string) => Promise<Organization>
   fetchMembers: (orgId: string) => Promise<OrgMember[]>
   addMember: (orgId: string, userId: string, roleId?: string) => Promise<OrgMember>
   removeMember: (orgId: string, memberId: string) => Promise<void>
@@ -122,10 +122,14 @@ export const useOrgStore = create<OrgState>((set, get) => ({
 
   setCurrentOrg: (org) => set({ currentOrg: org }),
 
-  createOrganization: async (name: string) => {
+  createOrganization: async (name: string, workspaceName?: string, workspaceColor?: string) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await apiClient.post<Organization>('/api/v1/organizations', { name })
+      const res = await apiClient.post<Organization>('/api/v1/organizations', {
+        name,
+        workspaceName,
+        workspaceColor,
+      })
       const newOrg = res.data
       set((state) => ({
         organizations: [...state.organizations, newOrg],

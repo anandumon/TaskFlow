@@ -39,6 +39,7 @@ async function resolveValidOwnerId(userId?: string): Promise<string> {
         [userId]
       )
       if (row?.id) return row.id
+      return userId
     } else if (userId.includes('@')) {
       const row = await queryOne(
         `SELECT id FROM users WHERE email = $1 LIMIT 1`,
@@ -48,11 +49,7 @@ async function resolveValidOwnerId(userId?: string): Promise<string> {
     }
   }
 
-  // Fallback to first active user in database
-  const fallback = await queryOne(`SELECT id FROM users WHERE (deleted = false OR deleted IS NULL) ORDER BY created_at ASC LIMIT 1`)
-  if (fallback?.id) return fallback.id
-
-  return '543cb7a9-44dc-4a3e-844c-020d52cefca7'
+  return userId || ''
 }
 
 function mapOrg(row: any): OrganizationDto {
@@ -70,17 +67,21 @@ function mapOrg(row: any): OrganizationDto {
 
 export async function listOrganizations(userId?: string): Promise<OrganizationDto[]> {
   try {
-    const rows = await query(
-      `SELECT * FROM organizations WHERE (deleted = false OR deleted IS NULL) ORDER BY created_at ASC`
-    )
-    const orgs = rows.map(mapOrg)
-    if (orgs.length > 0) return orgs
+    if (!userId) return []
 
-    if (userId) {
-      const defaultOrg = await createOrganization(userId, { name: 'Default Organization' })
-      return [defaultOrg]
-    }
-    return []
+    const validOwnerId = await resolveValidOwnerId(userId)
+    if (!validOwnerId) return []
+
+    const rows = await query(
+      `SELECT DISTINCT o.* 
+       FROM organizations o
+       LEFT JOIN organization_members om ON om.organization_id = o.id
+       WHERE (o.deleted = false OR o.deleted IS NULL)
+         AND (om.user_id = $1 OR o.owner_id = $1)
+       ORDER BY o.created_at ASC`,
+      [validOwnerId]
+    )
+    return rows.map(mapOrg)
   } catch (err) {
     console.warn('[org.service] listOrganizations error:', err)
     return []
@@ -89,10 +90,13 @@ export async function listOrganizations(userId?: string): Promise<OrganizationDt
 
 export async function createOrganization(
   userId: string,
-  input: { name: string; slug?: string }
+  input: { name: string; slug?: string; workspaceName?: string; workspaceColor?: string }
 ): Promise<OrganizationDto> {
   const id = crypto.randomUUID()
   const validOwnerId = await resolveValidOwnerId(userId)
+  if (!validOwnerId) {
+    throw new Error('User not authenticated')
+  }
   const slug = (input.slug || input.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
@@ -110,13 +114,25 @@ export async function createOrganization(
     [crypto.randomUUID(), id, validOwnerId, OWNER_ROLE_ID, now]
   )
 
-  // Auto-create a default workspace for this organization
+  // Create primary workspace for this organization
+  const wsName = (input.workspaceName || 'Main Workspace').trim()
+  const wsColor = input.workspaceColor || '#3b82f6'
   const defaultWsId = crypto.randomUUID()
   await query(
     `INSERT INTO workspaces (id, organization_id, name, slug, description, color, icon, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, 'Main Workspace', $3, 'Primary workspace', '#3b82f6', 'Folder', false, 0, $4, $4)`,
-    [defaultWsId, id, `main-${id.slice(0, 8)}`, now]
+     VALUES ($1, $2, $3, $4, 'Primary workspace', $5, 'Folder', false, 0, $6, $6)`,
+    [defaultWsId, id, wsName, `main-${id.slice(0, 8)}`, wsColor, now]
   )
+
+  try {
+    await query(
+      `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+       VALUES ($1, $2, $3, 'OWNER', $4, $4)`,
+      [crypto.randomUUID(), defaultWsId, validOwnerId, now]
+    )
+  } catch (wmErr) {
+    console.debug('[org.service] non-fatal workspace_members insert:', wmErr)
+  }
 
   return mapOrg(row)
 }

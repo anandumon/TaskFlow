@@ -36,7 +36,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   const router = useRouter()
   const { user } = useAuthStore()
   const { createOrganization, setCurrentOrg } = useOrgStore()
-  const { createWorkspace, setCurrentWorkspace } = useWorkspaceStore()
+  const { fetchWorkspaces, setCurrentWorkspace } = useWorkspaceStore()
 
   const [step, setStep] = useState<1 | 2>(1)
   const [orgName, setOrgName] = useState('')
@@ -78,18 +78,15 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
     setError(null)
 
     try {
-      // 1. Create the new Organization
-      const org = await createOrganization(orgName.trim())
+      // 1. Create the new Organization with custom Workspace
+      const org = await createOrganization(orgName.trim(), workspaceName.trim(), workspaceColor)
       setCurrentOrg(org)
 
-      // 2. Create the first Workspace under this Organization
-      const ws = await createWorkspace(org.id, {
-        name: workspaceName.trim(),
-        description: 'Primary workspace for team projects, tasks, and sprints',
-        color: workspaceColor,
-        icon: 'folder',
-      })
-      setCurrentWorkspace(ws)
+      // 2. Fetch the created workspace under this Organization
+      const workspaces = await fetchWorkspaces(org.id)
+      if (workspaces.length > 0) {
+        setCurrentWorkspace(workspaces[0])
+      }
 
       // 3. Mark onboarding as completed
       if (user?.id) {

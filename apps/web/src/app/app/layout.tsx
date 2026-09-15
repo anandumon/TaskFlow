@@ -56,9 +56,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             setInitialLoaded(true)
           })
         } else {
-          if (user?.isNewUser === true) {
-            router.push('/onboarding')
-          }
+          setShowOnboarding(true)
           setInitialLoaded(true)
         }
       })
@@ -134,6 +132,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
             }
             localStorage.setItem('taskflow_onboarding_completed', 'true')
+            fetchOrganizations().then((freshOrgs) => {
+              if (freshOrgs && freshOrgs.length > 0) {
+                fetchWorkspaces(freshOrgs[0].id)
+              }
+            })
           }}
         />
       )}

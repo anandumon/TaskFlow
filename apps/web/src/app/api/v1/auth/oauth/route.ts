@@ -41,43 +41,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Ensure user has default organization & workspace
-    const { data: members } = await supabaseAdmin
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', userId)
-
-    if (!members || members.length === 0) {
-      const orgId = crypto.randomUUID()
-      await supabaseAdmin.from('organizations').insert({
-        id: orgId,
-        name: `${firstName}'s Workspace`,
-        slug: `workspace-${userId.slice(0, 8)}`,
-        plan: 'PRO',
-        owner_id: userId,
-        created_at: now,
-        updated_at: now,
-      })
-      await supabaseAdmin.from('organization_members').insert({
-        id: crypto.randomUUID(),
-        organization_id: orgId,
-        user_id: userId,
-        role: 'OWNER',
-        created_at: now,
-        updated_at: now,
-      })
-      await supabaseAdmin.from('workspaces').insert({
-        id: crypto.randomUUID(),
-        organization_id: orgId,
-        name: 'Main Workspace',
-        slug: `main-${userId.slice(0, 8)}`,
-        color: '#3b82f6',
-        icon: 'Folder',
-        created_at: now,
-        updated_at: now,
-      })
-    }
-
     const accessToken = createTaskFlowJwt({
       id: userId,
       email: cleanEmail,
