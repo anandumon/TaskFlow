@@ -259,12 +259,12 @@ export default function AuthCallbackPage() {
           if (inviteToken) {
             setStatusMessage('Google authentication verified! Opening project invite...')
             setTimeout(() => {
-              router.push(`/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`)
+              window.location.href = `/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`
             }, 100)
           } else {
             setStatusMessage('Authentication successful! Opening dashboard...')
             setTimeout(() => {
-              router.push('/app/home')
+              window.location.href = '/app/home'
             }, 100)
           }
         }

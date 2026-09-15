@@ -16,10 +16,14 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
   const callbackUrl = `${origin}/auth/callback?mode=${mode}`
-  const directOAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`
 
-  const handleGoogleLogin = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // Set immediate loading state
+  // Force Google to ALWAYS display the account selection dialog by passing prompt=select_account
+  const directOAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+    callbackUrl
+  )}&prompt=select_account&access_type=offline&queryParams[prompt]=select_account&queryParams[access_type]=offline`
+
+  const handleGoogleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
     setIsGoogleLoading(true)
     setAuthError(null)
 
@@ -31,14 +35,14 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
       }
     }
 
-    // Try Supabase client SDK first; if not navigating within 250ms, force direct navigation
+    // Clear any existing local Supabase session to prevent automatic account re-use
     try {
-      const fallbackTimer = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          window.location.href = directOAuthUrl
-        }
-      }, 250)
+      await supabase.auth.signOut({ scope: 'local' })
+    } catch {
+      // ignore
+    }
 
+    try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -51,9 +55,8 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
         },
       })
 
-      clearTimeout(fallbackTimer)
-
       if (error) {
+        console.warn('[GoogleAuth] signInWithOAuth returned error, navigating to direct URL:', error)
         if (typeof window !== 'undefined') {
           window.location.href = directOAuthUrl
         }
@@ -65,7 +68,8 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
       } else if (typeof window !== 'undefined') {
         window.location.href = directOAuthUrl
       }
-    } catch {
+    } catch (err: any) {
+      console.warn('[GoogleAuth] Fallback direct navigation:', err)
       if (typeof window !== 'undefined') {
         window.location.href = directOAuthUrl
       }
@@ -80,11 +84,12 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
         </div>
       )}
 
-      <a
+      <button
+        type="button"
         id="google-auth-btn"
-        href={directOAuthUrl}
         onClick={handleGoogleLogin}
-        className="w-full h-10 rounded-xl border border-border bg-card hover:bg-muted/50 active:bg-muted text-foreground font-semibold text-xs transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow active:scale-[0.99] cursor-pointer select-none no-underline"
+        disabled={isGoogleLoading}
+        className="w-full h-10 rounded-xl border border-border bg-card hover:bg-muted/50 active:bg-muted text-foreground font-semibold text-xs transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow active:scale-[0.99] cursor-pointer select-none disabled:opacity-75 disabled:cursor-not-allowed"
       >
         {isGoogleLoading ? (
           <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -109,7 +114,7 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
           </svg>
         )}
         <span>{isGoogleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
-      </a>
+      </button>
     </div>
   )
 }
