@@ -48,10 +48,91 @@ export default function CalendarPage() {
   const [draggedCalTaskId, setDraggedCalTaskId] = useState<string | null>(null)
   const [dragOverCalDay, setDragOverCalDay] = useState<number | null>(null)
 
+  // Day Inspection Drag & Drop Reordering in any position
+  const [draggedInspectorTaskId, setDraggedInspectorTaskId] = useState<string | null>(null)
+  const [dragOverInspectorTaskId, setDragOverInspectorTaskId] = useState<string | null>(null)
+  const [dragOverInspectorPosition, setDragOverInspectorPosition] = useState<'before' | 'after' | null>(null)
+
   const handleCalTaskDragStart = (e: React.DragEvent, taskId: string) => {
     setDraggedCalTaskId(taskId)
     e.dataTransfer.setData('text/plain', taskId)
     e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleInspectorDragStart = (e: React.DragEvent, taskId: string) => {
+    setDraggedInspectorTaskId(taskId)
+    setDraggedCalTaskId(taskId)
+    e.dataTransfer.setData('text/plain', taskId)
+    e.dataTransfer.setData('source', 'day-inspector')
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleInspectorDragOver = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    if (draggedInspectorTaskId === targetTaskId) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    const position = e.clientY < midpoint ? 'before' : 'after'
+
+    setDragOverInspectorTaskId(targetTaskId)
+    setDragOverInspectorPosition(position)
+  }
+
+  const handleInspectorDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleInspectorDrop = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const draggedId = draggedInspectorTaskId || e.dataTransfer.getData('text/plain')
+    if (!draggedId || draggedId === targetTaskId) {
+      setDragOverInspectorTaskId(null)
+      setDragOverInspectorPosition(null)
+      setDraggedInspectorTaskId(null)
+      return
+    }
+
+    const currentDayTasks = tasks.filter((t) => getTaskDayNumber(t) === selectedDay)
+    const draggedIndex = currentDayTasks.findIndex((t) => t.id === draggedId)
+    const targetIndex = currentDayTasks.findIndex((t) => t.id === targetTaskId)
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDragOverInspectorTaskId(null)
+      setDragOverInspectorPosition(null)
+      setDraggedInspectorTaskId(null)
+      return
+    }
+
+    const reorderedDayTasks = [...currentDayTasks]
+    const [removed] = reorderedDayTasks.splice(draggedIndex, 1)
+
+    let insertIndex = targetIndex
+    if (dragOverInspectorPosition === 'after') {
+      insertIndex = draggedIndex < targetIndex ? targetIndex : targetIndex + 1
+    } else {
+      insertIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex
+    }
+    const clampedIndex = Math.max(0, Math.min(insertIndex, reorderedDayTasks.length))
+    reorderedDayTasks.splice(clampedIndex, 0, removed)
+
+    // Reconstruct full list preserving newly reordered day tasks
+    const otherTasks = tasks.filter((t) => getTaskDayNumber(t) !== selectedDay)
+    const updatedAllTasks = [...otherTasks, ...reorderedDayTasks]
+
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    useTaskStore.getState().reorderTasks(wsId, updatedAllTasks)
+
+    showToast(`✨ Reordered task in Day Inspection!`)
+    setDragOverInspectorTaskId(null)
+    setDragOverInspectorPosition(null)
+    setDraggedInspectorTaskId(null)
+    setDraggedCalTaskId(null)
   }
 
   const handleCalDayDragOver = (e: React.DragEvent, day: number) => {
@@ -489,25 +570,41 @@ export default function CalendarPage() {
                 </button>
               </div>
             ) : (
-              selectedDayTasks.map((task) => {
+              selectedDayTasks.map((task, taskIdx) => {
                 const taskProject = projects.find((p) => p.id === task.projectId)
                 const projectEnvs = getProjectEnvs(task.projectId)
                 const projectColor = taskProject?.color || (taskProject ? '#6366F1' : undefined)
+                const isDraggingThis = draggedInspectorTaskId === task.id
+                const isOverThis = dragOverInspectorTaskId === task.id
 
                 return (
                   <div
                     key={task.id}
                     draggable={true}
-                    onDragStart={(e) => handleCalTaskDragStart(e, task.id)}
-                    className={`p-3 rounded-xl border space-y-2 transition-all hover:scale-[1.01] bg-card/60 relative overflow-hidden cursor-move select-none ${
-                      draggedCalTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : ''
+                    onDragStart={(e) => handleInspectorDragStart(e, task.id)}
+                    onDragOver={(e) => handleInspectorDragOver(e, task.id)}
+                    onDragLeave={handleInspectorDragLeave}
+                    onDrop={(e) => handleInspectorDrop(e, task.id)}
+                    className={`p-3 rounded-xl border space-y-2 transition-all duration-150 hover:scale-[1.01] bg-card/60 relative overflow-hidden cursor-move select-none ${
+                      isDraggingThis
+                        ? 'opacity-30 scale-95 border-dashed border-primary ring-2 ring-primary/40'
+                        : isOverThis
+                        ? 'ring-2 ring-primary/60 border-primary shadow-lg bg-card/90'
+                        : ''
                     }`}
                     style={{
                       backgroundColor: projectColor ? `${projectColor}10` : 'rgba(255,255,255,0.02)',
                       borderColor: projectColor ? `${projectColor}40` : 'rgba(255,255,255,0.08)',
                     }}
-                    title="Drag and drop onto any calendar day to reschedule"
+                    title="Drag to reorder in this day, or drop onto any calendar day to reschedule"
                   >
+                    {/* Visual Drop Placement Indicators */}
+                    {isOverThis && dragOverInspectorPosition === 'before' && (
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-indigo-400 to-primary rounded-full shadow-lg shadow-primary/60 animate-pulse z-30 pointer-events-none" />
+                    )}
+                    {isOverThis && dragOverInspectorPosition === 'after' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-indigo-400 to-primary rounded-full shadow-lg shadow-primary/60 animate-pulse z-30 pointer-events-none" />
+                    )}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing p-0.5 shrink-0" title="Drag to any day">

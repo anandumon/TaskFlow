@@ -235,6 +235,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
           {pathname !== '/app/tasks' && (
             <Link
               href="/app/tasks"
+              prefetch={true}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-sm shadow-primary/20 active:scale-95"
             >
               <Plus className="w-3.5 h-3.5" />

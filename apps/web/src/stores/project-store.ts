@@ -44,7 +44,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   loadProjects: async (workspaceId: string) => {
     if (!workspaceId) return
-    set({ isLoading: true, error: null })
+    if (get().projects.length === 0) {
+      set({ isLoading: true, error: null })
+    }
     try {
       const res = await apiClient.get<Project[]>(`/api/v1/workspaces/${workspaceId}/projects`)
       set({ projects: res.data || [], isLoading: false })

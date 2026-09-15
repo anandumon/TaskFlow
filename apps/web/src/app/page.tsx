@@ -152,10 +152,11 @@ export default function LandingPage() {
           </nav>
 
           {/* Auth Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {isAuthenticated ? (
               <Link
                 href="/app/home"
+                prefetch={true}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all active:scale-95 cursor-pointer"
               >
                 <span>Enter Workspace</span>
@@ -165,15 +166,25 @@ export default function LandingPage() {
               <>
                 <Link
                   href="/login"
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                  prefetch={true}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
                 >
-                  Sign in
+                  Sign In
+                </Link>
+
+                <Link
+                  href="/register"
+                  prefetch={true}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/45 transition-all active:scale-95 cursor-pointer"
+                >
+                  <span>Sign Up</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
 
                 <a
                   href={directOAuthUrl}
                   onClick={handleGoogleLogin}
-                  className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-white/20 transition-all active:scale-95 cursor-pointer no-underline select-none"
+                  className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 hover:border-white/20 transition-all active:scale-95 cursor-pointer no-underline select-none"
                   title="Quick Sign in with Google"
                 >
                   {googleLoading ? (
@@ -200,14 +211,6 @@ export default function LandingPage() {
                   )}
                   <span>Google</span>
                 </a>
-
-                <Link
-                  href="/register"
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all active:scale-95 cursor-pointer"
-                >
-                  <span>Get Started</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
               </>
             )}
           </div>
@@ -223,34 +226,51 @@ export default function LandingPage() {
         )}
 
         {/* Announcement Pill */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-8 hover:bg-indigo-500/15 transition-all cursor-pointer">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-8 hover:bg-indigo-500/15 transition-all cursor-pointer">
           <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
-          <span className="font-semibold text-indigo-300">TaskFlow 2.0 Release</span>
+          <span className="font-semibold text-indigo-300">TaskFlow 2.0 Enterprise Release</span>
           <span className="text-indigo-400/60">•</span>
-          <span>Next-gen task & project execution</span>
+          <span>Next-gen agile execution & pipeline tracking</span>
           <ChevronRight className="w-3 h-3 text-indigo-400" />
         </div>
 
         {/* Hero Title */}
         <h1 className="max-w-4xl text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
-          Everything your team needs.{' '}
+          High-Velocity Project Execution.{' '}
           <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-sky-300 bg-clip-text text-transparent">
-            All in one fluid flow.
+            Engineered for Modern Teams.
           </span>
         </h1>
 
         {/* Hero Subtitle */}
-        <p className="max-w-2xl text-base sm:text-lg text-slate-400 font-normal leading-relaxed mb-10">
-          Transform project complexity into effortless clarity. Plan deliverables, track subtask percentages,
-          attach any document format, and collaborate in real-time with universal drag-and-drop.
+        <p className="max-w-2xl text-base sm:text-lg text-slate-300 font-normal leading-relaxed mb-10">
+          Streamline complex engineering workflows with zero friction. Plan multi-environment deliverables,
+          track sprint progress with subtask precision, attach mission-critical assets, and coordinate in real time.
         </p>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md justify-center mb-10">
+        <div className="flex flex-col sm:flex-row items-center gap-3.5 w-full max-w-lg justify-center mb-10">
+          <Link
+            href="/register"
+            prefetch={true}
+            className="w-full sm:w-auto h-12 px-7 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-98 cursor-pointer"
+          >
+            <span>Sign Up Free</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+
+          <Link
+            href="/login"
+            prefetch={true}
+            className="w-full sm:w-auto h-12 px-6 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 active:bg-white/15 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm hover:border-white/40 active:scale-98 cursor-pointer"
+          >
+            <span>Sign In</span>
+          </Link>
+
           <a
             href={directOAuthUrl}
             onClick={handleGoogleLogin}
-            className="w-full sm:w-auto h-12 px-6 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 active:bg-white/20 text-white font-semibold text-xs transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-indigo-500/10 active:scale-98 cursor-pointer select-none no-underline"
+            className="w-full sm:w-auto h-12 px-5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/10 active:bg-white/15 text-slate-200 font-semibold text-xs transition-all flex items-center justify-center gap-2.5 active:scale-98 cursor-pointer select-none no-underline"
           >
             {googleLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-indigo-300" />
@@ -274,16 +294,8 @@ export default function LandingPage() {
                 />
               </svg>
             )}
-            <span>{googleLoading ? 'Connecting...' : 'Continue with Google'}</span>
+            <span>Google</span>
           </a>
-
-          <Link
-            href="/register"
-            className="w-full sm:w-auto h-12 px-6 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-98 cursor-pointer"
-          >
-            <span>Start Free with Email</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
         </div>
 
         {/* Feature Badges */}
@@ -807,10 +819,19 @@ export default function LandingPage() {
 
             <Link
               href="/register"
-              className="w-full sm:w-auto h-11 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+              prefetch={true}
+              className="w-full sm:w-auto h-11 px-7 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
             >
               <span>Create Free Account</span>
               <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+
+            <Link
+              href="/login"
+              prefetch={true}
+              className="w-full sm:w-auto h-11 px-6 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-all flex items-center justify-center cursor-pointer"
+            >
+              <span>Sign In</span>
             </Link>
           </div>
         </div>

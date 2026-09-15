@@ -202,16 +202,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      await supabase.auth.signOut()
+      await apiClient.post('/api/v1/auth/logout', {}).catch(() => {})
+      await supabase.auth.signOut().catch(() => {})
     } finally {
       apiClient.setAccessToken(null)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
+        localStorage.removeItem('taskflow_is_new_user')
       }
       useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
       useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
       set({ user: null, isAuthenticated: false, error: null })
+      if (typeof window !== 'undefined') {
+        window.location.href = '/'
+      }
     }
   },
 

@@ -63,7 +63,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set({ workspaces: [], currentWorkspace: null, isLoading: false })
       return []
     }
-    set({ isLoading: true, error: null })
+    if (get().workspaces.length === 0) {
+      set({ isLoading: true, error: null })
+    }
     try {
       const res = await apiClient.get<Workspace[]>(`/api/v1/organizations/${orgId}/workspaces`)
       const list = res.data || []

@@ -100,7 +100,9 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   },
 
   fetchOrganizations: async () => {
-    set({ isLoading: true, error: null })
+    if (get().organizations.length === 0) {
+      set({ isLoading: true, error: null })
+    }
     try {
       const res = await apiClient.get<Organization[]>('/api/v1/organizations')
       const orgs = res.data || []

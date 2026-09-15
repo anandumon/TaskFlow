@@ -89,7 +89,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   error: null,
 
   loadTasks: async (workspaceId: string) => {
-    set({ isLoading: true, error: null })
+    if (get().tasks.length === 0) {
+      set({ isLoading: true, error: null })
+    }
     try {
       const res = await apiClient.get<Task[]>(`/api/v1/workspaces/${workspaceId}/tasks`)
       let list = res.data || []

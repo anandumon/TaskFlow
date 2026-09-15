@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
@@ -50,6 +50,61 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false)
   const [createWsModalOpen, setCreateWsModalOpen] = useState(false)
 
+  // 10-second auto-close timers and container refs
+  const orgTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const wsTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const orgContainerRef = useRef<HTMLDivElement | null>(null)
+  const wsContainerRef = useRef<HTMLDivElement | null>(null)
+
+  const resetOrgTimer = () => {
+    if (orgTimerRef.current) clearTimeout(orgTimerRef.current)
+    orgTimerRef.current = setTimeout(() => {
+      setOrgDropdownOpen(false)
+    }, 10000)
+  }
+
+  const resetWsTimer = () => {
+    if (wsTimerRef.current) clearTimeout(wsTimerRef.current)
+    wsTimerRef.current = setTimeout(() => {
+      setWsDropdownOpen(false)
+    }, 10000)
+  }
+
+  useEffect(() => {
+    if (orgDropdownOpen) {
+      resetOrgTimer()
+    } else if (orgTimerRef.current) {
+      clearTimeout(orgTimerRef.current)
+    }
+    return () => {
+      if (orgTimerRef.current) clearTimeout(orgTimerRef.current)
+    }
+  }, [orgDropdownOpen])
+
+  useEffect(() => {
+    if (wsDropdownOpen) {
+      resetWsTimer()
+    } else if (wsTimerRef.current) {
+      clearTimeout(wsTimerRef.current)
+    }
+    return () => {
+      if (wsTimerRef.current) clearTimeout(wsTimerRef.current)
+    }
+  }, [wsDropdownOpen])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (orgDropdownOpen && orgContainerRef.current && !orgContainerRef.current.contains(e.target as Node)) {
+        setOrgDropdownOpen(false)
+      }
+      if (wsDropdownOpen && wsContainerRef.current && !wsContainerRef.current.contains(e.target as Node)) {
+        setWsDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [orgDropdownOpen, wsDropdownOpen])
+
   const navItems = [
     { label: 'Overview', href: '/app/home', icon: LayoutDashboard },
     { label: 'My Tasks & Board', href: '/app/tasks', icon: CheckSquare },
@@ -79,7 +134,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           </div>
 
           {/* Org Switcher Card */}
-          <div className="relative">
+          <div ref={orgContainerRef} onMouseMove={resetOrgTimer} className="relative">
             <button
               onClick={() => {
                 setOrgDropdownOpen(!orgDropdownOpen)
@@ -170,7 +225,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
             </button>
           </div>
 
-          <div className="relative">
+          <div ref={wsContainerRef} onMouseMove={resetWsTimer} className="relative">
             <button
               onClick={() => {
                 setWsDropdownOpen(!wsDropdownOpen)
@@ -271,6 +326,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 onClick={onCloseMobile}
                 className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${active
                     ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20 font-bold'
