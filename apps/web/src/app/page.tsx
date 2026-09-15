@@ -210,7 +210,7 @@ export default function LandingPage() {
                 }`}
               >
                 <Kanban className="w-3.5 h-3.5" />
-                <span>Kanban</span>
+                <span>Task Board</span>
               </button>
               <button
                 onClick={() => setActiveTab('grid')}
