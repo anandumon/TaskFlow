@@ -43,29 +43,29 @@ export default function LandingPage() {
   }, [loadUser])
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col selection:bg-indigo-500/30 selection:text-indigo-200 overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-[#000000] text-slate-100 flex flex-col selection:bg-[#00638E]/40 selection:text-[#BFD8E3] overflow-x-hidden font-sans">
       {/* Ambient background glow meshes */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-tr from-indigo-600/15 via-violet-600/20 to-cyan-500/10 rounded-full blur-[130px] opacity-70" />
-        <div className="absolute top-[600px] -left-60 w-[600px] h-[600px] bg-indigo-900/10 rounded-full blur-[140px] opacity-50" />
-        <div className="absolute top-[1200px] -right-60 w-[600px] h-[600px] bg-violet-900/10 rounded-full blur-[140px] opacity-50" />
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[850px] h-[520px] bg-gradient-to-tr from-[#004A6B]/30 via-[#00638E]/25 to-[#8CB9CC]/15 rounded-full blur-[140px] opacity-70" />
+        <div className="absolute top-[600px] -left-60 w-[600px] h-[600px] bg-[#00638E]/12 rounded-full blur-[150px] opacity-50" />
+        <div className="absolute top-[1200px] -right-60 w-[600px] h-[600px] bg-[#004A6B]/15 rounded-full blur-[150px] opacity-50" />
       </div>
 
       {/* Top Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#07090e]/80 backdrop-blur-xl transition-all">
+      <header className="sticky top-0 z-50 w-full border-b border-[#2B2B2B]/70 bg-[#000000]/85 backdrop-blur-xl transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group cursor-pointer">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 p-0.5 shadow-lg shadow-indigo-500/25 group-hover:shadow-indigo-500/40 transition-all duration-300">
-              <div className="w-full h-full bg-[#0b0f19] rounded-[10px] flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#004A6B] via-[#00638E] to-[#8CB9CC] p-0.5 shadow-lg shadow-[#00638E]/30 group-hover:shadow-[#00638E]/50 transition-all duration-300">
+              <div className="w-full h-full bg-[#141414] rounded-[10px] flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-[#BFD8E3] group-hover:scale-110 transition-transform" />
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                 TaskFlow
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40">
                 v2.0
               </span>
             </div>
@@ -93,7 +93,7 @@ export default function LandingPage() {
               <Link
                 href="/app/home"
                 prefetch={true}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white shadow-lg shadow-[#00638E]/30 hover:shadow-[#00638E]/50 transition-all active:scale-95 cursor-pointer"
               >
                 <span>Enter Workspace</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -103,7 +103,7 @@ export default function LandingPage() {
                 <Link
                   href="/login"
                   prefetch={true}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-[#141414] hover:bg-[#2B2B2B] border border-[#2B2B2B] transition-all cursor-pointer shadow-sm"
                 >
                   Sign In
                 </Link>
@@ -111,7 +111,7 @@ export default function LandingPage() {
                 <Link
                   href="/register"
                   prefetch={true}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/45 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white shadow-lg shadow-[#00638E]/30 hover:shadow-[#00638E]/50 transition-all active:scale-95 cursor-pointer"
                 >
                   <span>Sign Up</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -125,18 +125,18 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative z-10 pt-16 pb-20 md:pt-24 md:pb-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
         {/* Announcement Pill */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-8 hover:bg-indigo-500/15 transition-all cursor-pointer">
-          <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
-          <span className="font-semibold text-indigo-300">TaskFlow 2.0 Enterprise Release</span>
-          <span className="text-indigo-400/60">•</span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-medium mb-8 hover:bg-[#00638E]/25 transition-all cursor-pointer shadow-sm">
+          <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-ping" />
+          <span className="font-semibold text-[#BFD8E3]">TaskFlow 2.0 Enterprise Release</span>
+          <span className="text-[#BFD8E3]/60">•</span>
           <span>Next-gen agile execution & pipeline tracking</span>
-          <ChevronRight className="w-3 h-3 text-indigo-400" />
+          <ChevronRight className="w-3 h-3 text-[#BFD8E3]" />
         </div>
 
         {/* Hero Title */}
         <h1 className="max-w-4xl text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
           High-Velocity Project Execution.{' '}
-          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-sky-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
             Engineered for Modern Teams.
           </span>
         </h1>
@@ -152,7 +152,7 @@ export default function LandingPage() {
           <Link
             href="/register"
             prefetch={true}
-            className="w-full sm:w-auto h-12 px-8 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-98 cursor-pointer"
+            className="w-full sm:w-auto h-12 px-8 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#00638E]/35 hover:shadow-[#00638E]/55 active:scale-98 cursor-pointer"
           >
             <span>Sign Up Free</span>
             <ArrowRight className="w-4 h-4" />
@@ -161,7 +161,7 @@ export default function LandingPage() {
           <Link
             href="/login"
             prefetch={true}
-            className="w-full sm:w-auto h-12 px-7 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 active:bg-white/15 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm hover:border-white/40 active:scale-98 cursor-pointer"
+            className="w-full sm:w-auto h-12 px-7 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:bg-[#2B2B2B] active:bg-[#141414] text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm hover:border-[#00638E]/40 active:scale-98 cursor-pointer"
           >
             <span>Sign In</span>
           </Link>
@@ -170,15 +170,15 @@ export default function LandingPage() {
         {/* Feature Badges */}
         <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-[#BFD8E3]" />
             No credit card required
           </span>
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+            <CheckCircle2 className="w-4 h-4 text-[#00638E]" />
             Instant team onboarding
           </span>
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-sky-400" />
+            <CheckCircle2 className="w-4 h-4 text-[#8CB9CC]" />
             Sub-millisecond reactivity
           </span>
         </div>
@@ -187,9 +187,9 @@ export default function LandingPage() {
       {/* Interactive Product Showcase */}
       <section id="views" className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
         {/* Showcase Frame */}
-        <div className="rounded-3xl border border-white/10 bg-[#0d121f]/90 backdrop-blur-2xl shadow-2xl shadow-indigo-950/40 p-4 sm:p-6 overflow-hidden">
+        <div className="rounded-3xl border border-[#2B2B2B] bg-[#141414]/95 backdrop-blur-2xl shadow-2xl shadow-[#000000]/90 p-4 sm:p-6 overflow-hidden">
           {/* Top Bar with View Switchers */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/5">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#2B2B2B]/60">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-rose-500/80" />
@@ -200,12 +200,12 @@ export default function LandingPage() {
             </div>
 
             {/* Interactive Tab Switcher */}
-            <div className="flex items-center p-1 rounded-xl bg-white/5 border border-white/5 text-xs font-semibold">
+            <div className="flex items-center p-1 rounded-xl bg-[#000000]/80 border border-[#2B2B2B] text-xs font-semibold">
               <button
                 onClick={() => setActiveTab('kanban')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'kanban'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -216,7 +216,7 @@ export default function LandingPage() {
                 onClick={() => setActiveTab('grid')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'grid'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -227,7 +227,7 @@ export default function LandingPage() {
                 onClick={() => setActiveTab('calendar')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'calendar'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -238,7 +238,7 @@ export default function LandingPage() {
                 onClick={() => setActiveTab('teams')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'teams'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -253,18 +253,18 @@ export default function LandingPage() {
             {activeTab === 'kanban' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Column 1: To Do */}
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3 flex flex-col gap-2.5">
+                <div className="rounded-2xl border border-[#2B2B2B] bg-[#000000]/60 p-3 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between pb-1">
                     <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-slate-400" />
                       To Do
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#141414] text-slate-400 font-mono border border-[#2B2B2B]">
                       2
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-white/10 bg-white/5 hover:border-indigo-500/40 transition-all space-y-2 cursor-grab">
+                  <div className="p-3 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/50 transition-all space-y-2 cursor-grab">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">
                         HIGH
@@ -274,84 +274,84 @@ export default function LandingPage() {
                     <p className="text-xs font-semibold text-slate-200">Payment Gateway Integration</p>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400">
                       <span className="flex items-center gap-1">
-                        <Paperclip className="w-3 h-3" /> 3 files
+                        <Paperclip className="w-3 h-3 text-[#BFD8E3]" /> 3 files
                       </span>
                       <span className="flex items-center gap-1">
-                        <Layers className="w-3 h-3" /> 2 subtasks
+                        <Layers className="w-3 h-3 text-[#00638E]" /> 2 subtasks
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-white/10 bg-white/5 hover:border-indigo-500/40 transition-all space-y-2 cursor-grab">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/20">
+                  <div className="p-3 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/50 transition-all space-y-2 cursor-grab">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40">
                       MEDIUM
                     </span>
                     <p className="text-xs font-semibold text-slate-200">OAuth Security Audit & Tokens</p>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400">
                       <span className="flex items-center gap-1">
-                        <FileText className="w-3 h-3" /> specs.docx
+                        <FileText className="w-3 h-3 text-[#BFD8E3]" /> specs.docx
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Column 2: In Progress */}
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3 flex flex-col gap-2.5">
+                <div className="rounded-2xl border border-[#2B2B2B] bg-[#000000]/60 p-3 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between pb-1">
-                    <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                    <span className="text-xs font-bold text-[#BFD8E3] flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#00638E] animate-pulse" />
                       In Progress
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00638E]/20 text-[#BFD8E3] font-mono border border-[#00638E]/30">
                       2
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 space-y-2.5 cursor-grab">
+                  <div className="p-3 rounded-xl border border-[#00638E]/40 bg-[#00638E]/10 space-y-2.5 cursor-grab">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/20">
                         CRITICAL
                       </span>
-                      <span className="text-[10px] text-indigo-300 font-bold font-mono">75%</span>
+                      <span className="text-[10px] text-[#BFD8E3] font-bold font-mono">75%</span>
                     </div>
                     <p className="text-xs font-semibold text-white">Multi-Format Document Vault</p>
                     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-full w-3/4" />
+                      <div className="h-full bg-gradient-to-r from-[#00638E] to-[#8CB9CC] rounded-full w-3/4" />
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-300 pt-1">
-                      <span className="flex items-center gap-1 text-emerald-400">
-                        <FileSpreadsheet className="w-3 h-3" /> data.xlsx
+                      <span className="flex items-center gap-1 text-[#BFD8E3]">
+                        <FileSpreadsheet className="w-3 h-3 text-[#8CB9CC]" /> data.xlsx
                       </span>
-                      <span className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                      <span className="w-5 h-5 rounded-full bg-[#00638E] flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
                         TF
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-white/10 bg-white/5 hover:border-indigo-500/40 transition-all space-y-2 cursor-grab">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
+                  <div className="p-3 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/50 transition-all space-y-2 cursor-grab">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/30">
                       FEATURE
                     </span>
                     <p className="text-xs font-semibold text-slate-200">Universal Card Drag & Drop</p>
                     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full w-1/2" />
+                      <div className="h-full bg-[#00638E] rounded-full w-1/2" />
                     </div>
                   </div>
                 </div>
 
                 {/* Column 3: In Review */}
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3 flex flex-col gap-2.5">
+                <div className="rounded-2xl border border-[#2B2B2B] bg-[#000000]/60 p-3 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between pb-1">
                     <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-amber-500" />
                       In Review
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#141414] text-slate-400 font-mono border border-[#2B2B2B]">
                       1
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl border border-white/10 bg-white/5 hover:border-indigo-500/40 transition-all space-y-2 cursor-grab">
+                  <div className="p-3 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/50 transition-all space-y-2 cursor-grab">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">
                         HIGH
@@ -366,13 +366,13 @@ export default function LandingPage() {
                 </div>
 
                 {/* Column 4: Done */}
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3 flex flex-col gap-2.5">
+                <div className="rounded-2xl border border-[#2B2B2B] bg-[#000000]/60 p-3 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between pb-1">
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       Completed
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono border border-emerald-500/20">
                       3
                     </span>
                   </div>
@@ -396,9 +396,9 @@ export default function LandingPage() {
             )}
 
             {activeTab === 'grid' && (
-              <div className="overflow-x-auto rounded-xl border border-white/5 bg-white/[0.01]">
+              <div className="overflow-x-auto rounded-xl border border-[#2B2B2B] bg-[#000000]/40">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  <thead className="border-b border-[#2B2B2B] text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-[#141414]">
                     <tr>
                       <th className="p-3">Task / Subtask</th>
                       <th className="p-3">Status</th>
@@ -408,14 +408,14 @@ export default function LandingPage() {
                       <th className="p-3">Assignee</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 text-slate-300">
-                    <tr className="hover:bg-white/[0.02] font-semibold">
+                  <tbody className="divide-y divide-[#2B2B2B] text-slate-300">
+                    <tr className="hover:bg-[#141414] font-semibold">
                       <td className="p-3 flex items-center gap-2">
-                        <Move className="w-3 h-3 text-slate-500" />
+                        <Move className="w-3 h-3 text-[#8CB9CC]" />
                         <span className="text-white">API Gateway & Rate Limiter</span>
                       </td>
                       <td className="p-3">
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-bold text-[10px]">
+                        <span className="px-2 py-0.5 rounded-md bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40 font-bold text-[10px]">
                           IN PROGRESS
                         </span>
                       </td>
@@ -423,17 +423,17 @@ export default function LandingPage() {
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <div className="w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                            <div className="h-full bg-indigo-500 rounded-full w-[80%]" />
+                            <div className="h-full bg-gradient-to-r from-[#00638E] to-[#8CB9CC] rounded-full w-[80%]" />
                           </div>
-                          <span className="font-mono text-[10px] text-indigo-300">80%</span>
+                          <span className="font-mono text-[10px] text-[#BFD8E3]">80%</span>
                         </div>
                       </td>
                       <td className="p-3 text-[10px] text-slate-400">config.env, architecture.pdf</td>
-                      <td className="p-3">Alex Rivera</td>
+                      <td className="p-3 text-[#BFD8E3]">Alex Rivera</td>
                     </tr>
-                    <tr className="hover:bg-white/[0.02] bg-white/[0.01]">
+                    <tr className="hover:bg-[#141414] bg-[#000000]/20">
                       <td className="p-3 pl-8 flex items-center gap-2 text-slate-300">
-                        <span className="text-indigo-400">↳</span>
+                        <span className="text-[#00638E]">↳</span>
                         <span>Token Bucket Algorithm Implementation</span>
                       </td>
                       <td className="p-3">
@@ -444,22 +444,22 @@ export default function LandingPage() {
                       <td className="p-3 text-amber-400 font-bold text-[10px]">HIGH</td>
                       <td className="p-3 font-mono text-[10px] text-emerald-400">100%</td>
                       <td className="p-3 text-[10px] text-slate-400">tests.py</td>
-                      <td className="p-3">Sarah Chen</td>
+                      <td className="p-3 text-[#BFD8E3]">Sarah Chen</td>
                     </tr>
-                    <tr className="hover:bg-white/[0.02] bg-white/[0.01]">
+                    <tr className="hover:bg-[#141414] bg-[#000000]/20">
                       <td className="p-3 pl-8 flex items-center gap-2 text-slate-300">
-                        <span className="text-indigo-400">↳</span>
+                        <span className="text-[#00638E]">↳</span>
                         <span>Redis Cluster Deployment</span>
                       </td>
                       <td className="p-3">
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-bold text-[10px]">
+                        <span className="px-2 py-0.5 rounded-md bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/30 font-bold text-[10px]">
                           IN PROGRESS
                         </span>
                       </td>
-                      <td className="p-3 text-blue-400 font-bold text-[10px]">MEDIUM</td>
-                      <td className="p-3 font-mono text-[10px] text-indigo-300">60%</td>
+                      <td className="p-3 text-[#8CB9CC] font-bold text-[10px]">MEDIUM</td>
+                      <td className="p-3 font-mono text-[10px] text-[#BFD8E3]">60%</td>
                       <td className="p-3 text-[10px] text-slate-400">compose.yaml</td>
-                      <td className="p-3">Alex Rivera</td>
+                      <td className="p-3 text-[#BFD8E3]">Alex Rivera</td>
                     </tr>
                   </tbody>
                 </table>
@@ -476,11 +476,11 @@ export default function LandingPage() {
                   {['Mon 14', 'Tue 15', 'Wed 16', 'Thu 17', 'Fri 18'].map((day, i) => (
                     <div
                       key={day}
-                      className="rounded-xl border border-white/5 bg-white/[0.02] p-3 flex flex-col gap-2 min-h-[160px]"
+                      className="rounded-xl border border-[#2B2B2B] bg-[#000000]/50 p-3 flex flex-col gap-2 min-h-[160px]"
                     >
                       <span className="font-bold text-slate-400 text-[11px]">{day}</span>
                       {i === 1 && (
-                        <div className="p-2 rounded-lg bg-indigo-500/20 border border-indigo-500/30 text-left text-[11px] font-semibold text-indigo-200">
+                        <div className="p-2 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-left text-[11px] font-semibold text-[#BFD8E3]">
                           Sprint Planning
                         </div>
                       )}
@@ -502,24 +502,24 @@ export default function LandingPage() {
 
             {activeTab === 'teams' && (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-[#000000]/60 border border-[#2B2B2B]">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-white">Teams & Projects Overview</span>
-                    <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-[#BFD8E3] text-xs font-bold flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5" /> New Invitations (2)
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="px-3 py-1 rounded-lg bg-white/10 text-slate-200 font-semibold flex items-center gap-1.5">
-                      <FolderKanban className="w-3.5 h-3.5 text-indigo-400" /> Project: Core Engine
+                    <span className="px-3 py-1 rounded-lg bg-[#141414] border border-[#2B2B2B] text-slate-200 font-semibold flex items-center gap-1.5">
+                      <FolderKanban className="w-3.5 h-3.5 text-[#BFD8E3]" /> Project: Core Engine
                     </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3.5 rounded-xl border border-white/5 bg-white/[0.02] flex items-center justify-between">
+                  <div className="p-3.5 rounded-xl border border-[#2B2B2B] bg-[#141414] flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white">
+                      <div className="w-8 h-8 rounded-full bg-[#00638E] flex items-center justify-center font-bold text-white shadow-sm">
                         AR
                       </div>
                       <div>
@@ -527,14 +527,14 @@ export default function LandingPage() {
                         <p className="text-[10px] text-slate-400">alex@taskflow.dev</p>
                       </div>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/30 font-bold">
                       OWNER
                     </span>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border border-white/5 bg-white/[0.02] flex items-center justify-between">
+                  <div className="p-3.5 rounded-xl border border-[#2B2B2B] bg-[#141414] flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center font-bold text-white">
+                      <div className="w-8 h-8 rounded-full bg-[#004A6B] flex items-center justify-center font-bold text-white shadow-sm">
                         SC
                       </div>
                       <div>
@@ -542,7 +542,7 @@ export default function LandingPage() {
                         <p className="text-[10px] text-slate-400">sarah@taskflow.dev</p>
                       </div>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300 font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300 font-bold border border-white/5">
                       ADMIN
                     </span>
                   </div>
@@ -557,7 +557,7 @@ export default function LandingPage() {
                         <p className="text-[10px] text-amber-300">Invitation Pending</p>
                       </div>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/20">
                       INVITED
                     </span>
                   </div>
@@ -569,9 +569,9 @@ export default function LandingPage() {
       </section>
 
       {/* Core Features Grid */}
-      <section id="features" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-white/5">
+      <section id="features" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-[#2B2B2B]/60">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-[#BFD8E3] mb-3">
             Engineered for Modern Teams
           </h2>
           <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
@@ -581,8 +581,8 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card 1: Document Vault */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">Universal Document Vault</h3>
@@ -592,8 +592,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 2: Universal Drag & Drop */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 flex items-center justify-center border border-violet-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <Move className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">Universal Drag & Drop</h3>
@@ -603,8 +603,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 3: Hierarchical Subtasks */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <Layers className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">Subtask Percentage Tracking</h3>
@@ -614,8 +614,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 4: Discussion & Comment History */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center border border-sky-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <MessageSquare className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">Task Discussion & History</h3>
@@ -625,8 +625,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 5: Team Invites & Roles */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <Users className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">Invite Queues & RBAC</h3>
@@ -636,8 +636,8 @@ export default function LandingPage() {
           </div>
 
           {/* Card 6: Enterprise Security */}
-          <div className="p-6 rounded-2xl border border-white/10 bg-[#0d121f]/70 backdrop-blur-xl hover:border-indigo-500/40 transition-all space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+          <div className="p-6 rounded-2xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-xl hover:border-[#00638E]/60 hover:shadow-xl hover:shadow-[#00638E]/10 transition-all space-y-3 group">
+            <div className="w-10 h-10 rounded-xl bg-[#00638E]/15 text-[#BFD8E3] flex items-center justify-center border border-[#00638E]/30 group-hover:scale-105 transition-transform">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white">OAuth & Zero-Trust Security</h3>
@@ -650,8 +650,8 @@ export default function LandingPage() {
 
       {/* Call to Action Banner */}
       <section className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-b from-indigo-950/40 to-[#0b0f19] p-8 sm:p-12 shadow-2xl relative overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent" />
+        <div className="rounded-3xl border border-[#2B2B2B] bg-gradient-to-b from-[#141414] via-[#0b1218] to-[#000000] p-8 sm:p-12 shadow-2xl relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-[#00638E]/15 via-transparent to-transparent" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-4">
             Ready to streamline your entire workspace?
           </h2>
@@ -663,7 +663,7 @@ export default function LandingPage() {
             <Link
               href="/register"
               prefetch={true}
-              className="w-full sm:w-auto h-11 px-8 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+              className="w-full sm:w-auto h-11 px-8 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#00638E]/40 cursor-pointer"
             >
               <span>Create Free Account</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -672,7 +672,7 @@ export default function LandingPage() {
             <Link
               href="/login"
               prefetch={true}
-              className="w-full sm:w-auto h-11 px-7 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-all flex items-center justify-center cursor-pointer"
+              className="w-full sm:w-auto h-11 px-7 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:bg-[#2B2B2B] text-white font-semibold text-xs transition-all flex items-center justify-center cursor-pointer shadow-sm"
             >
               <span>Sign In</span>
             </Link>
@@ -681,10 +681,10 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 bg-[#05070a] py-8 text-center text-xs text-slate-500">
+      <footer className="relative z-10 border-t border-[#2B2B2B]/70 bg-[#000000] py-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 font-bold text-slate-300">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <Sparkles className="w-3.5 h-3.5 text-[#BFD8E3]" />
             <span>TaskFlow</span>
             <span className="text-slate-600 font-normal">© 2026 TaskFlow Inc. All rights reserved.</span>
           </div>

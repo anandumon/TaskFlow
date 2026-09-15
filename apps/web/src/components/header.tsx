@@ -181,7 +181,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-card/90 border border-border/80 text-foreground font-semibold shadow-xs">
               <div
                 className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: currentWorkspace?.color || '#6366F1' }}
+                style={{ backgroundColor: currentWorkspace?.color || '#00638E' }}
               />
               <span className="truncate max-w-[120px] sm:max-w-[160px]">
                 {currentWorkspace?.name || 'Primary Workspace'}

@@ -61,6 +61,30 @@ const config: Config = {
           foreground: 'hsl(var(--sidebar-foreground))',
           accent: 'hsl(var(--sidebar-accent))',
         },
+        azure: {
+          dark: '#00638E',
+          deep: '#004A6B',
+          light: '#BFD8E3',
+          soft: '#8CB9CC',
+          DEFAULT: '#00638E',
+        },
+        onyx: {
+          DEFAULT: '#141414',
+          deep: '#000000',
+          surface: '#141414',
+          elevated: '#1a1a1a',
+        },
+        charcoal: {
+          DEFAULT: '#2B2B2B',
+          border: '#2B2B2B',
+          light: '#383838',
+        },
+        paper: '#FFFFFF',
+      },
+      backgroundImage: {
+        'brand-gradient': 'linear-gradient(135deg, #000000 0%, #004A6B 35%, #00638E 70%, #8CB9CC 100%)',
+        'brand-gradient-h': 'linear-gradient(90deg, #000000 0%, #004A6B 35%, #00638E 70%, #8CB9CC 100%)',
+        'azure-glow': 'radial-gradient(ellipse at top, rgba(0, 99, 142, 0.35), transparent 70%)',
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -143,7 +143,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-card/60 hover:bg-card/95 border border-border/70 hover:border-primary/40 backdrop-blur-md shadow-sm text-xs font-semibold text-foreground transition-all duration-200 cursor-pointer group"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-primary/25 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#004A6B] via-[#00638E] to-[#8CB9CC] text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-[#00638E]/30 group-hover:scale-105 transition-transform">
                   {currentOrg?.name?.charAt(0)?.toUpperCase() || 'O'}
                 </div>
                 <div className="text-left truncate min-w-0">
@@ -237,15 +237,15 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 <div
                   className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform"
                   style={{
-                    backgroundColor: `${currentWorkspace?.color || '#6366F1'}20`,
-                    border: `1px solid ${currentWorkspace?.color || '#6366F1'}50`,
+                    backgroundColor: `${currentWorkspace?.color || '#00638E'}20`,
+                    border: `1px solid ${currentWorkspace?.color || '#00638E'}50`,
                   }}
                 >
                   <div
                     className="w-2.5 h-2.5 rounded-full"
                     style={{
-                      backgroundColor: currentWorkspace?.color || '#6366F1',
-                      boxShadow: `0 0 8px ${currentWorkspace?.color || '#6366F1'}80`,
+                      backgroundColor: currentWorkspace?.color || '#00638E',
+                      boxShadow: `0 0 8px ${currentWorkspace?.color || '#00638E'}80`,
                     }}
                   />
                 </div>
@@ -287,8 +287,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                           <div
                             className="w-3 h-3 rounded-full shrink-0"
                             style={{
-                              backgroundColor: ws.color || '#6366F1',
-                              boxShadow: `0 0 6px ${ws.color || '#6366F1'}60`,
+                              backgroundColor: ws.color || '#00638E',
+                              boxShadow: `0 0 6px ${ws.color || '#00638E'}60`,
                             }}
                           />
                           <span className="truncate">{ws.name}</span>

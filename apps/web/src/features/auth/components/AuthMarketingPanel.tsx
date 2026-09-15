@@ -91,12 +91,12 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
   return (
     <aside
       aria-label="Product Highlights"
-      className="hidden lg:flex lg:w-1/2 h-screen max-h-screen bg-gradient-to-br from-[#161028] via-[#0E091B] to-[#120924] p-6 xl:p-10 flex-col justify-between relative overflow-hidden border-r border-white/[0.07] shrink-0 select-none"
+      className="hidden lg:flex lg:w-1/2 h-screen max-h-screen bg-gradient-to-br from-[#000000] via-[#002638] to-[#141414] p-6 xl:p-10 flex-col justify-between relative overflow-hidden border-r border-[#2B2B2B] shrink-0 select-none"
     >
       {/* Subtle background ambient glows */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.18),rgba(255,255,255,0))]" />
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#00638E]/25 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#004A6B]/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(0,99,142,0.18),transparent)]" />
 
       {/* Top Header */}
       <header className="relative z-10 flex items-center justify-between shrink-0">
@@ -142,7 +142,7 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
               return (
                 <div
                   key={card.tag}
-                  className={`p-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md space-y-1 ${card.borderHover} transition-all duration-150 shadow-sm`}
+                  className={`p-3 rounded-2xl bg-[#141414]/80 border border-[#2B2B2B] backdrop-blur-md space-y-1 hover:border-[#00638E]/50 transition-all duration-150 shadow-sm`}
                 >
                   <div className={`flex items-center gap-1.5 ${card.color} font-bold text-[10px] uppercase tracking-wider`}>
                     <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
@@ -161,7 +161,7 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
               return (
                 <div
                   key={card.tag}
-                  className={`p-3 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md flex items-start gap-3 ${card.borderHover} transition-all duration-150 shadow-sm`}
+                  className={`p-3 rounded-2xl bg-[#141414]/80 border border-[#2B2B2B] backdrop-blur-md flex items-start gap-3 hover:border-[#00638E]/50 transition-all duration-150 shadow-sm`}
                 >
                   <div className={`w-8 h-8 rounded-xl ${card.bg} ${card.color} flex items-center justify-center shrink-0 mt-0.5`}>
                     <Icon className="w-4 h-4" aria-hidden="true" />
