@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
-import { supabase } from '@/lib/supabase/client'
-import { mapSupabaseError } from '@/lib/supabase/errors'
 import {
   CheckCircle2,
   Sparkles,
@@ -30,7 +28,6 @@ import {
   FolderKanban,
   Check,
   Star,
-  Loader2,
 } from 'lucide-react'
 
 export default function LandingPage() {
@@ -38,73 +35,12 @@ export default function LandingPage() {
   const { user, isAuthenticated, loadUser } = useAuthStore()
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false)
   const [activeTab, setActiveTab] = useState<'kanban' | 'grid' | 'calendar' | 'teams'>('kanban')
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const [googleError, setGoogleError] = useState<string | null>(null)
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-  const callbackUrl = `${origin}/auth/callback?mode=signin`
-  const directOAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`
 
   useEffect(() => {
     loadUser().finally(() => {
       setHasCheckedAuth(true)
     })
   }, [loadUser])
-
-  const handleGoogleLogin = async (e?: React.MouseEvent) => {
-    if (googleLoading) return
-    try {
-      setGoogleLoading(true)
-      setGoogleError(null)
-
-      const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('tf_auth_mode', 'signin')
-      }
-
-      const callbackUrl = `${redirectOrigin}/auth/callback?mode=signin`
-      const targetUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}`
-
-      const fallbackTimer = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          window.location.href = targetUrl
-        }
-      }, 300)
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: callbackUrl,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
-        },
-      })
-
-      clearTimeout(fallbackTimer)
-
-      if (error) {
-        if (typeof window !== 'undefined') {
-          window.location.href = targetUrl
-        }
-        return
-      }
-
-      if (data?.url && typeof window !== 'undefined') {
-        window.location.href = data.url
-      } else if (typeof window !== 'undefined') {
-        window.location.href = targetUrl
-      }
-    } catch (err: any) {
-      const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const targetUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(`${redirectOrigin}/auth/callback?mode=signin`)}`
-      if (typeof window !== 'undefined') {
-        window.location.href = targetUrl
-      }
-    }
-  }
 
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col selection:bg-indigo-500/30 selection:text-indigo-200 overflow-x-hidden font-sans">
@@ -167,7 +103,7 @@ export default function LandingPage() {
                 <Link
                   href="/login"
                   prefetch={true}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
                 >
                   Sign In
                 </Link>
@@ -180,37 +116,6 @@ export default function LandingPage() {
                   <span>Sign Up</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
-
-                <a
-                  href={directOAuthUrl}
-                  onClick={handleGoogleLogin}
-                  className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 hover:border-white/20 transition-all active:scale-95 cursor-pointer no-underline select-none"
-                  title="Quick Sign in with Google"
-                >
-                  {googleLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                  ) : (
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                  )}
-                  <span>Google</span>
-                </a>
               </>
             )}
           </div>
@@ -219,12 +124,6 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative z-10 pt-16 pb-20 md:pt-24 md:pb-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
-        {googleError && (
-          <div className="mb-6 max-w-md p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium">
-            {googleError}
-          </div>
-        )}
-
         {/* Announcement Pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-8 hover:bg-indigo-500/15 transition-all cursor-pointer">
           <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
@@ -249,11 +148,11 @@ export default function LandingPage() {
         </p>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-3.5 w-full max-w-lg justify-center mb-10">
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full max-w-md justify-center mb-10">
           <Link
             href="/register"
             prefetch={true}
-            className="w-full sm:w-auto h-12 px-7 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-98 cursor-pointer"
+            className="w-full sm:w-auto h-12 px-8 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-98 cursor-pointer"
           >
             <span>Sign Up Free</span>
             <ArrowRight className="w-4 h-4" />
@@ -262,40 +161,10 @@ export default function LandingPage() {
           <Link
             href="/login"
             prefetch={true}
-            className="w-full sm:w-auto h-12 px-6 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 active:bg-white/15 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm hover:border-white/40 active:scale-98 cursor-pointer"
+            className="w-full sm:w-auto h-12 px-7 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 active:bg-white/15 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm hover:border-white/40 active:scale-98 cursor-pointer"
           >
             <span>Sign In</span>
           </Link>
-
-          <a
-            href={directOAuthUrl}
-            onClick={handleGoogleLogin}
-            className="w-full sm:w-auto h-12 px-5 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/10 active:bg-white/15 text-slate-200 font-semibold text-xs transition-all flex items-center justify-center gap-2.5 active:scale-98 cursor-pointer select-none no-underline"
-          >
-            {googleLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-300" />
-            ) : (
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-            )}
-            <span>Google</span>
-          </a>
         </div>
 
         {/* Feature Badges */}
@@ -565,7 +434,7 @@ export default function LandingPage() {
                     <tr className="hover:bg-white/[0.02] bg-white/[0.01]">
                       <td className="p-3 pl-8 flex items-center gap-2 text-slate-300">
                         <span className="text-indigo-400">↳</span>
-                        <span>Token Bucket Algorithm Impl</span>
+                        <span>Token Bucket Algorithm Implementation</span>
                       </td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">
@@ -637,7 +506,7 @@ export default function LandingPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-white">Teams & Projects Overview</span>
                     <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5" /> New Invites (2)
+                      <Users className="w-3.5 h-3.5" /> New Invitations (2)
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
@@ -685,7 +554,7 @@ export default function LandingPage() {
                       </div>
                       <div>
                         <p className="font-bold text-white">Max Kowalski</p>
-                        <p className="text-[10px] text-amber-300">Invite Pending</p>
+                        <p className="text-[10px] text-amber-300">Invitation Pending</p>
                       </div>
                     </div>
                     <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
@@ -790,37 +659,11 @@ export default function LandingPage() {
             Experience the clarity of organized tasks, interactive sprint timelines, and seamless team collaboration.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a
-              href={directOAuthUrl}
-              onClick={handleGoogleLogin}
-              className="w-full sm:w-auto h-11 px-6 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 active:bg-white/20 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer select-none no-underline"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>Continue with Google</span>
-            </a>
-
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register"
               prefetch={true}
-              className="w-full sm:w-auto h-11 px-7 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+              className="w-full sm:w-auto h-11 px-8 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
             >
               <span>Create Free Account</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -829,7 +672,7 @@ export default function LandingPage() {
             <Link
               href="/login"
               prefetch={true}
-              className="w-full sm:w-auto h-11 px-6 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-all flex items-center justify-center cursor-pointer"
+              className="w-full sm:w-auto h-11 px-7 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-all flex items-center justify-center cursor-pointer"
             >
               <span>Sign In</span>
             </Link>
