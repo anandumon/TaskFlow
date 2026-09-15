@@ -646,28 +646,25 @@ export default function TasksPage() {
 
   const getTagColor = (tag: string) => {
     switch (tag) {
-      case 'Design': return 'bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30'
-      case 'DevOps': return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-      case 'Backend': return 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-      case 'Architecture': return 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30'
-      case 'Frontend': return 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
-      case 'Bug Fix': return 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-      default: return 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30'
+      case 'Design': return 'bg-[#004A6B]/25 text-[#BFD8E3] border border-[#00638E]/35'
+      case 'DevOps': return 'bg-[#2B2B2B] text-[#BFD8E3] border border-[#383838]'
+      case 'Backend': return 'bg-[#004A6B]/35 text-[#8CB9CC] border border-[#004A6B]/50'
+      case 'Architecture': return 'bg-[#00638E]/20 text-white border border-[#00638E]/35'
+      case 'Frontend': return 'bg-[#00638E]/25 text-[#BFD8E3] border border-[#00638E]/45'
+      case 'Bug Fix': return 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+      default: return 'bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/35'
     }
   }
 
   const getProjectColor = (proj?: any, projId?: string) => {
     if (proj?.color && typeof proj.color === 'string' && proj.color.startsWith('#')) return proj.color
     const colorPalette = [
-      '#6366F1', // Indigo
-      '#EC4899', // Pink
-      '#06B6D4', // Cyan
-      '#10B981', // Emerald
-      '#F59E0B', // Amber
-      '#8B5CF6', // Purple
-      '#3B82F6', // Blue
-      '#F97316', // Orange
-      '#14B8A6', // Teal
+      '#00638E', // Dark Azure
+      '#004A6B', // Deep Azure
+      '#8CB9CC', // Soft Azure
+      '#BFD8E3', // Light Azure
+      '#007EA7', // Vivid Azure
+      '#00557A', // Navy Azure
     ]
     const seed = proj?.name || proj?.id || projId || 'TaskFlow'
     let hash = 0
@@ -1062,19 +1059,19 @@ export default function TasksPage() {
             {/* Guide Tour Button */}
             <button
               onClick={() => setGuideModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-accent border border-border text-xs font-semibold text-primary transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#141414] hover:bg-[#2B2B2B] border border-[#2B2B2B] text-xs font-semibold text-white transition-all shadow-xs active:scale-95 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" /> User Guide
+              <Sparkles className="w-3.5 h-3.5 text-[#BFD8E3]" /> User Guide
             </button>
 
             {/* Project Filter */}
             {projects.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-muted/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-border text-xs">
-                <FolderKanban className="w-3.5 h-3.5 text-muted-foreground" />
+              <div className="flex items-center gap-1.5 bg-[#141414] backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#2B2B2B] text-xs">
+                <FolderKanban className="w-3.5 h-3.5 text-[#BFD8E3]" />
                 <select
                   value={filterProject}
                   onChange={(e) => setFilterProject(e.target.value)}
-                  className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
+                  className="bg-transparent text-white text-xs focus:outline-none cursor-pointer font-medium"
                 >
                   <option value="all">All Projects ({projects.length})</option>
                   {projects.map((p) => (
@@ -1087,12 +1084,12 @@ export default function TasksPage() {
             )}
 
             {/* Tag Filter */}
-            <div className="flex items-center gap-1.5 bg-muted/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-border text-xs">
-              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+            <div className="flex items-center gap-1.5 bg-[#141414] backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#2B2B2B] text-xs">
+              <Filter className="w-3.5 h-3.5 text-[#BFD8E3]" />
               <select
                 value={filterTag}
                 onChange={(e) => setFilterTag(e.target.value)}
-                className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
+                className="bg-transparent text-white text-xs focus:outline-none cursor-pointer font-medium"
               >
                 <option value="all">All Tags ({tasks.length})</option>
                 <option value="Frontend">Frontend</option>
@@ -1105,51 +1102,51 @@ export default function TasksPage() {
             </div>
 
             {/* View Switcher: Minimal Grid, List, and Tree / Graph */}
-            <div className="flex items-center p-1 bg-muted/90 backdrop-blur-md rounded-xl border border-border shadow-xs">
+            <div className="flex items-center p-1 bg-[#000000]/80 backdrop-blur-md rounded-xl border border-[#2B2B2B] shadow-xs">
               <button
                 onClick={() => setViewMode('grid')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'grid'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
+                    : 'text-slate-400 hover:text-white'
                 }`}
                 title="Minimal Liquid Glass Grid View"
               >
-                <LayoutGrid className="w-3.5 h-3.5 text-primary" /> Grid
+                <LayoutGrid className="w-3.5 h-3.5 text-[#BFD8E3]" /> Grid
               </button>
               <button
                 onClick={() => setViewMode('list')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'list'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
+                    : 'text-slate-400 hover:text-white'
                 }`}
                 title="Compact List View"
               >
-                <List className="w-3.5 h-3.5 text-primary" /> List
+                <List className="w-3.5 h-3.5 text-[#BFD8E3]" /> List
               </button>
               <button
                 onClick={() => setViewMode('tree')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'tree'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
+                    : 'text-slate-400 hover:text-white'
                 }`}
                 title="Interactive Status & Project Hierarchy Graph"
               >
-                <GitBranch className="w-3.5 h-3.5 text-primary" /> Tree / Graph
+                <GitBranch className="w-3.5 h-3.5 text-[#BFD8E3]" /> Tree / Graph
               </button>
             </div>
 
             {/* Dispatch Due Alerts: Date Selector + Dispatch Action */}
-            <div className="flex items-center gap-1.5 bg-card/90 border border-border/80 px-2 py-1 rounded-xl shadow-xs">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+            <div className="flex items-center gap-1.5 bg-[#141414] border border-[#2B2B2B] px-2 py-1 rounded-xl shadow-xs">
+              <div className="flex items-center gap-1 text-xs text-slate-400">
+                <Calendar className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                 <input
                   type="date"
                   value={selectedAlertDate}
                   onChange={(e) => setSelectedAlertDate(e.target.value)}
-                  className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
+                  className="bg-transparent text-white text-xs focus:outline-none cursor-pointer font-medium"
                   title="Select date to dispatch due alerts for"
                 />
               </div>
@@ -1157,7 +1154,7 @@ export default function TasksPage() {
                 type="button"
                 onClick={() => handleDispatchDateDueAlerts(selectedAlertDate)}
                 disabled={isDispatchingDateAlert}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-rose-500 via-rose-600 to-amber-500 hover:from-rose-600 hover:to-amber-600 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
                 title={`Send email alert for all tasks due on ${selectedAlertDate}`}
               >
                 {isDispatchingDateAlert ? (
@@ -1177,10 +1174,10 @@ export default function TasksPage() {
             {/* Statuses Modal Trigger */}
             <button
               onClick={() => setStatusModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:bg-[#2B2B2B] text-xs font-semibold text-white transition-all shadow-xs active:scale-95 cursor-pointer"
               title="Edit Space Statuses"
             >
-              <Sliders className="w-3.5 h-3.5 text-primary" />
+              <Sliders className="w-3.5 h-3.5 text-[#BFD8E3]" />
               <span className="hidden sm:inline">Statuses</span>
             </button>
 
@@ -1190,7 +1187,7 @@ export default function TasksPage() {
                 setNewTaskDue(todayStr)
                 setIsModalOpen(true)
               }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white text-xs font-bold shadow-md shadow-[#00638E]/30 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Add Task
             </button>
@@ -1233,15 +1230,15 @@ export default function TasksPage() {
                 }}
                 onDragLeave={() => setDragOverStatusId(null)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                  dragOverStatusId === 'all' ? 'ring-2 ring-primary scale-105' : ''
+                  dragOverStatusId === 'all' ? 'ring-2 ring-[#00638E] scale-105' : ''
                 } ${
                   selectedStatusTab === 'all'
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
-                    : 'bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50'
+                    ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
+                    : 'bg-[#141414] hover:bg-[#2B2B2B] text-slate-300 hover:text-white border border-[#2B2B2B]'
                 }`}
               >
                 <span>All Tasks</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedStatusTab === 'all' ? 'bg-white/25 text-white' : 'bg-background/80 text-muted-foreground'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedStatusTab === 'all' ? 'bg-white/20 text-white' : 'bg-[#000000] text-[#BFD8E3] border border-[#2B2B2B]'}`}>
                   {tasks.length}
                 </span>
               </button>
@@ -1261,11 +1258,11 @@ export default function TasksPage() {
                     onDragLeave={() => setDragOverStatusId(null)}
                     onDrop={(e) => handleDropOnStatusTab(e, st.id)}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-                      isDragOver ? 'ring-2 ring-primary scale-105 bg-primary/20 shadow-md' : ''
+                      isDragOver ? 'ring-2 ring-[#00638E] scale-105 bg-[#00638E]/20 shadow-md' : ''
                     } ${
                       isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
-                        : 'bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50'
+                        ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
+                        : 'bg-[#141414] hover:bg-[#2B2B2B] text-slate-300 hover:text-white border border-[#2B2B2B]'
                     }`}
                     title={`Drop task card here to set status to ${st.name}`}
                   >
@@ -1274,7 +1271,7 @@ export default function TasksPage() {
                       style={{ backgroundColor: st.color }}
                     />
                     <span>{st.name}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-background/80 text-muted-foreground'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-[#000000] text-[#BFD8E3] border border-[#2B2B2B]'}`}>
                       {count}
                     </span>
                   </button>
@@ -1342,22 +1339,19 @@ export default function TasksPage() {
                       onDragOver={handleTaskDragOver}
                       onDrop={(e) => handleTaskDrop(e, task.id)}
                       onDragEnd={() => setDraggedTaskId(null)}
-                      className={`group relative rounded-3xl border p-5 space-y-4 backdrop-blur-xl overflow-hidden cursor-move flex flex-col justify-between select-none smooth-card animate-slide-up ${
-                        draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : 'hover:border-primary/50'
+                      className={`group relative rounded-3xl border border-[#2B2B2B] bg-[#141414] p-5 space-y-4 backdrop-blur-xl overflow-hidden cursor-move flex flex-col justify-between select-none smooth-card animate-slide-up hover:border-[#00638E]/70 hover:shadow-2xl hover:shadow-[#00638E]/10 transition-all ${
+                        draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-[#00638E] ring-2 ring-[#00638E]/40' : ''
                       }`}
                       style={{
-                        backgroundColor: `${projColor}0a`,
-                        borderColor: `${projColor}35`,
-                        boxShadow: `0 8px 32px 0 ${projColor}12`,
+                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.45)',
                       }}
                       title="Drag to place at any position or drop on status tabs"
                     >
 
                       {/* Gloss Reflection Highlights */}
-                      <div className="absolute -top-16 -right-16 w-36 h-36 bg-gradient-to-br from-white/15 to-transparent rounded-full blur-2xl pointer-events-none" />
+                      <div className="absolute -top-16 -right-16 w-36 h-36 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-2xl pointer-events-none" />
                       <div
-                        className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full blur-3xl pointer-events-none opacity-20"
-                        style={{ backgroundColor: projColor }}
+                        className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full blur-3xl pointer-events-none opacity-15 bg-[#00638E]"
                       />
 
                       {/* Card Content Area */}
@@ -1366,25 +1360,20 @@ export default function TasksPage() {
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 flex-wrap min-w-0">
                             {/* Drag Handle */}
-                            <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing shrink-0 p-0.5" title="Drag to reorder position">
+                            <div className="text-slate-500 hover:text-[#BFD8E3] cursor-grab active:cursor-grabbing shrink-0 p-0.5 transition-colors" title="Drag to reorder position">
                               <GripVertical className="w-4 h-4" />
                             </div>
 
                             {/* Project Badge */}
                             {proj ? (
                               <span
-                                className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl border truncate max-w-[150px] shadow-xs"
-                                style={{
-                                  backgroundColor: `${projColor}18`,
-                                  color: projColor,
-                                  borderColor: `${projColor}40`,
-                                }}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl border border-[#00638E]/35 bg-[#00638E]/15 text-[#BFD8E3] truncate max-w-[160px] shadow-xs"
                               >
-                                <FolderKanban className="w-3 h-3 shrink-0" />
+                                <FolderKanban className="w-3 h-3 shrink-0 text-[#BFD8E3]" />
                                 <span className="truncate">{proj.name}</span>
                               </span>
                             ) : (
-                              <span className="text-[10px] text-muted-foreground">&mdash;</span>
+                              <span className="text-[10px] text-slate-500">&mdash;</span>
                             )}
 
                             {/* Tag Badge */}
@@ -1396,7 +1385,7 @@ export default function TasksPage() {
                           {/* Priority Pill & View-Only Badge */}
                           <div className="flex items-center gap-1.5">
                             {!canEditTask(task) && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30 shadow-xs">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-xs">
                                 <Lock className="w-2.5 h-2.5" />
                                 <span>View Only</span>
                               </span>
@@ -1404,10 +1393,10 @@ export default function TasksPage() {
                             <span
                               className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                                 task.priority === 'high' || task.priority === 'urgent'
-                                  ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
+                                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                                   : task.priority === 'medium'
-                                  ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                                  : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
+                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                               }`}
                             >
                               {task.priority || 'medium'}
@@ -1418,14 +1407,14 @@ export default function TasksPage() {
                         {/* Title (Link to Detail Page) */}
                         <Link
                           href={`/app/tasks/${task.id}`}
-                          className="block text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2"
+                          className="block text-sm font-bold tracking-tight text-white group-hover:text-[#BFD8E3] transition-colors leading-snug line-clamp-2"
                         >
                           {task.title}
                         </Link>
 
                         {/* Description snippet if any */}
                         {task.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                             {task.description}
                           </p>
                         )}
@@ -1433,16 +1422,16 @@ export default function TasksPage() {
                         {/* Dynamic Progress Bar & Percentage Pill */}
                         <div className="space-y-1.5 py-0.5">
                           <div className="flex items-center justify-between text-[11px] font-semibold">
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <SlidersHorizontal className="w-3 h-3 text-primary" /> Progress
+                            <span className="text-slate-400 flex items-center gap-1">
+                              <SlidersHorizontal className="w-3 h-3 text-[#BFD8E3]" /> Progress
                             </span>
-                            <span className="font-bold text-primary px-2 py-0.2 rounded-full bg-primary/10 border border-primary/20 text-[10px]">
+                            <span className="font-bold text-[#BFD8E3] px-2 py-0.2 rounded-full bg-[#00638E]/20 border border-[#00638E]/35 text-[10px]">
                               {taskProgress}%
                             </span>
                           </div>
-                          <div className="h-1.5 w-full bg-muted/70 rounded-full overflow-hidden">
+                          <div className="h-1.5 w-full bg-[#2B2B2B] rounded-full overflow-hidden">
                             <div
-                              className="h-full rounded-full transition-all duration-300 bg-gradient-to-r from-primary to-indigo-500"
+                              className="h-full rounded-full transition-all duration-300 bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC]"
                               style={{ width: `${taskProgress}%` }}
                             />
                           </div>
@@ -1455,10 +1444,10 @@ export default function TasksPage() {
                               <button
                                 type="button"
                                 onClick={() => openEditModal(task)}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-lg bg-background/80 hover:bg-background border border-border/60 text-muted-foreground hover:text-foreground cursor-pointer transition-colors shadow-xs"
+                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-lg bg-[#000000]/60 hover:bg-[#2B2B2B] border border-[#2B2B2B] text-slate-300 hover:text-white cursor-pointer transition-colors shadow-xs"
                                 title={`${attachmentsList.length} attachment(s)`}
                               >
-                                <Paperclip className="w-3 h-3 text-primary" />
+                                <Paperclip className="w-3 h-3 text-[#BFD8E3]" />
                                 <span>{attachmentsList.length} file{attachmentsList.length === 1 ? '' : 's'}</span>
                               </button>
                             )}
@@ -1466,10 +1455,10 @@ export default function TasksPage() {
                               <button
                                 type="button"
                                 onClick={() => openEditModal(task)}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-lg bg-background/80 hover:bg-background border border-border/60 text-muted-foreground hover:text-foreground cursor-pointer transition-colors shadow-xs"
+                                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-lg bg-[#000000]/60 hover:bg-[#2B2B2B] border border-[#2B2B2B] text-slate-300 hover:text-white cursor-pointer transition-colors shadow-xs"
                                 title={`${commentsList.length} comment(s)`}
                               >
-                                <MessageSquare className="w-3 h-3 text-primary" />
+                                <MessageSquare className="w-3 h-3 text-[#BFD8E3]" />
                                 <span>{commentsList.length} comment{commentsList.length === 1 ? '' : 's'}</span>
                               </button>
                             )}
@@ -1482,34 +1471,34 @@ export default function TasksPage() {
                             <button
                               type="button"
                               onClick={() => toggleTaskTree(task.id)}
-                              className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-xl bg-background/50 border border-border/40 hover:bg-background transition-all cursor-pointer"
+                              className="flex items-center gap-1.5 text-[11px] font-semibold text-[#BFD8E3] hover:text-white px-2.5 py-1 rounded-xl bg-[#000000]/50 border border-[#2B2B2B] hover:border-[#00638E]/40 hover:bg-[#2B2B2B]/40 transition-all cursor-pointer"
                             >
-                              <CheckSquare className="w-3 h-3 text-primary" />
+                              <CheckSquare className="w-3 h-3 text-[#00638E]" />
                               <span>
                                 Subtasks: {doneCount}/{subtaskList.length} completed
                               </span>
                               {isExpanded ? (
-                                <ChevronUp className="w-3 h-3 ml-auto text-muted-foreground" />
+                                <ChevronUp className="w-3 h-3 ml-auto text-slate-400" />
                               ) : (
-                                <ChevronDown className="w-3 h-3 ml-auto text-muted-foreground" />
+                                <ChevronDown className="w-3 h-3 ml-auto text-slate-400" />
                               )}
                             </button>
 
                             {/* Expandable subtasks preview */}
                             {isExpanded && (
-                              <div className="p-3 rounded-2xl bg-card/80 border border-border/60 space-y-2 text-xs animate-fade-in">
+                              <div className="p-3 rounded-2xl bg-[#0c0c0c] border border-[#2B2B2B] space-y-2 text-xs animate-fade-in">
                                 {subtaskList.map((st: any) => (
                                   <label
                                     key={st.id}
-                                    className="flex items-center gap-2 cursor-pointer text-[11px] text-foreground hover:text-primary transition-colors"
+                                    className="flex items-center gap-2 cursor-pointer text-[11px] text-foreground hover:text-[#BFD8E3] transition-colors"
                                   >
                                     <input
                                       type="checkbox"
                                       checked={st.completed}
                                       onChange={() => toggleSubtask(task.id, st.id)}
-                                      className="w-3.5 h-3.5 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                                      className="w-3.5 h-3.5 rounded text-[#00638E] focus:ring-[#00638E] cursor-pointer accent-[#00638E]"
                                     />
-                                    <span className={st.completed ? 'line-through text-muted-foreground' : 'font-medium'}>
+                                    <span className={st.completed ? 'line-through text-muted-foreground' : 'font-medium text-slate-200'}>
                                       {st.title}
                                     </span>
                                   </label>
@@ -1520,16 +1509,16 @@ export default function TasksPage() {
                         )}
 
                         {/* Assignee & Assigned By Info */}
-                        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 text-xs">
+                        <div className="pt-2 border-t border-[#2B2B2B] flex items-center justify-between gap-2 text-xs">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/30 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
+                            <div className="w-6 h-6 rounded-full bg-[#00638E]/25 border border-[#00638E]/40 text-[#BFD8E3] font-bold text-[10px] flex items-center justify-center shrink-0">
                               {(task.assigneeName || 'You').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-[11px] font-bold text-foreground truncate">
+                              <p className="text-[11px] font-bold text-white truncate">
                                 {task.assigneeName || 'You'}
                               </p>
-                              <p className="text-[9px] text-muted-foreground truncate">
+                              <p className="text-[9px] text-slate-400 truncate">
                                 By: {task.reviewerName || 'You'}
                               </p>
                             </div>
@@ -1539,15 +1528,15 @@ export default function TasksPage() {
                           <div
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0 border ${
                               dueStatus.isToday
-                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 ring-1 ring-rose-500/20'
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30 ring-1 ring-rose-500/20'
                                 : dueStatus.isOverdue
-                                ? 'bg-red-500/20 text-red-500 font-bold border-red-500/30'
+                                ? 'bg-red-500/20 text-red-400 font-bold border-red-500/30'
                                 : dueStatus.isNear
-                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                : 'bg-muted/70 text-muted-foreground border-border/60'
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                : 'bg-[#000000]/60 text-slate-300 border-[#2B2B2B]'
                             }`}
                           >
-                            <Calendar className="w-3 h-3 text-primary shrink-0" />
+                            <Calendar className="w-3 h-3 text-[#00638E] shrink-0" />
                             <span>{task.dueDate || todayStr}</span>
                             {dueStatus.text && (
                               <span className="text-[9px] font-black uppercase opacity-90">
@@ -1559,13 +1548,13 @@ export default function TasksPage() {
                       </div>
 
                       {/* Footer Actions: Status Dropdown & Action Buttons */}
-                      <div className="pt-3 border-t border-border/40 flex items-center justify-between gap-2 relative z-10">
+                      <div className="pt-3 border-t border-[#2B2B2B] flex items-center justify-between gap-2 relative z-10">
                         {/* Status selector */}
                         <select
                           value={task.status}
                           disabled={!canEditTask(task)}
                           onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
-                          className="text-[11px] font-semibold bg-background/80 hover:bg-background border border-border/70 px-2.5 py-1.5 rounded-xl text-foreground focus:outline-none cursor-pointer transition-colors shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="text-[11px] font-semibold bg-[#000000]/80 hover:bg-[#000000] border border-[#2B2B2B] hover:border-[#00638E]/50 px-2.5 py-1.5 rounded-xl text-white focus:outline-none focus:border-[#00638E] cursor-pointer transition-colors shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {workspaceStatuses.map((st) => (
                             <option key={st.id} value={st.id}>
@@ -1584,11 +1573,11 @@ export default function TasksPage() {
                             className={`p-2 rounded-xl transition-all relative flex items-center justify-center cursor-pointer border ${
                               dueStatus.isToday || dueStatus.isOverdue
                                 ? 'bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 border-rose-500/30 ring-1 ring-rose-500/30'
-                                : 'bg-card/70 hover:bg-accent border-border/60 text-muted-foreground hover:text-foreground'
+                                : 'bg-[#000000]/70 hover:bg-[#2B2B2B] border-[#2B2B2B] text-slate-300 hover:text-white'
                             }`}
                           >
                             {isDispatchingThis ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00638E]" />
                             ) : (
                               <Bell className="w-3.5 h-3.5" />
                             )}
@@ -1602,12 +1591,12 @@ export default function TasksPage() {
                             type="button"
                             onClick={() => openEditModal(task)}
                             title={canEditTask(task) ? "Edit Task" : "View Task Details"}
-                            className="p-2 rounded-xl bg-card/70 hover:bg-accent border border-border/60 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-[#000000]/70 hover:bg-[#2B2B2B] border border-[#2B2B2B] text-slate-300 hover:text-[#BFD8E3] hover:border-[#00638E]/50 transition-colors cursor-pointer"
                           >
                             {canEditTask(task) ? (
                               <Edit2 className="w-3.5 h-3.5" />
                             ) : (
-                              <Eye className="w-3.5 h-3.5 text-sky-400" />
+                              <Eye className="w-3.5 h-3.5 text-[#8CB9CC]" />
                             )}
                           </button>
 
@@ -1617,7 +1606,7 @@ export default function TasksPage() {
                               type="button"
                               onClick={() => handleDelete(task.id)}
                               title="Delete Task"
-                              className="p-2 rounded-xl bg-card/70 hover:bg-destructive/20 border border-border/60 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                              className="p-2 rounded-xl bg-[#000000]/70 hover:bg-destructive/20 border border-[#2B2B2B] hover:border-destructive/40 text-slate-400 hover:text-destructive transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1637,29 +1626,29 @@ export default function TasksPage() {
         {/* ========================================================================= */}
         {viewMode === 'tree' && (
           <div className="space-y-6">
-            <div className="p-5 rounded-3xl bg-card/60 backdrop-blur-xl border border-border/80 shadow-lg space-y-6">
+            <div className="p-5 rounded-3xl bg-[#141414] backdrop-blur-xl border border-[#2B2B2B] shadow-2xl space-y-6">
               {/* Root Workspace Node */}
-              <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-r from-primary/20 via-primary/10 to-transparent border border-primary/30 shadow-xs">
-                <div className="p-2.5 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30">
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-r from-[#004A6B]/20 via-[#00638E]/10 to-transparent border border-[#00638E]/30 shadow-xs">
+                <div className="p-2.5 rounded-xl bg-[#00638E] text-white shadow-md shadow-[#00638E]/30">
                   <Workflow className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-foreground tracking-tight">
+                    <h3 className="text-sm font-bold text-white tracking-tight">
                       Workspace: {currentWorkspace?.name || 'Main Workspace'}
                     </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40">
                       Root Graph
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-slate-400">
                     Hierarchical task tree connecting statuses, projects, deliverables, and subtasks.
                   </p>
                 </div>
               </div>
 
               {/* Status Branches */}
-              <div className="space-y-6 pl-4 md:pl-8 border-l-2 border-primary/25 ml-4">
+              <div className="space-y-6 pl-4 md:pl-8 border-l-2 border-[#00638E]/25 ml-4">
                 {workspaceStatuses.map((status) => {
                   const statusTasks = filteredTasks.filter(
                     (t) =>
@@ -1671,52 +1660,48 @@ export default function TasksPage() {
                   return (
                     <div key={status.id} className="relative space-y-3">
                       {/* Branch line connector */}
-                      <div className="absolute -left-4 md:-left-8 top-4 w-4 md:w-8 h-0.5 bg-primary/25" />
+                      <div className="absolute -left-4 md:-left-8 top-4 w-4 md:w-8 h-0.5 bg-[#00638E]/30" />
 
                       {/* Status Node Card */}
                       <div
                         onClick={() => toggleTreeStatus(status.id)}
-                        className="flex items-center justify-between p-3.5 rounded-2xl border bg-card/85 backdrop-blur-md shadow-xs hover:shadow-md transition-all cursor-pointer group select-none"
-                        style={{
-                          borderColor: `${status.color}50`,
-                          backgroundColor: `${status.color}0a`,
-                        }}
+                        className="flex items-center justify-between p-3.5 rounded-2xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/60 backdrop-blur-md shadow-xs hover:shadow-md transition-all cursor-pointer group select-none"
                       >
                         <div className="flex items-center gap-3">
                           <div
-                            className="w-3.5 h-3.5 rounded-full ring-4 ring-offset-1 ring-offset-background shrink-0"
+                            className="w-3.5 h-3.5 rounded-full ring-4 ring-offset-1 ring-offset-black shrink-0"
                             style={{
                               backgroundColor: status.color,
                               boxShadow: `0 0 10px ${status.color}`,
                             }}
                           />
                           <div>
-                            <span className="text-xs font-bold text-foreground uppercase tracking-wide">
+                            <span className="text-xs font-bold text-white uppercase tracking-wide">
                               {status.name}
                             </span>
-                            <span className="text-[10px] text-muted-foreground ml-2">
+                            <span className="text-[10px] text-slate-400 ml-2">
                               ({status.category.replace('_', ' ')})
                             </span>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-muted text-foreground border border-border/60">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#000000] text-[#BFD8E3] border border-[#2B2B2B]">
                             {statusTasks.length} task{statusTasks.length === 1 ? '' : 's'}
                           </span>
                           {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                            <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-white" />
                           ) : (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                            <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-white" />
                           )}
                         </div>
                       </div>
 
                       {/* Tasks under this status node */}
                       {isExpanded && (
-                        <div className="space-y-3 pl-4 md:pl-8 border-l-2 border-dashed border-border/70 ml-4 animate-fade-in">
+                        <div className="space-y-3 pl-4 md:pl-8 border-l-2 border-dashed border-[#2B2B2B] ml-4 animate-fade-in">
                           {statusTasks.length === 0 ? (
-                            <div className="text-xs text-muted-foreground py-2 italic">
+                            <div className="text-xs text-slate-400 py-2 italic">
                               No tasks in this status branch.
                             </div>
                           ) : (
@@ -1753,15 +1738,11 @@ export default function TasksPage() {
                               return (
                                 <div key={t.id} className="relative space-y-2">
                                   {/* Sub-branch horizontal line */}
-                                  <div className="absolute -left-4 md:-left-8 top-4 w-4 md:w-8 h-0.5 bg-border/70" />
+                                  <div className="absolute -left-4 md:-left-8 top-4 w-4 md:w-8 h-0.5 bg-[#2B2B2B]" />
 
                                   {/* Task Node Glass Card */}
                                   <div
-                                    className="p-4 rounded-2xl border bg-card/90 backdrop-blur-xl shadow-xs hover:shadow-lg transition-all space-y-2.5"
-                                    style={{
-                                      borderColor: `${projColor}40`,
-                                      backgroundColor: `${projColor}08`,
-                                    }}
+                                    className="p-4 rounded-2xl border border-[#2B2B2B] bg-[#141414] hover:border-[#00638E]/60 backdrop-blur-xl shadow-sm hover:shadow-lg transition-all space-y-2.5"
                                   >
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex items-center gap-2 min-w-0">
@@ -1771,7 +1752,7 @@ export default function TasksPage() {
                                         />
                                         <Link
                                           href={`/app/tasks/${t.id}`}
-                                          className="text-xs font-bold text-foreground hover:text-primary transition-colors truncate max-w-md"
+                                          className="text-xs font-bold text-white hover:text-[#BFD8E3] transition-colors truncate max-w-md"
                                         >
                                           {t.title}
                                         </Link>
@@ -1780,12 +1761,7 @@ export default function TasksPage() {
                                       <div className="flex items-center gap-2">
                                         {proj && (
                                           <span
-                                            className="text-[10px] font-bold px-2 py-0.5 rounded-lg border shadow-xs"
-                                            style={{
-                                              backgroundColor: `${projColor}15`,
-                                              color: projColor,
-                                              borderColor: `${projColor}40`,
-                                            }}
+                                            className="text-[10px] font-bold px-2 py-0.5 rounded-lg border border-[#00638E]/35 bg-[#00638E]/15 text-[#BFD8E3] shadow-xs"
                                           >
                                             {proj.name}
                                           </span>
@@ -1794,7 +1770,7 @@ export default function TasksPage() {
                                           {t.tag}
                                         </span>
                                         {!canEditTask(t) && (
-                                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
                                             <Lock className="w-2.5 h-2.5" />
                                             <span>View Only</span>
                                           </span>
@@ -1804,15 +1780,15 @@ export default function TasksPage() {
 
                                     {/* Mini Progress Bar & Badges */}
                                     <div className="space-y-1 py-0.5">
-                                      <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground">
+                                      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400">
                                         <span className="flex items-center gap-1">
-                                          <SlidersHorizontal className="w-2.5 h-2.5 text-primary" /> Progress
+                                          <SlidersHorizontal className="w-2.5 h-2.5 text-[#BFD8E3]" /> Progress
                                         </span>
-                                        <span className="font-bold text-primary">{taskProgress}%</span>
+                                        <span className="font-bold text-[#BFD8E3]">{taskProgress}%</span>
                                       </div>
-                                      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+                                      <div className="h-1 w-full bg-[#2B2B2B] rounded-full overflow-hidden">
                                         <div
-                                          className="h-full bg-gradient-to-r from-primary to-indigo-500 rounded-full transition-all duration-300"
+                                          className="h-full bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC] rounded-full transition-all duration-300"
                                           style={{ width: `${taskProgress}%` }}
                                         />
                                       </div>
@@ -1825,9 +1801,9 @@ export default function TasksPage() {
                                           <button
                                             type="button"
                                             onClick={() => openEditModal(t)}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-background border border-border/50 text-muted-foreground hover:text-foreground cursor-pointer"
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#000000]/60 border border-[#2B2B2B] text-slate-300 hover:text-white cursor-pointer"
                                           >
-                                            <Paperclip className="w-2.5 h-2.5 text-primary" />
+                                            <Paperclip className="w-2.5 h-2.5 text-[#BFD8E3]" />
                                             <span>{attachmentsList.length} files</span>
                                           </button>
                                         )}
@@ -1835,9 +1811,9 @@ export default function TasksPage() {
                                           <button
                                             type="button"
                                             onClick={() => openEditModal(t)}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-background border border-border/50 text-muted-foreground hover:text-foreground cursor-pointer"
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#000000]/60 border border-[#2B2B2B] text-slate-300 hover:text-white cursor-pointer"
                                           >
-                                            <MessageSquare className="w-2.5 h-2.5 text-primary" />
+                                            <MessageSquare className="w-2.5 h-2.5 text-[#BFD8E3]" />
                                             <span>{commentsList.length} comments</span>
                                           </button>
                                         )}
@@ -1845,14 +1821,14 @@ export default function TasksPage() {
                                     )}
 
                                     {/* Assignees & Due Date row */}
-                                    <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+                                    <div className="flex items-center justify-between gap-2 pt-1 text-xs text-slate-400">
                                       <div className="flex items-center gap-3">
                                         <span className="flex items-center gap-1">
-                                          <User className="w-3 h-3 text-primary" />
-                                          <span className="text-[11px] font-medium text-foreground">
+                                          <User className="w-3 h-3 text-[#00638E]" />
+                                          <span className="text-[11px] font-medium text-white">
                                             {t.assigneeName || 'You'}
                                           </span>
-                                          <span className="text-[10px] text-muted-foreground">
+                                          <span className="text-[10px] text-slate-400">
                                             (By: {t.reviewerName || 'You'})
                                           </span>
                                         </span>
@@ -1862,13 +1838,13 @@ export default function TasksPage() {
                                         <span
                                           className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
                                             dueStatus.isToday
-                                              ? 'bg-rose-500/15 text-rose-600 border-rose-500/30'
+                                              ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                                               : dueStatus.isOverdue
-                                              ? 'bg-red-500/20 text-red-500 border-red-500/30'
-                                              : 'bg-muted text-muted-foreground border-border/60'
+                                              ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                                              : 'bg-[#000000]/60 text-slate-300 border-[#2B2B2B]'
                                           }`}
                                         >
-                                          <Calendar className="w-2.5 h-2.5 text-primary" />
+                                          <Calendar className="w-2.5 h-2.5 text-[#00638E]" />
                                           <span>{t.dueDate || todayStr}</span>
                                         </span>
 
@@ -1878,10 +1854,10 @@ export default function TasksPage() {
                                           onClick={() => handleSendDueAlert(t)}
                                           disabled={isDispatchingThis}
                                           title="Send Due Date Alert Email"
-                                          className="p-1 rounded-lg hover:bg-accent text-muted-foreground hover:text-amber-500 transition-colors cursor-pointer"
+                                          className="p-1 rounded-lg hover:bg-[#2B2B2B] text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
                                         >
                                           {isDispatchingThis ? (
-                                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                            <Loader2 className="w-3 h-3 animate-spin text-[#00638E]" />
                                           ) : (
                                             <Bell className="w-3 h-3" />
                                           )}
@@ -1892,12 +1868,12 @@ export default function TasksPage() {
                                           type="button"
                                           onClick={() => openEditModal(t)}
                                           title={canEditTask(t) ? "Edit Task" : "View Task Details"}
-                                          className="p-1 rounded-lg hover:bg-accent text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                                          className="p-1 rounded-lg hover:bg-[#2B2B2B] text-slate-300 hover:text-[#BFD8E3] transition-colors cursor-pointer"
                                         >
                                           {canEditTask(t) ? (
                                             <Edit2 className="w-3 h-3" />
                                           ) : (
-                                            <Eye className="w-3 h-3 text-sky-400" />
+                                            <Eye className="w-3 h-3 text-[#8CB9CC]" />
                                           )}
                                         </button>
                                       </div>
@@ -1970,9 +1946,9 @@ export default function TasksPage() {
         {/* VIEW MODE 3: COMPACT LIQUID GLASS LIST VIEW                               */}
         {/* ========================================================================= */}
         {viewMode === 'list' && (
-          <div className="rounded-3xl border border-border/80 bg-card/75 backdrop-blur-xl overflow-hidden shadow-lg">
+          <div className="rounded-3xl border border-[#2B2B2B] bg-[#141414] backdrop-blur-xl overflow-hidden shadow-2xl">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/80 border-b border-border text-muted-foreground font-semibold">
+              <thead className="bg-[#000000] border-b border-[#2B2B2B] text-slate-300 font-semibold">
                 <tr>
                   <th className="p-3.5 pl-6">Task Title</th>
                   <th className="p-3.5">Project</th>
@@ -1985,7 +1961,7 @@ export default function TasksPage() {
                   <th className="p-3.5 pr-6 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
+              <tbody className="divide-y divide-[#2B2B2B]">
                 {orderedFilteredTasks.map((t) => {
                   const proj = projects.find((p) => p.id === t.projectId)
                   const projColor = getProjectColor(proj, t.projectId)
@@ -2023,20 +1999,20 @@ export default function TasksPage() {
                         onDragOver={handleTaskDragOver}
                         onDrop={(e) => handleTaskDrop(e, t.id)}
                         onDragEnd={() => setDraggedTaskId(null)}
-                        className={`hover:bg-accent/40 transition-colors cursor-move select-none ${
-                          draggedTaskId === t.id ? 'opacity-40 bg-primary/10 border-primary border-y-2' : ''
+                        className={`hover:bg-[#2B2B2B]/40 transition-colors cursor-move select-none ${
+                          draggedTaskId === t.id ? 'opacity-40 bg-[#00638E]/15 border-[#00638E] border-y-2' : ''
                         }`}
                         title="Drag to place at any position"
                       >
                         <td className="p-3.5 pl-6">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing shrink-0 p-0.5" title="Drag to reorder position">
+                            <div className="text-slate-500 hover:text-white cursor-grab active:cursor-grabbing shrink-0 p-0.5" title="Drag to reorder position">
                               <GripVertical className="w-3.5 h-3.5" />
                             </div>
                             {subtaskList.length > 0 && (
                               <button
                                 onClick={() => toggleTaskTree(t.id)}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                                className="p-1 rounded hover:bg-[#2B2B2B] text-slate-400 hover:text-white cursor-pointer"
                               >
                                 {isExpanded ? (
                                   <ChevronDown className="w-3.5 h-3.5" />
@@ -2047,32 +2023,32 @@ export default function TasksPage() {
                             )}
                             <Link
                               href={`/app/tasks/${t.id}`}
-                              className="font-bold text-foreground hover:text-primary transition-colors"
+                              className="font-bold text-white hover:text-[#BFD8E3] transition-colors"
                             >
                               {t.title}
                             </Link>
                             {!canEditTask(t) && (
-                              <span title="View Only (Assigned to someone else)" className="inline-flex items-center text-amber-500">
+                              <span title="View Only (Assigned to someone else)" className="inline-flex items-center text-amber-400">
                                 <Lock className="w-3 h-3" />
                               </span>
                             )}
                             {attachmentsList.length > 0 && (
                               <span
                                 onClick={() => openEditModal(t)}
-                                className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground cursor-pointer border border-border/50"
+                                className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-[#000000]/60 text-slate-300 hover:text-white cursor-pointer border border-[#2B2B2B]"
                                 title={`${attachmentsList.length} attachment(s)`}
                               >
-                                <Paperclip className="w-2.5 h-2.5 text-primary" />
+                                <Paperclip className="w-2.5 h-2.5 text-[#BFD8E3]" />
                                 <span>{attachmentsList.length}</span>
                               </span>
                             )}
                             {commentsList.length > 0 && (
                               <span
                                 onClick={() => openEditModal(t)}
-                                className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground cursor-pointer border border-border/50"
+                                className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-[#000000]/60 text-slate-300 hover:text-white cursor-pointer border border-[#2B2B2B]"
                                 title={`${commentsList.length} comment(s)`}
                               >
-                                <MessageSquare className="w-2.5 h-2.5 text-primary" />
+                                <MessageSquare className="w-2.5 h-2.5 text-[#BFD8E3]" />
                                 <span>{commentsList.length}</span>
                               </span>
                             )}
@@ -2081,18 +2057,13 @@ export default function TasksPage() {
                         <td className="p-3.5">
                           {proj ? (
                             <span
-                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border"
-                              style={{
-                                backgroundColor: `${projColor}15`,
-                                color: projColor,
-                                borderColor: `${projColor}40`,
-                              }}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-[#00638E]/35 bg-[#00638E]/15 text-[#BFD8E3]"
                             >
                               <FolderKanban className="w-3 h-3" />
                               {proj.name}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-muted-foreground">&mdash;</span>
+                            <span className="text-[10px] text-slate-500">&mdash;</span>
                           )}
                         </td>
                         <td className="p-3.5">
@@ -2100,7 +2071,7 @@ export default function TasksPage() {
                             value={t.status}
                             disabled={!canEditTask(t)}
                             onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
-                            className="text-[10px] font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary border-none cursor-pointer focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="text-[10px] font-semibold px-2 py-1 rounded-full bg-[#000000] text-[#BFD8E3] border border-[#2B2B2B] cursor-pointer focus:outline-none focus:border-[#00638E] disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             {workspaceStatuses.map((st) => (
                               <option key={st.id} value={st.id}>
@@ -2112,11 +2083,11 @@ export default function TasksPage() {
                         <td className="p-3.5 min-w-[120px]">
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[10px] font-semibold">
-                              <span className="text-muted-foreground">{taskProgress}%</span>
+                              <span className="text-[#BFD8E3]">{taskProgress}%</span>
                             </div>
-                            <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
+                            <div className="h-1.5 w-24 bg-[#2B2B2B] rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-primary to-indigo-500 rounded-full transition-all duration-300"
+                                className="h-full bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC] rounded-full transition-all duration-300"
                                 style={{ width: `${taskProgress}%` }}
                               />
                             </div>
@@ -2127,16 +2098,16 @@ export default function TasksPage() {
                             {t.tag}
                           </span>
                         </td>
-                        <td className="p-3.5 text-foreground font-medium">{t.assigneeName || 'You'}</td>
-                        <td className="p-3.5 text-muted-foreground">{t.reviewerName || 'You'}</td>
-                        <td className="p-3.5 text-muted-foreground">
+                        <td className="p-3.5 text-white font-medium">{t.assigneeName || 'You'}</td>
+                        <td className="p-3.5 text-slate-400">{t.reviewerName || 'You'}</td>
+                        <td className="p-3.5 text-slate-400">
                           <span
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
                               dueStatus.isToday
-                                ? 'bg-rose-500/15 text-rose-600 border-rose-500/30 font-bold'
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30 font-bold'
                                 : dueStatus.isOverdue
-                                ? 'bg-red-500/20 text-red-500 border-red-500/30 font-bold'
-                                : 'bg-muted/70 border-border/50 text-muted-foreground'
+                                ? 'bg-red-500/20 text-red-400 border-red-500/30 font-bold'
+                                : 'bg-[#000000]/60 border-[#2B2B2B] text-slate-300'
                             }`}
                           >
                             {t.dueDate || todayStr}
@@ -2148,30 +2119,30 @@ export default function TasksPage() {
                               type="button"
                               onClick={() => handleSendDueAlert(t)}
                               disabled={dispatchingAlertId === t.id}
-                              className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
                               title="Send Due Date Alert Email"
                             >
                               {dispatchingAlertId === t.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00638E]" />
                               ) : (
                                 <Bell className="w-3.5 h-3.5" />
                               )}
                             </button>
                             <button
                               onClick={() => openEditModal(t)}
-                              className="p-1 text-muted-foreground hover:text-primary rounded transition-colors cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-[#BFD8E3] rounded transition-colors cursor-pointer"
                               title={canEditTask(t) ? "Edit task" : "View task details"}
                             >
                               {canEditTask(t) ? (
                                 <Edit2 className="w-3.5 h-3.5" />
                               ) : (
-                                <Eye className="w-3.5 h-3.5 text-sky-400" />
+                                <Eye className="w-3.5 h-3.5 text-[#8CB9CC]" />
                               )}
                             </button>
                             {canEditTask(t) && (
                               <button
                                 onClick={() => handleDelete(t.id)}
-                                className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
+                                className="p-1 text-slate-400 hover:text-destructive rounded transition-colors cursor-pointer"
                                 title="Delete task"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2183,14 +2154,14 @@ export default function TasksPage() {
 
                       {/* Expandable subtasks preview */}
                       {isExpanded && subtaskList.length > 0 && (
-                        <tr className="bg-muted/20">
+                        <tr className="bg-[#000000]/40">
                           <td colSpan={9} className="py-2.5 pl-12 pr-6">
-                            <div className="rounded-2xl bg-card/80 border border-border/80 p-3 space-y-2 max-w-xl">
-                              <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                                <FolderOpen className="w-4 h-4 text-amber-500" />
+                            <div className="rounded-2xl bg-[#141414] border border-[#2B2B2B] p-3 space-y-2 max-w-xl">
+                              <div className="flex items-center gap-2 text-xs font-bold text-white">
+                                <FolderOpen className="w-4 h-4 text-[#BFD8E3]" />
                                 <span>Subtasks List</span>
                               </div>
-                              <div className="space-y-1.5 pl-2 border-l-2 border-primary/20 ml-2">
+                              <div className="space-y-1.5 pl-2 border-l-2 border-[#00638E]/30 ml-2">
                                 {subtaskList.map((st: any) => (
                                   <label
                                     key={st.id}
@@ -2200,9 +2171,9 @@ export default function TasksPage() {
                                       type="checkbox"
                                       checked={st.completed}
                                       onChange={() => toggleSubtask(t.id, st.id)}
-                                      className="w-3.5 h-3.5 rounded text-primary accent-primary cursor-pointer"
+                                      className="w-3.5 h-3.5 rounded text-[#00638E] accent-[#00638E] cursor-pointer"
                                     />
-                                    <span className={st.completed ? 'line-through text-muted-foreground' : 'text-foreground font-medium'}>
+                                    <span className={st.completed ? 'line-through text-slate-500' : 'text-white font-medium'}>
                                       {st.title}
                                     </span>
                                   </label>
