@@ -27,7 +27,7 @@ import {
   Building2,
   Check,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
+import { useUserTheme } from '@/hooks/useUserTheme'
 import { UserGuideModal } from '@/components/user-guide-modal'
 import { CreateOrganizationModal } from '@/components/create-organization-modal'
 import { CreateWorkspaceModal } from '@/components/create-workspace-modal'
@@ -42,7 +42,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { user, logout } = useAuthStore()
   const { currentOrg, organizations, setCurrentOrg } = useOrgStore()
   const { currentWorkspace, workspaces, setCurrentWorkspace } = useWorkspaceStore()
-  const { theme, setTheme } = useTheme()
+  const { theme, toggleTheme } = useUserTheme()
 
   const [orgDropdownOpen, setOrgDropdownOpen] = useState(false)
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false)
@@ -369,7 +369,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           </div>
 
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={toggleTheme}
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             title="Toggle theme"
           >

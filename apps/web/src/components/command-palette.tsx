@@ -14,7 +14,7 @@ import {
   Sun,
   X,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
+import { useUserTheme } from '@/hooks/useUserTheme'
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -23,7 +23,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const router = useRouter()
-  const { theme, setTheme } = useTheme()
+  const { theme, toggleTheme } = useUserTheme()
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     {
       label: 'Toggle Theme',
       icon: theme === 'dark' ? Sun : Moon,
-      action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+      action: toggleTheme,
     },
   ]
 

@@ -191,34 +191,34 @@ export default function ProjectsPage() {
 
         <div className="flex items-center gap-3">
           {/* View Switcher: Grid vs List */}
-          <div className="flex items-center p-1 bg-muted/80 backdrop-blur-md rounded-xl border border-border shadow-xs">
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-[#141414] backdrop-blur-md rounded-xl border border-slate-200 dark:border-[#2B2B2B] shadow-xs">
             <button
               onClick={() => setViewMode('grid')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-white dark:bg-[#00638E] text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
               title="Glass Grid View"
             >
-              <LayoutGrid className="w-3.5 h-3.5 text-primary" /> Grid
+              <LayoutGrid className="w-3.5 h-3.5 text-[#00638E] dark:text-[#BFD8E3]" /> Grid
             </button>
             <button
               onClick={() => setViewMode('list')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-white dark:bg-[#00638E] text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
               title="Table List View"
             >
-              <List className="w-3.5 h-3.5 text-primary" /> List
+              <List className="w-3.5 h-3.5 text-[#00638E] dark:text-[#BFD8E3]" /> List
             </button>
           </div>
 
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] text-white text-xs font-semibold hover:opacity-95 shadow-md shadow-[#00638E]/25 transition-all active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4" /> New Project
           </button>
@@ -258,9 +258,9 @@ export default function ProjectsPage() {
         </div>
       ) : (
         /* Clean Spacious Table List View with Drag & Drop */
-        <div className="rounded-3xl border border-border/80 bg-card/75 backdrop-blur-xl overflow-hidden shadow-lg">
+        <div className="rounded-3xl border border-slate-200 dark:border-[#2B2B2B] bg-white dark:bg-[#141414] backdrop-blur-xl overflow-hidden shadow-lg dark:shadow-2xl">
           <table className="w-full text-left text-xs">
-            <thead className="bg-muted/80 border-b border-border text-muted-foreground font-semibold">
+            <thead className="bg-slate-50 dark:bg-[#000000] border-b border-slate-200 dark:border-[#2B2B2B] text-slate-600 dark:text-slate-300 font-semibold">
               <tr>
                 <th className="p-4 pl-6">Project</th>
                 <th className="p-4">Status</th>
@@ -269,7 +269,7 @@ export default function ProjectsPage() {
                 <th className="p-4 pr-6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-[#2B2B2B]">
               {orderedProjects.map((p) => {
                 let envList: string[] = ['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN']
                 try {
@@ -284,47 +284,46 @@ export default function ProjectsPage() {
                     onDragOver={handleProjDragOver}
                     onDrop={(e) => handleProjDrop(e, p.id)}
                     onDragEnd={() => setDraggedProjId(null)}
-                    className={`hover:bg-accent/40 transition-colors group cursor-move select-none ${
-                      draggedProjId === p.id ? 'opacity-40 bg-primary/10 border-primary border-y-2' : ''
+                    className={`hover:bg-slate-50/80 dark:hover:bg-[#2B2B2B]/40 transition-colors group cursor-move select-none ${
+                      draggedProjId === p.id ? 'opacity-40 bg-[#00638E]/15 border-[#00638E] border-y-2' : ''
                     }`}
                     title="Drag to place at any position"
                   >
                     <td className="p-4 pl-6">
                       <div className="flex items-center gap-2.5">
-                        <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing p-0.5 shrink-0" title="Drag to reorder">
+                        <div className="text-slate-400 dark:text-slate-500 hover:text-[#00638E] dark:hover:text-[#BFD8E3] cursor-grab active:cursor-grabbing p-0.5 shrink-0 transition-colors" title="Drag to reorder">
                           <GripVertical className="w-4 h-4" />
                         </div>
                         <Link
                           href={`/app/projects/${p.id}`}
-                          className="flex items-center gap-3 block"
+                          className="flex items-center gap-3 block group-hover:translate-x-0.5 transition-transform"
                         >
                           <div
                             className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
                             style={{
-                              backgroundColor: p.color || '#6366F1',
-                              boxShadow: `0 0 10px ${p.color || '#6366F1'}60`,
+                              backgroundColor: p.color || '#00638E',
+                              boxShadow: `0 0 10px ${p.color || '#00638E'}60`,
                             }}
                           />
                           <div>
                             <p
-                              className="font-bold text-sm tracking-tight transition-colors group-hover:text-primary flex items-center gap-1.5"
-                            style={{ color: p.color }}
-                          >
-                            {p.name}
-                            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-muted-foreground" />
-                          </p>
-                          {p.description && p.description !== 'Comprehensive project milestones & deliverables' && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-1">
-                              {p.description}
+                              className="font-bold text-sm tracking-tight text-slate-900 dark:text-white group-hover:text-[#00638E] dark:group-hover:text-[#BFD8E3] transition-colors flex items-center gap-1.5"
+                            >
+                              {p.name}
+                              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-[#00638E] dark:text-[#BFD8E3]" />
                             </p>
-                          )}
-                        </div>
-                      </Link>
-                    </div>
-                  </td>
+                            {p.description && p.description !== 'Comprehensive project milestones & deliverables' && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                {p.description}
+                              </p>
+                            )}
+                          </div>
+                        </Link>
+                      </div>
+                    </td>
 
                     <td className="p-4">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/25 uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00638E]/10 dark:bg-[#00638E]/20 text-[#00638E] dark:text-[#BFD8E3] border border-[#00638E]/25 dark:border-[#00638E]/40 uppercase">
                         {p.status || 'ACTIVE'}
                       </span>
                     </td>
@@ -332,16 +331,15 @@ export default function ProjectsPage() {
                     <td className="p-4 min-w-[180px]">
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[11px] font-semibold">
-                          <span className="text-muted-foreground">Progress</span>
-                          <span className="font-bold" style={{ color: p.color || '#6366F1' }}>
+                          <span className="text-slate-500 dark:text-slate-400">Progress</span>
+                          <span className="font-bold text-[#00638E] dark:text-[#BFD8E3]">
                             {p.progress || 0}%
                           </span>
                         </div>
-                        <div className="w-full h-2 rounded-full bg-muted overflow-hidden border border-border/40">
+                        <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-[#2B2B2B] overflow-hidden">
                           <div
-                            className="h-full rounded-full transition-all duration-500"
+                            className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC]"
                             style={{
-                              backgroundColor: p.color || '#6366F1',
                               width: `${p.progress || 0}%`,
                             }}
                           />
@@ -354,7 +352,7 @@ export default function ProjectsPage() {
                         {envList.map((env) => (
                           <span
                             key={env}
-                            className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-muted/80 text-muted-foreground border border-border/60"
+                            className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-[#000000]/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#2B2B2B]"
                           >
                             {env}
                           </span>
@@ -366,13 +364,13 @@ export default function ProjectsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/app/projects/${p.id}`}
-                          className="px-3 py-1.5 rounded-xl bg-card hover:bg-accent border border-border text-xs font-semibold text-foreground transition-all cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#000000]/70 hover:bg-slate-100 dark:hover:bg-[#2B2B2B] border border-slate-200 dark:border-[#2B2B2B] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00638E] dark:hover:text-white transition-all cursor-pointer"
                         >
                           View Roadmap
                         </Link>
                         <button
                           onClick={() => handleDelete(p.id)}
-                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
                           title="Delete Project"
                         >
                           <Trash2 className="w-4 h-4" />
