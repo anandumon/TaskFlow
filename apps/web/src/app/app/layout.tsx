@@ -43,45 +43,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return
     }
 
-    loadUser().finally(() => {
-      setAuthChecked(true)
-    })
-  }, [loadUser, router])
-
-  useEffect(() => {
-    if (!authChecked || isLoading) return
-
-    if (!isAuthenticated) {
-      router.push('/login')
-      return
-    }
-
-    fetchOrganizations()
-      .then((orgs) => {
-        if (!orgs || orgs.length === 0) {
-          // ONLY newly created users without organizations should go to onboarding
+    // Parallel prefetching for maximum speed and zero waterfall delay
+    Promise.all([
+      loadUser(),
+      fetchOrganizations(),
+    ])
+      .then(([_, orgs]) => {
+        setAuthChecked(true)
+        const activeOrgs = orgs || []
+        if (activeOrgs.length > 0) {
+          fetchWorkspaces(activeOrgs[0].id).finally(() => {
+            setInitialLoaded(true)
+          })
+        } else {
           if (user?.isNewUser === true) {
             router.push('/onboarding')
-          } else {
-            // Existing user in DB: NEVER route to onboarding or show creation modal
-            setInitialLoaded(true)
           }
-        } else {
-          const org = orgs[0]
-          fetchWorkspaces(org.id)
-            .then(() => {
-              setInitialLoaded(true)
-            })
-            .catch(() => {
-              setInitialLoaded(true)
-            })
+          setInitialLoaded(true)
         }
       })
       .catch((err) => {
-        console.error('Error fetching orgs in layout:', err)
+        console.warn('Layout parallel load notice:', err)
+        setAuthChecked(true)
         setInitialLoaded(true)
       })
-  }, [authChecked, isLoading, isAuthenticated, router, fetchOrganizations, fetchWorkspaces, user])
+  }, [loadUser, fetchOrganizations, fetchWorkspaces, router, user?.isNewUser])
+
+  useEffect(() => {
+    if (!authChecked || isLoading) return
+    if (!isAuthenticated) {
+      router.push('/login')
+    }
+  }, [authChecked, isLoading, isAuthenticated, router])
+
 
 
   useEffect(() => {

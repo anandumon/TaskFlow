@@ -178,4 +178,30 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--primary) / 0.5);
   }
+
+  /* GPU accelerated smooth physics and hover effects */
+  .smooth-card {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease;
+    transform: translate3d(0, 0, 0);
+    will-change: transform, box-shadow;
+  }
+  .smooth-card:hover {
+    transform: translate3d(0, -2px, 0);
+    box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(99, 102, 241, 0.3);
+  }
+
+  .interactive-tap {
+    transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .interactive-tap:active {
+    transform: scale(0.97);
+  }
+
+  .glass-panel {
+    background: rgba(18, 18, 26, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
 }
+

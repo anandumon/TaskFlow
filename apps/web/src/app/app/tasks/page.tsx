@@ -1342,8 +1342,8 @@ export default function TasksPage() {
                       onDragOver={handleTaskDragOver}
                       onDrop={(e) => handleTaskDrop(e, task.id)}
                       onDragEnd={() => setDraggedTaskId(null)}
-                      className={`group relative rounded-3xl border transition-all duration-300 p-5 space-y-4 backdrop-blur-xl hover:shadow-2xl overflow-hidden cursor-move flex flex-col justify-between select-none ${
-                        draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : ''
+                      className={`group relative rounded-3xl border p-5 space-y-4 backdrop-blur-xl overflow-hidden cursor-move flex flex-col justify-between select-none smooth-card animate-slide-up ${
+                        draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : 'hover:border-primary/50'
                       }`}
                       style={{
                         backgroundColor: `${projColor}0a`,
@@ -1352,6 +1352,7 @@ export default function TasksPage() {
                       }}
                       title="Drag to place at any position or drop on status tabs"
                     >
+
                       {/* Gloss Reflection Highlights */}
                       <div className="absolute -top-16 -right-16 w-36 h-36 bg-gradient-to-br from-white/15 to-transparent rounded-full blur-2xl pointer-events-none" />
                       <div

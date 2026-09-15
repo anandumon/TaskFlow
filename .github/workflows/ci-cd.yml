@@ -9,71 +9,10 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────
-  # Job 1: Build & Verify Backend (Spring Boot + Java 21)
+  # Build & Verify Full-Stack Next.js (Serverless API + Frontend)
   # ─────────────────────────────────────────────────────────────
-  backend-build:
-    name: Build & Verify Backend (Spring Boot)
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: services/backend
-
-    env:
-      SPRING_PROFILES_ACTIVE: ${{ secrets.SPRING_PROFILES_ACTIVE || 'supabase' }}
-      DB_URL: ${{ secrets.DB_URL }}
-      DB_USERNAME: ${{ secrets.DB_USERNAME }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
-      MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-      JWT_SECRET: ${{ secrets.JWT_SECRET || 'taskflow-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-security' }}
-      CORS_ORIGINS: ${{ secrets.CORS_ORIGINS || 'http://localhost:3000' }}
-      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID || secrets.GOOGLE_CLIENT_ID }}
-      TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET || secrets.GOOGLE_CLIENT_SECRET }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Setup Gradle cache
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Build Spring Boot Application
-        run: |
-          if [ -f "pom.xml" ]; then
-            echo "Building with Maven..."
-            mvn clean package -DskipTests --batch-mode
-            mkdir -p build/libs
-            cp target/taskflow-backend.jar build/libs/taskflow-backend.jar || true
-          fi
-          if [ ! -f "build/libs/taskflow-backend.jar" ]; then
-            echo "Building with Gradle..."
-            chmod +x gradlew
-            ./gradlew bootJar -x test --no-daemon
-          fi
-
-      - name: Archive Backend Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: taskflow-backend-jar
-          path: |
-            services/backend/build/libs/taskflow-backend.jar
-            services/backend/target/taskflow-backend.jar
-          retention-days: 7
-
-  # ─────────────────────────────────────────────────────────────
-  # Job 2: Build & Verify Frontend (Next.js 13 + Node.js 20)
-  # ─────────────────────────────────────────────────────────────
-  frontend-build:
-    name: Build & Verify Frontend (Next.js)
+  nextjs-build:
+    name: Build & Verify TaskFlow (Full-Stack Next.js)
     runs-on: ubuntu-latest
 
     defaults:
@@ -81,11 +20,14 @@ jobs:
         working-directory: apps/web
 
     env:
-      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8080' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'taskflow-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-security' }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co' }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+      MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -107,10 +49,10 @@ jobs:
       - name: Build Next.js Web App
         run: npm run build
 
-      - name: Archive Frontend Next Build
+      - name: Archive Next.js Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: taskflow-frontend-build
+          name: taskflow-build
           path: |
             apps/web/.next
             apps/web/public

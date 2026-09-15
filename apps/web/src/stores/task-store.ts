@@ -79,7 +79,7 @@ interface TaskState {
   addNote: (taskId: string, noteText: string) => Promise<void>
   deleteTask: (id: string) => Promise<void>
   dispatchDueAlert: (taskId: string) => Promise<{ success: boolean; recipientEmail: string; dueDate: string }>
-  dispatchDateDueAlerts: (workspaceId: string, date?: string) => Promise<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>
+  dispatchDateDueAlerts: (workspaceId: string, date?: string, email?: string) => Promise<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>
   dispatchUpcomingDueAlerts: (workspaceId: string) => Promise<{ success: boolean; taskCount: number; recipientEmail: string; message: string }>
 }
 
@@ -114,32 +114,68 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   createTask: async (workspaceId: string, taskData: Partial<Task>) => {
-    set({ isLoading: true, error: null })
+    const tempId = `temp-${Date.now()}`
+    const optimisticTask: Task = {
+      id: tempId,
+      workspaceId,
+      title: taskData.title || 'Untitled Task',
+      description: taskData.description || '',
+      status: taskData.status || 'todo',
+      priority: taskData.priority || 'MEDIUM',
+      environment: taskData.environment || 'DEV',
+      dueDate: taskData.dueDate,
+      tag: taskData.tag || 'General',
+      subtasks: taskData.subtasks || '[]',
+      filesChanged: taskData.filesChanged || '[]',
+      order: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...taskData,
+    } as Task
+
+    // Optimistically insert at top of tasks
+    set((state) => ({
+      tasks: [optimisticTask, ...state.tasks],
+    }))
+
     try {
       const res = await apiClient.post<Task>(`/api/v1/workspaces/${workspaceId}/tasks`, taskData)
+      const realTask = res.data
       set((state) => ({
-        tasks: [res.data, ...state.tasks],
-        isLoading: false,
+        tasks: state.tasks.map((t) => (t.id === tempId ? realTask : t)),
       }))
-      return res.data
+      return realTask
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to create task', isLoading: false })
+      // Rollback optimistic task
+      set((state) => ({
+        tasks: state.tasks.filter((t) => t.id !== tempId),
+        error: err?.message || 'Failed to create task',
+      }))
       throw err
     }
   },
 
-  updateTask: async (id: string, updates: Partial<Task>) => {
+  updateTask: async (id: string, updates: Partial<Task>): Promise<Task> => {
+    const prevTasks = get().tasks
+    // Optimistic immediate update
+    set((state) => ({
+      tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t)),
+    }))
+
     try {
       const res = await apiClient.patch<Task>(`/api/v1/tasks/${id}`, updates)
+      const updated = res.data || ({ ...prevTasks.find((t) => t.id === id), ...updates } as Task)
       set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === id ? res.data : t)),
+        tasks: state.tasks.map((t) => (t.id === id ? updated : t)),
       }))
-      return res.data
+      return updated
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to update task' })
+      // Rollback on failure
+      set({ tasks: prevTasks, error: err?.message || 'Failed to update task' })
       throw err
     }
   },
+
 
   updateStatus: async (id: string, newStatus: TaskStatus, newEnv?: TaskEnvironment) => {
     let env = newEnv
@@ -149,34 +185,58 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       env = 'DEV'
     }
 
+    const prevTasks = get().tasks
+    // Optimistic status change in 0ms
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? { ...t, status: newStatus, ...(env ? { environment: env } : {}), updatedAt: new Date().toISOString() }
+          : t
+      ),
+    }))
+
     try {
       const res = await apiClient.patch<Task>(`/api/v1/tasks/${id}`, {
         status: newStatus,
         ...(env ? { environment: env } : {}),
       })
-      set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === id ? res.data : t)),
-      }))
+      if (res.data) {
+        set((state) => ({
+          tasks: state.tasks.map((t) => (t.id === id ? res.data : t)),
+        }))
+      }
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to update task status' })
+      set({ tasks: prevTasks, error: err?.message || 'Failed to update task status' })
       throw err
     }
   },
 
   updateEnvironment: async (id: string, newEnv: TaskEnvironment) => {
+    const prevTasks = get().tasks
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? { ...t, environment: newEnv, ...(newEnv === 'MAIN' ? { status: 'done' } : {}), updatedAt: new Date().toISOString() }
+          : t
+      ),
+    }))
+
     try {
       const res = await apiClient.patch<Task>(`/api/v1/tasks/${id}`, {
         environment: newEnv,
         ...(newEnv === 'MAIN' ? { status: 'done' } : {}),
       })
-      set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === id ? res.data : t)),
-      }))
+      if (res.data) {
+        set((state) => ({
+          tasks: state.tasks.map((t) => (t.id === id ? res.data : t)),
+        }))
+      }
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to update environment' })
+      set({ tasks: prevTasks, error: err?.message || 'Failed to update environment' })
       throw err
     }
   },
+
 
   moveTask: async (workspaceId: string, taskId: string, targetStatus: TaskStatus, targetIndex: number, newEnv?: TaskEnvironment) => {
     const currentTasks = [...get().tasks]
@@ -365,14 +425,19 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   deleteTask: async (id: string) => {
+    const prevTasks = get().tasks
+    // Optimistically remove from state in 0ms
+    set((state) => ({
+      tasks: state.tasks.filter((t) => t.id !== id),
+    }))
+
     try {
       await apiClient.delete(`/api/v1/tasks/${id}`)
-      set((state) => ({
-        tasks: state.tasks.filter((t) => t.id !== id),
-      }))
     } catch (err: any) {
-      set({ error: err?.message || 'Failed to delete task' })
+      // Rollback on failure
+      set({ tasks: prevTasks, error: err?.message || 'Failed to delete task' })
       throw err
     }
   },
+
 }))

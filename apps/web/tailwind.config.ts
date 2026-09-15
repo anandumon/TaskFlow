@@ -5,10 +5,15 @@ const config: Config = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/features/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
+      transitionTimingFunction: {
+        spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        smooth: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -86,13 +91,21 @@ const config: Config = {
           from: { transform: 'translateY(100%)' },
           to: { transform: 'translateY(0)' },
         },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translate3d(0, 10px, 0)' },
+          to: { opacity: '1', transform: 'translate3d(0, 0, 0)' },
+        },
         'fade-in': {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
         'scale-in': {
-          from: { opacity: '0', transform: 'scale(0.95)' },
+          from: { opacity: '0', transform: 'scale(0.96)' },
           to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'pulse-subtle': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.88', transform: 'scale(1.02)' },
         },
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
@@ -103,15 +116,18 @@ const config: Config = {
         },
       },
       animation: {
-        'slide-in-right': 'slide-in-from-right 0.2s ease-out',
-        'slide-in-left': 'slide-in-from-left 0.2s ease-out',
-        'slide-in-top': 'slide-in-from-top 0.2s ease-out',
-        'slide-in-bottom': 'slide-in-from-bottom 0.2s ease-out',
+        'slide-in-right': 'slide-in-from-right 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-left': 'slide-in-from-left 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-top': 'slide-in-from-top 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-bottom': 'slide-in-from-bottom 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-up': 'slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         'fade-in': 'fade-in 0.2s ease-out',
-        'scale-in': 'scale-in 0.15s ease-out',
+        'scale-in': 'scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+        'pulse-subtle': 'pulse-subtle 3s ease-in-out infinite',
         shimmer: 'shimmer 2s infinite',
         'marquee-ltr': 'marquee-ltr 22s linear infinite',
       },
+
     },
   },
   plugins: [],

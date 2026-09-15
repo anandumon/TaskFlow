@@ -7,7 +7,10 @@ export interface AuthUser {
   id: string
   email: string
   fullName?: string
+  firstName?: string
+  lastName?: string
 }
+
 
 function isUuid(val?: string | null): boolean {
   if (!val || typeof val !== 'string') return false

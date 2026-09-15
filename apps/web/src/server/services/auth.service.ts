@@ -236,11 +236,12 @@ export async function verifyEmailOtp(input: {
   // Confirm email in Supabase auth and generate tokens
   let sessionData: any = null
   try {
-    const { data: suUser } = await supabaseAdmin.auth.admin.getUserByEmail(email)
+    const { data: suUser } = await (supabaseAdmin.auth.admin as any).getUserByEmail(email)
     if (suUser?.user) {
       await supabaseAdmin.auth.admin.updateUserById(suUser.user.id, { email_confirm: true })
     }
   } catch (err) {
+
     console.warn('[auth.service] supabase confirm error:', err)
   }
 
@@ -387,13 +388,14 @@ export async function performPasswordReset(token: string, newPassword: string): 
 
   // 2. Update password in Supabase Auth
   try {
-    const { data: suUser } = await supabaseAdmin.auth.admin.getUserByEmail(email)
+    const { data: suUser } = await (supabaseAdmin.auth.admin as any).getUserByEmail(email)
     if (suUser?.user) {
       await supabaseAdmin.auth.admin.updateUserById(suUser.user.id, {
         password: newPassword,
       })
     }
   } catch (err) {
+
     console.warn('[auth.service] Non-fatal supabase password update:', err)
   }
 

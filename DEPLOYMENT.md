@@ -1,96 +1,54 @@
 # TaskFlow Deployment & CI/CD Guide
 
-This document explains how to configure GitHub Actions, deploy the **Backend (Spring Boot)** and **Frontend (Next.js)**, and configure environment variables for production.
+TaskFlow is a high-performance, modern full-stack project and task management platform built with **Next.js 13 (App Router)**, **TypeScript**, **Tailwind CSS**, and **Supabase PostgreSQL**.
+
+The application self-hosts all REST API endpoints as Next.js Serverless Route Handlers (`apps/web/src/app/api/v1/...`), requiring **zero standalone backend servers, zero Docker containers, and zero Java runtimes**.
 
 ---
 
-## 1. GitHub Actions CI/CD Pipeline
+## 1. Quick Deploy to Vercel (100% Free, Zero Server Maintenance)
 
-The pipeline is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
-Whenever you push to `main` or create a pull request, GitHub Actions automatically:
-- Compiles the **Spring Boot backend** with Java 21 Temurin and packages `taskflow-backend.jar`.
-- Verifies TypeScript and builds the **Next.js web app** with Node.js 20.
-- Archives build artifacts for release.
+1. Go to [Vercel](https://vercel.com) and import your repository: `https://github.com/anandumon/TaskFlow`.
+2. Configure Project Settings:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `apps/web`
+3. Configure **Environment Variables** in Vercel:
 
-### Adding Secrets in GitHub
-1. Go to your repository on GitHub: `https://github.com/anandumon/TaskFlow`
-2. Click **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret** and add:
+| Variable | Value / Description | Required |
+| :--- | :--- | :---: |
+| `DATABASE_URL` | PostgreSQL connection pooler string (e.g. `postgresql://postgres.[REF]:[PW]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres`) | **Yes** |
+| `JWT_SECRET` | 256-bit string for signing authentication JWT tokens | **Yes** |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL (`https://dxrcfczdfstnymbeicmq.supabase.co`) | **Yes** |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon public API key | **Yes** |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth Client ID | Optional |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | Optional |
+| `MAIL_USERNAME` | Gmail address for OTP and task due alert dispatches | Optional |
+| `MAIL_PASSWORD` | 16-character Gmail App Password | Optional |
 
-#### Backend Secrets
-| Secret | Description |
-| :--- | :--- |
-| `DB_URL` | Supabase Pooler JDBC URL (e.g. `jdbc:postgresql://aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0`) |
-| `DB_USERNAME` | Supabase database user (e.g. `postgres.dxrcfczdfstnymbeicmq`) |
-| `DB_PASSWORD` | Supabase database password |
-| `SPRING_PROFILES_ACTIVE` | Set to `supabase` |
-| `JWT_SECRET` | 256-bit string for signing JWT tokens |
-| `CORS_ORIGINS` | Comma-separated frontend domains (e.g. `https://taskflow.vercel.app,http://localhost:3000`) |
-| `MAIL_USERNAME` | Gmail address for sending alerts & invitations |
-| `MAIL_PASSWORD` | 16-character Gmail App Password |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
-| `TASKFLOW_CALENDAR_GOOGLE_CLIENT_ID` | *(Optional)* Google Calendar Client ID |
-| `TASKFLOW_CALENDAR_GOOGLE_CLIENT_SECRET` | *(Optional)* Google Calendar Client Secret |
-
-#### Frontend Secrets
-| Secret | Description |
-| :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | Public URL of your deployed backend (e.g. `https://taskflow-api.onrender.com` or `http://localhost:8080`) |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL (`https://dxrcfczdfstnymbeicmq.supabase.co`) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon public API key |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth Client ID for sign-in & calendar buttons |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
+4. Click **Deploy**. Vercel will deploy the complete full-stack web application in under 1 minute.
 
 ---
 
-## 2. Deploying Full-Stack Next.js (Vercel — 100% Free Forever, Zero Backend Servers Needed!)
+## 2. GitHub Actions CI/CD
 
-The entire TaskFlow application (frontend + REST APIs) is now fully native in **Next.js** using Serverless Route Handlers (`apps/web/src/app/api/v1/...`). You do **not** need to deploy any separate Java or Docker container!
-
-1. Go to [Vercel](https://vercel.com) and open your project (or import `anandumon/TaskFlow`).
-2. Set **Root Directory** to: `apps/web`.
-3. In **Environment Variables**, add:
-   - `DATABASE_URL`: Your Supabase Pooler PostgreSQL URL
-   - `NEXT_PUBLIC_SUPABASE_URL`: `https://YOUR_PROJECT_REF.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anon public key
-   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`: Your Google OAuth Client ID
-   - `GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret
-   - `NEXT_PUBLIC_API_URL`: *(Leave empty! The app self-hosts its own API routes at `/api/v1` on the same domain)*
-4. Click **Deploy**. Vercel will deploy your complete full-stack web application in under 1 minute!
+The automated test and build pipeline is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
+Whenever code is pushed to `main` or a pull request is opened, GitHub Actions:
+1. Validates TypeScript types across the entire codebase (`tsc --noEmit`).
+2. Compiles an optimized production build of the Next.js application.
+3. Generates and stores deployment-ready artifacts.
 
 ---
 
-## 3. Deploying the Backend (Render / Railway / Docker)
+## 3. Google OAuth & Calendar Configuration
 
-### Option A: Render (Free Web Service)
-1. Go to [Render](https://render.com) → **New Web Service**.
-2. Connect your repository: `anandumon/TaskFlow`.
-3. Configure:
-   - **Root Directory**: `services/backend`
-   - **Environment**: `Java` (or Docker)
-   - **Build Command**: `./gradlew bootJar -x test`
-   - **Start Command**: `java -jar build/libs/taskflow-backend.jar`
-4. Add the environment variables from the Backend table above.
-
-### Option B: Railway
-1. Go to [Railway](https://railway.app) → **New Project from GitHub**.
-2. Select `services/backend` as root directory.
-3. Railway automatically detects Gradle and starts Spring Boot.
-
----
-
-## 4. Google Cloud Console Configuration
-
-To allow login and calendar sync in production:
+To allow Google One-Click Sign-in and Google Calendar sync:
 1. Open [Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials).
-2. Click your OAuth 2.0 Client ID.
-3. Add your production redirect URIs under **Authorized redirect URIs**:
-   - `https://your-frontend-domain.com/app/calendar/callback`
-   - `https://your-frontend-domain.com/auth/callback`
-   - `https://your-frontend-domain.com/callback`
-   - `http://localhost:3000/app/calendar/callback` (for local dev)
-4. Under **Authorized JavaScript origins**:
-   - `https://your-frontend-domain.com`
-   - `http://localhost:3000`
-5. Ensure **Google Calendar API** is enabled under **APIs & Services** → **Library**.
+2. Edit your OAuth 2.0 Client ID:
+   - **Authorized JavaScript origins**:
+     - `https://your-domain.vercel.app`
+     - `http://localhost:3000`
+   - **Authorized redirect URIs**:
+     - `https://your-domain.vercel.app/app/calendar/callback`
+     - `https://your-domain.vercel.app/callback`
+     - `http://localhost:3000/app/calendar/callback` (for local development)
+3. Ensure the **Google Calendar API** is enabled under **APIs & Services** → **Library**.
