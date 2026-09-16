@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db/postgres'
 import crypto from 'crypto'
+import { decryptCalendarToken, encryptCalendarToken } from '../utils/calendar-crypto'
 
 export interface CalendarConnectionDto {
   id: string
@@ -90,8 +91,8 @@ export async function saveDirectTokens(
   )
 
   const id = existing?.id || crypto.randomUUID()
-  const tokenBuf = Buffer.from(accessToken, 'utf-8')
-  const refreshBuf = refreshToken ? Buffer.from(refreshToken, 'utf-8') : null
+  const tokenBuf = encryptCalendarToken(accessToken)
+  const refreshBuf = refreshToken ? encryptCalendarToken(refreshToken) : null
 
   if (existing) {
     await query(
@@ -247,7 +248,7 @@ export async function listExternalCalendars(connectionId: string): Promise<Exter
 
     const conn = await queryOne(`SELECT access_token FROM calendar_connection WHERE id = $1`, [connectionId])
     if (conn?.access_token) {
-      const tokenStr = Buffer.isBuffer(conn.access_token) ? conn.access_token.toString('utf-8') : String(conn.access_token)
+      const tokenStr = decryptCalendarToken(conn.access_token)
       await fetchAndStoreGoogleCalendars(connectionId, tokenStr)
       const newlyStored = await query(`SELECT * FROM external_calendar WHERE connection_id = $1`, [connectionId])
       return newlyStored.map((s: any) => ({

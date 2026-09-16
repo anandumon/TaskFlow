@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
-import { updateOrganization } from '@/server/services/organization.service'
+import { updateOrganization, deleteOrganization } from '@/server/services/organization.service'
 import { queryOne } from '@/server/db/postgres'
 
 export async function GET(
@@ -49,4 +49,21 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   return PATCH(req, { params })
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authUser = await getAuthUser(req)
+    if (!authUser) {
+      return apiError('Authentication required', 401, 'UNAUTHORIZED')
+    }
+    await deleteOrganization(params.id)
+    return apiSuccess({ success: true, message: 'Organization deleted successfully' })
+  } catch (err: any) {
+    console.error('[API DELETE /organizations/:id] Error:', err)
+    return apiError(err.message || 'Failed to delete organization', 500)
+  }
 }

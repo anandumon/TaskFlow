@@ -24,16 +24,22 @@ import {
   Camera,
   Loader2,
   Palette,
+  FolderKanban,
+  AlertTriangle,
+  Pencil,
+  ExternalLink,
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
 import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
+import { useProjectStore, Project } from '@/stores/project-store'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const { user, updateUserAvatar } = useAuthStore()
-  const { currentOrg, setCurrentOrg, updateOrg } = useOrgStore()
-  const { currentWorkspace, setCurrentWorkspace, teams } = useWorkspaceStore()
+  const { organizations, currentOrg, setCurrentOrg, updateOrg, deleteOrganization, fetchOrganizations } = useOrgStore()
+  const { workspaces, currentWorkspace, setCurrentWorkspace, updateWorkspace, deleteWorkspace, fetchWorkspaces, teams } = useWorkspaceStore()
+  const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading: isProjectsLoading } = useProjectStore()
 
   const isOrgAdminOrOwner =
     !currentOrg ||
@@ -42,7 +48,7 @@ export default function SettingsPage() {
     (currentOrg as any)?.role === 'ADMIN' ||
     (currentOrg as any)?.isOwner === true
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'teams' | 'security' | 'calendar'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'projects' | 'teams' | 'security' | 'calendar'>('profile')
 
   useEffect(() => {
     const tab = searchParams.get('tab')
@@ -52,8 +58,31 @@ export default function SettingsPage() {
       setActiveTab('appearance')
     } else if (tab === 'security' && isOrgAdminOrOwner) {
       setActiveTab('security')
+    } else if (tab === 'projects') {
+      setActiveTab('projects')
+    } else if (tab === 'organization' || tab === 'org') {
+      setActiveTab('organization')
+    } else if (tab === 'workspace') {
+      setActiveTab('workspace')
     }
   }, [searchParams, isOrgAdminOrOwner])
+
+  useEffect(() => {
+    fetchOrganizations()
+  }, [])
+
+  useEffect(() => {
+    if (currentOrg?.id) {
+      fetchWorkspaces(currentOrg.id)
+    }
+  }, [currentOrg?.id])
+
+  useEffect(() => {
+    if (currentWorkspace?.id) {
+      setSelectedWsId(currentWorkspace.id)
+      loadProjects(currentWorkspace.id)
+    }
+  }, [currentWorkspace?.id])
 
   useEffect(() => {
     if (!isOrgAdminOrOwner && activeTab === 'security') {
@@ -81,10 +110,34 @@ export default function SettingsPage() {
   const [orgName, setOrgName] = useState(currentOrg?.name || '')
   const [orgLogoPreview, setOrgLogoPreview] = useState<string | null>(currentOrg?.logoUrl || null)
   const [isUploadingOrgLogo, setIsUploadingOrgLogo] = useState(false)
+  const [isDeleteOrgModalOpen, setIsDeleteOrgModalOpen] = useState(false)
+  const [deleteOrgConfirmText, setDeleteOrgConfirmText] = useState('')
+  const [isDeletingOrg, setIsDeletingOrg] = useState(false)
 
   // Workspace state
   const [wsName, setWsName] = useState(currentWorkspace?.name || '')
   const [wsColor, setWsColor] = useState(currentWorkspace?.color || '#6366F1')
+  const [isDeleteWsModalOpen, setIsDeleteWsModalOpen] = useState(false)
+  const [isDeletingWs, setIsDeletingWs] = useState(false)
+
+  // Projects state
+  const [selectedWsId, setSelectedWsId] = useState<string>('')
+  const [isCreateProjModalOpen, setIsCreateProjModalOpen] = useState(false)
+  const [newProjName, setNewProjName] = useState('')
+  const [newProjDesc, setNewProjDesc] = useState('')
+  const [newProjStatus, setNewProjStatus] = useState<Project['status']>('ACTIVE')
+  const [newProjColor, setNewProjColor] = useState('#3B82F6')
+  const [isCreatingProj, setIsCreatingProj] = useState(false)
+
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editProjName, setEditProjName] = useState('')
+  const [editProjDesc, setEditProjDesc] = useState('')
+  const [editProjStatus, setEditProjStatus] = useState<Project['status']>('ACTIVE')
+  const [editProjColor, setEditProjColor] = useState('#3B82F6')
+  const [isUpdatingProj, setIsUpdatingProj] = useState(false)
+
+  const [deletingProject, setDeletingProject] = useState<Project | null>(null)
+  const [isDeletingProj, setIsDeletingProj] = useState(false)
 
   // Sync with store when currentOrg or currentWorkspace loads
   React.useEffect(() => {
@@ -254,12 +307,132 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSaveWorkspace = (e: React.FormEvent) => {
+  const handleSaveWorkspace = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (currentWorkspace) {
-      setCurrentWorkspace({ ...currentWorkspace, name: wsName, color: wsColor })
+    if (!wsName.trim()) {
+      showToast('Workspace name cannot be empty')
+      return
     }
-    showToast('Workspace branding updated!')
+    if (currentWorkspace && currentOrg) {
+      try {
+        await updateWorkspace(currentOrg.id, currentWorkspace.id, { name: wsName.trim(), color: wsColor })
+        showToast('Workspace branding updated!')
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to update workspace')
+      }
+    }
+  }
+
+  const handleDeleteOrg = async () => {
+    if (!currentOrg) return
+    if (deleteOrgConfirmText.trim().toLowerCase() !== currentOrg.name.trim().toLowerCase()) {
+      showToast('Organization name does not match confirmation text')
+      return
+    }
+    try {
+      setIsDeletingOrg(true)
+      await deleteOrganization(currentOrg.id)
+      showToast('Organization deleted successfully')
+      setIsDeleteOrgModalOpen(false)
+      setDeleteOrgConfirmText('')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete organization')
+    } finally {
+      setIsDeletingOrg(false)
+    }
+  }
+
+  const handleDeleteWorkspace = async () => {
+    if (!currentWorkspace || !currentOrg) return
+    if (workspaces.length <= 1) {
+      showToast('Cannot delete the only workspace in this organization')
+      return
+    }
+    try {
+      setIsDeletingWs(true)
+      await deleteWorkspace(currentOrg.id, currentWorkspace.id)
+      showToast('Workspace deleted successfully')
+      setIsDeleteWsModalOpen(false)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete workspace')
+    } finally {
+      setIsDeletingWs(false)
+    }
+  }
+
+  const handleWsSelect = (wsId: string) => {
+    setSelectedWsId(wsId)
+    loadProjects(wsId)
+  }
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const targetWsId = selectedWsId || currentWorkspace?.id
+    if (!targetWsId) {
+      showToast('Please select a workspace first')
+      return
+    }
+    if (!newProjName.trim()) {
+      showToast('Project name is required')
+      return
+    }
+    try {
+      setIsCreatingProj(true)
+      await createProject(targetWsId, {
+        name: newProjName.trim(),
+        description: newProjDesc.trim(),
+        status: newProjStatus,
+        color: newProjColor,
+      })
+      showToast(`Project '${newProjName.trim()}' created!`)
+      setNewProjName('')
+      setNewProjDesc('')
+      setNewProjStatus('ACTIVE')
+      setNewProjColor('#3B82F6')
+      setIsCreateProjModalOpen(false)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create project')
+    } finally {
+      setIsCreatingProj(false)
+    }
+  }
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProject) return
+    if (!editProjName.trim()) {
+      showToast('Project name is required')
+      return
+    }
+    try {
+      setIsUpdatingProj(true)
+      await updateProject(editingProject.id, {
+        name: editProjName.trim(),
+        description: editProjDesc.trim(),
+        status: editProjStatus,
+        color: editProjColor,
+      })
+      showToast(`Project '${editProjName.trim()}' updated!`)
+      setEditingProject(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update project')
+    } finally {
+      setIsUpdatingProj(false)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!deletingProject) return
+    try {
+      setIsDeletingProj(true)
+      await deleteProject(deletingProject.id)
+      showToast(`Project '${deletingProject.name}' deleted!`)
+      setDeletingProject(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete project')
+    } finally {
+      setIsDeletingProj(false)
+    }
   }
 
   const handleCreateTeam = (e: React.FormEvent) => {
@@ -284,6 +457,7 @@ export default function SettingsPage() {
     { id: 'appearance', label: 'Appearance & Theme', icon: Palette },
     { id: 'organization', label: 'Organization', icon: Building2 },
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
+    { id: 'projects', label: 'Projects', icon: FolderKanban },
     { id: 'teams', label: 'Teams & Units', icon: Users },
     { id: 'calendar', label: 'Calendar & Sync', icon: Calendar },
     ...(isOrgAdminOrOwner ? [{ id: 'security', label: 'Security & Keys', icon: ShieldCheck }] : []),
@@ -559,6 +733,82 @@ export default function SettingsPage() {
               <span>Save Organization</span>
             </button>
           </div>
+
+          {/* Organizations Directory & Switcher */}
+          {organizations.length > 0 && (
+            <div className="space-y-3 pt-6 border-t border-border/60">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Organizations</h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Switch between organizations or review your accounts.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {organizations.map((org) => {
+                  const isCurrent = org.id === currentOrg?.id
+                  return (
+                    <div
+                      key={org.id}
+                      onClick={() => !isCurrent && setCurrentOrg(org)}
+                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                        isCurrent
+                          ? 'bg-primary/5 border-primary/40 shadow-sm'
+                          : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {org.logoUrl ? (
+                          <img src={org.logoUrl} alt={org.name} className="w-8 h-8 rounded-xl object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            {org.name?.charAt(0)?.toUpperCase() || 'O'}
+                          </div>
+                        )}
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
+                          Switch
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Danger Zone: Delete Organization */}
+          <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
+            <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Danger Zone</span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-foreground">Delete Organization</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Permanently delete '{currentOrg?.name || 'this organization'}', including all its workspaces, projects, teams, tasks, and data.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteOrgConfirmText('')
+                  setIsDeleteOrgModalOpen(true)
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shrink-0 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Organization</span>
+              </button>
+            </div>
+          </div>
         </form>
       )}
 
@@ -639,7 +889,264 @@ export default function SettingsPage() {
               <span>Save Workspace</span>
             </button>
           </div>
+
+          {/* Workspaces Directory in this Org */}
+          {workspaces.length > 0 && (
+            <div className="space-y-3 pt-6 border-t border-border/60">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Workspaces in {currentOrg?.name || 'Organization'}</h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Switch active workspace or manage your team environments.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {workspaces.map((ws) => {
+                  const isCurrent = ws.id === currentWorkspace?.id
+                  return (
+                    <div
+                      key={ws.id}
+                      onClick={() => !isCurrent && setCurrentWorkspace(ws)}
+                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                        isCurrent
+                          ? 'bg-primary/5 border-primary/40 shadow-sm'
+                          : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs"
+                          style={{ backgroundColor: ws.color || '#6366F1' }}
+                        >
+                          <Briefcase className="w-4 h-4" />
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-foreground truncate">{ws.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate font-mono">/{ws.slug}</p>
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
+                          Switch
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Danger Zone: Delete Workspace */}
+          <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
+            <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Danger Zone</span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-foreground">Delete Workspace</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Permanently remove '{currentWorkspace?.name || 'this workspace'}' along with its projects, tasks, and team assignments.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={workspaces.length <= 1}
+                onClick={() => setIsDeleteWsModalOpen(true)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  workspaces.length <= 1
+                    ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
+                    : 'bg-rose-600 text-white hover:bg-rose-700 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Workspace</span>
+              </button>
+            </div>
+            {workspaces.length <= 1 && (
+              <p className="text-[11px] text-amber-500 font-medium">
+                Note: You cannot delete the only workspace in this organization. Create another workspace first.
+              </p>
+            )}
+          </div>
         </form>
+      )}
+
+      {/* Projects Tab */}
+      {activeTab === 'projects' && (
+        <div className="space-y-6 max-w-4xl animate-fade-in">
+          {/* Header with workspace filter & New Project button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-3xl shadow-sm">
+            <div>
+              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+                <FolderKanban className="w-5 h-5 text-primary" />
+                <span>Projects Directory</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Manage, customize, and maintain projects for your active workspace.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              {workspaces.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted-foreground">Workspace:</span>
+                  <select
+                    value={selectedWsId || currentWorkspace?.id || ''}
+                    onChange={(e) => handleWsSelect(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                  >
+                    {workspaces.map((ws) => (
+                      <option key={ws.id} value={ws.id}>
+                        {ws.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                onClick={() => setIsCreateProjModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Project</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Project Cards */}
+          {isProjectsLoading ? (
+            <div className="py-16 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-xs font-semibold">Loading projects...</span>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="p-12 rounded-3xl border border-dashed border-border text-center space-y-4 bg-card/40">
+              <div className="w-12 h-12 rounded-2xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto">
+                <FolderKanban className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground">No projects found in this workspace</h4>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Get started by creating your first project to organize tasks, sprints, and environments.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsCreateProjModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all inline-flex items-center gap-1.5 shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Project</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {projects.map((proj) => (
+                <div
+                  key={proj.id}
+                  className="p-5 rounded-3xl bg-card/70 backdrop-blur-xl border border-border/80 hover:border-primary/40 transition-all shadow-sm flex flex-col justify-between group"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold shadow-xs shrink-0"
+                          style={{ backgroundColor: proj.color || '#3B82F6' }}
+                        >
+                          <FolderKanban className="w-5 h-5" />
+                        </div>
+                        <div className="truncate">
+                          <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                            {proj.name}
+                          </h4>
+                          <p className="text-[11px] font-mono text-muted-foreground truncate">/{proj.slug}</p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
+                          proj.status === 'COMPLETED'
+                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                            : proj.status === 'REVIEW'
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            : proj.status === 'IN_PROGRESS'
+                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        }`}
+                      >
+                        {proj.status?.replace('_', ' ') || 'ACTIVE'}
+                      </span>
+                    </div>
+
+                    {proj.description ? (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{proj.description}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/60 italic">No description provided</p>
+                    )}
+
+                    {/* Progress & stats */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+                        <span>
+                          Tasks: {proj.completedTasks ?? 0}/{proj.totalTasks ?? 0}
+                        </span>
+                        <span>{proj.progress ?? 0}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${proj.progress ?? 0}%`,
+                            backgroundColor: proj.color || '#3B82F6',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions: Edit & Delete & Open */}
+                  <div className="pt-4 mt-4 border-t border-border/60 flex items-center justify-between">
+                    <a
+                      href={`/app/projects/${proj.id}`}
+                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <span>Open Board</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProject(proj)
+                          setEditProjName(proj.name)
+                          setEditProjDesc(proj.description || '')
+                          setEditProjStatus(proj.status || 'ACTIVE')
+                          setEditProjColor(proj.color || '#3B82F6')
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl border border-border text-foreground hover:bg-muted/80 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingProject(proj)}
+                        className="px-2.5 py-1.5 rounded-xl border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Teams Tab */}
@@ -783,6 +1290,335 @@ export default function SettingsPage() {
       {activeTab === 'calendar' && (
         <div className="max-w-4xl space-y-6">
           <CalendarIntegrationPanel onSuccess={showToast} />
+        </div>
+      )}
+
+      {/* Modal: Create Project */}
+      {isCreateProjModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <FolderKanban className="w-5 h-5 text-primary" /> Create New Project
+              </h3>
+              <button
+                onClick={() => setIsCreateProjModalOpen(false)}
+                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Project Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Website Redesign, Mobile App v2"
+                  value={newProjName}
+                  onChange={(e) => setNewProjName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Description</label>
+                <textarea
+                  placeholder="Summarize project goals, timeline, or scope..."
+                  value={newProjDesc}
+                  onChange={(e) => setNewProjDesc(e.target.value)}
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none shadow-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-foreground">Status</label>
+                  <select
+                    value={newProjStatus}
+                    onChange={(e) => setNewProjStatus(e.target.value as any)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="REVIEW">In Review</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-foreground">Theme Color</label>
+                  <div className="flex items-center gap-2 pt-1">
+                    {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setNewProjColor(c)}
+                        className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
+                          newProjColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateProjModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingProj}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {isCreatingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Create Project</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Project */}
+      {editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-primary" /> Edit Project Details
+              </h3>
+              <button
+                onClick={() => setEditingProject(null)}
+                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProject} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Project Name *</label>
+                <input
+                  type="text"
+                  value={editProjName}
+                  onChange={(e) => setEditProjName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Description</label>
+                <textarea
+                  value={editProjDesc}
+                  onChange={(e) => setEditProjDesc(e.target.value)}
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none shadow-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-foreground">Status</label>
+                  <select
+                    value={editProjStatus}
+                    onChange={(e) => setEditProjStatus(e.target.value as any)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="REVIEW">In Review</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-foreground">Theme Color</label>
+                  <div className="flex items-center gap-2 pt-1">
+                    {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setEditProjColor(c)}
+                        className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
+                          editProjColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingProj}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {isUpdatingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Project Confirmation */}
+      {deletingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Delete Project</h3>
+                <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-foreground">"{deletingProject.name}"</span>? All tasks under this project will be archived/removed.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setDeletingProject(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProj}
+                onClick={handleDeleteProject}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {isDeletingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Delete Project</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Workspace Confirmation */}
+      {isDeleteWsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Delete Workspace</h3>
+                <p className="text-xs text-muted-foreground">Permanent deletion of workspace data.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              Are you sure you want to delete workspace <span className="font-bold text-foreground">"{currentWorkspace?.name}"</span>? All projects, tasks, and teams assigned to this workspace will be deleted.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setIsDeleteWsModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingWs}
+                onClick={handleDeleteWorkspace}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {isDeletingWs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Delete Workspace</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Organization Confirmation */}
+      {isDeleteOrgModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Delete Organization</h3>
+                <p className="text-xs text-muted-foreground">Irreversible account destruction.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              This will permanently delete <span className="font-bold text-foreground">"{currentOrg?.name}"</span>, including all workspaces, projects, tasks, teams, and invites.
+            </p>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                To confirm, type <span className="font-bold text-foreground font-mono select-all">{currentOrg?.name}</span> below:
+              </label>
+              <input
+                type="text"
+                placeholder={currentOrg?.name}
+                value={deleteOrgConfirmText}
+                onChange={(e) => setDeleteOrgConfirmText(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteOrgModalOpen(false)
+                  setDeleteOrgConfirmText('')
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  isDeletingOrg ||
+                  deleteOrgConfirmText.trim().toLowerCase() !== currentOrg?.name?.trim()?.toLowerCase()
+                }
+                onClick={handleDeleteOrg}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isDeletingOrg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Delete Organization</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

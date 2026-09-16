@@ -189,3 +189,36 @@ export async function updateOrganization(
   if (!row) return null
   return mapOrg(row)
 }
+
+export async function deleteOrganization(orgId: string): Promise<boolean> {
+  // Safe cascading cleanup:
+  // 1. Delete tasks in workspaces belonging to this org
+  await query(
+    `DELETE FROM tasks WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    [orgId]
+  )
+  // 2. Delete projects in workspaces belonging to this org
+  await query(
+    `DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    [orgId]
+  )
+  // 3. Delete workspace members in workspaces belonging to this org
+  await query(
+    `DELETE FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    [orgId]
+  )
+  // 4. Delete teams in workspaces belonging to this org
+  await query(
+    `DELETE FROM teams WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    [orgId]
+  )
+  // 5. Delete workspaces
+  await query(`DELETE FROM workspaces WHERE organization_id = $1`, [orgId])
+  // 6. Delete invitations for this org
+  await query(`DELETE FROM invitations WHERE organization_id = $1`, [orgId])
+  // 7. Delete organization members
+  await query(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId])
+  // 8. Delete organization
+  await query(`DELETE FROM organizations WHERE id = $1`, [orgId])
+  return true
+}

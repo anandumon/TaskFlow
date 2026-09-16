@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
 import { query, queryOne } from '@/server/db/postgres'
+import { decryptCalendarToken } from '@/server/utils/calendar-crypto'
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,13 +14,28 @@ export async function GET(req: NextRequest) {
     const events: any[] = []
 
     // 1. Fetch Google Calendar events if connected
-    const conn = await queryOne(
-      `SELECT * FROM calendar_connections WHERE user_id = $1 AND UPPER(provider) = 'GOOGLE' AND UPPER(status) = 'ACTIVE' LIMIT 1`,
-      [user.id]
-    )
+    let conn: any = null
+    try {
+      conn = await queryOne(
+        `SELECT * FROM calendar_connection WHERE user_id = $1 AND UPPER(provider) = 'GOOGLE' AND UPPER(status) IN ('ACTIVE', 'CONNECTED') LIMIT 1`,
+        [user.id]
+      )
+    } catch {
+      try {
+        conn = await queryOne(
+          `SELECT * FROM calendar_connections WHERE user_id = $1 AND UPPER(provider) = 'GOOGLE' AND UPPER(status) IN ('ACTIVE', 'CONNECTED') LIMIT 1`,
+          [user.id]
+        )
+      } catch {}
+    }
 
     if (conn && conn.access_token) {
       try {
+        const decryptedToken = decryptCalendarToken(conn.access_token)
+        if (!decryptedToken) {
+          throw new Error('Could not decrypt access token')
+        }
+
         const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         const timeMax = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -29,7 +45,7 @@ export async function GET(req: NextRequest) {
           )}&timeMax=${encodeURIComponent(timeMax)}&maxResults=100`,
           {
             headers: {
-              Authorization: `Bearer ${conn.access_token}`,
+              Authorization: `Bearer ${decryptedToken}`,
             },
           }
         )

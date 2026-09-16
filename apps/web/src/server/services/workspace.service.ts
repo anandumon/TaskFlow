@@ -168,3 +168,18 @@ export async function createTeam(
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
   }
 }
+
+export async function deleteWorkspace(workspaceId: string): Promise<boolean> {
+  // Cascading cleanup for workspace:
+  // 1. Delete tasks belonging to this workspace
+  await query(`DELETE FROM tasks WHERE workspace_id = $1`, [workspaceId])
+  // 2. Delete projects belonging to this workspace
+  await query(`DELETE FROM projects WHERE workspace_id = $1`, [workspaceId])
+  // 3. Delete workspace members
+  await query(`DELETE FROM workspace_members WHERE workspace_id = $1`, [workspaceId])
+  // 4. Delete teams
+  await query(`DELETE FROM teams WHERE workspace_id = $1`, [workspaceId])
+  // 5. Delete workspace
+  await query(`DELETE FROM workspaces WHERE id = $1`, [workspaceId])
+  return true
+}

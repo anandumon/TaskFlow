@@ -78,6 +78,7 @@ interface OrgState {
   addMember: (orgId: string, userId: string, roleId?: string) => Promise<OrgMember>
   removeMember: (orgId: string, memberId: string) => Promise<void>
   updateOrg: (orgId: string, data: { name?: string; logoUrl?: string }) => Promise<Organization>
+  deleteOrganization: (orgId: string) => Promise<void>
 }
 
 export const useOrgStore = create<OrgState>((set, get) => ({
@@ -180,5 +181,17 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       currentOrg: state.currentOrg?.id === orgId ? updated : state.currentOrg,
     }))
     return updated
+  },
+
+  deleteOrganization: async (orgId: string) => {
+    await apiClient.delete(`/api/v1/organizations/${orgId}`)
+    set((state) => {
+      const filtered = state.organizations.filter((o) => o.id !== orgId)
+      const nextOrg = state.currentOrg?.id === orgId ? (filtered[0] || null) : state.currentOrg
+      return {
+        organizations: filtered,
+        currentOrg: nextOrg,
+      }
+    })
   },
 }))

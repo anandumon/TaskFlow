@@ -45,6 +45,7 @@ interface WorkspaceState {
   setCurrentWorkspace: (workspace: Workspace | null) => void
   createWorkspace: (orgId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
   updateWorkspace: (orgId: string, workspaceId: string, data: { name?: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
+  deleteWorkspace: (orgId: string, workspaceId: string) => Promise<void>
   fetchTeams: (workspaceId: string) => Promise<Team[]>
   createTeam: (workspaceId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Team>
   fetchMembers: (workspaceId: string) => Promise<WorkspaceMember[]>
@@ -118,6 +119,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return updatedWs
     } catch (err: any) {
       set({ error: err?.message || 'Failed to update workspace', isLoading: false })
+      throw err
+    }
+  },
+
+  deleteWorkspace: async (orgId, workspaceId) => {
+    set({ isLoading: true, error: null })
+    try {
+      await apiClient.delete(`/api/v1/organizations/${orgId}/workspaces/${workspaceId}`)
+      set((state) => {
+        const remaining = state.workspaces.filter((w) => w.id !== workspaceId)
+        const nextWs = state.currentWorkspace?.id === workspaceId ? (remaining[0] || null) : state.currentWorkspace
+        return {
+          workspaces: remaining,
+          currentWorkspace: nextWs,
+          isLoading: false,
+        }
+      })
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to delete workspace', isLoading: false })
       throw err
     }
   },

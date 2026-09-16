@@ -2,18 +2,7 @@ import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
 import { query, queryOne } from '@/server/db/postgres'
-
-function extractTokenString(token: any): string {
-  if (!token) return ''
-  if (Buffer.isBuffer(token)) return token.toString('utf-8')
-  if (typeof token === 'string') {
-    if (token.startsWith('\\x')) {
-      return Buffer.from(token.slice(2), 'hex').toString('utf-8')
-    }
-    return token
-  }
-  return String(token)
-}
+import { decryptCalendarToken } from '@/server/utils/calendar-crypto'
 
 export async function POST(
   req: NextRequest,
@@ -32,7 +21,7 @@ export async function POST(
       return apiError('Calendar connection not found', 404)
     }
 
-    const accessToken = extractTokenString(conn.access_token)
+    const accessToken = decryptCalendarToken(conn.access_token)
     if (!accessToken) {
       return apiError('No access token found for this connection', 400)
     }

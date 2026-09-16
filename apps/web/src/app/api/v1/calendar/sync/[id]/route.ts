@@ -3,24 +3,13 @@ import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
 import { query, queryOne } from '@/server/db/postgres'
 import { sendCalendarSyncNotificationEmail } from '@/server/services/email.service'
+import { decryptCalendarToken, encryptCalendarToken } from '@/server/utils/calendar-crypto'
 
 const GOOGLE_CLIENT_ID =
   process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
   process.env.GOOGLE_CLIENT_ID ||
   '467128497270-r9o4vs5bdk699dtl58qpoij7k86f4j7t.apps.googleusercontent.com'
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
-
-function extractTokenString(token: any): string {
-  if (!token) return ''
-  if (Buffer.isBuffer(token)) return token.toString('utf-8')
-  if (typeof token === 'string') {
-    if (token.startsWith('\\x')) {
-      return Buffer.from(token.slice(2), 'hex').toString('utf-8')
-    }
-    return token
-  }
-  return String(token)
-}
 
 async function refreshGoogleAccessToken(refreshToken: string, connectionId: string): Promise<string | null> {
   try {
@@ -36,9 +25,10 @@ async function refreshGoogleAccessToken(refreshToken: string, connectionId: stri
     })
     const data = await res.json()
     if (res.ok && data.access_token) {
+      const encryptedBuf = encryptCalendarToken(data.access_token)
       await query(
         `UPDATE calendar_connection SET access_token = $1, updated_at = $2 WHERE id = $3`,
-        [Buffer.from(data.access_token, 'utf-8'), new Date(), connectionId]
+        [encryptedBuf, new Date(), connectionId]
       )
       return data.access_token
     }
@@ -67,8 +57,8 @@ export async function POST(
       return apiError('Calendar connection not found', 404)
     }
 
-    let accessToken = extractTokenString(conn.access_token)
-    const refreshToken = extractTokenString(conn.refresh_token)
+    let accessToken = decryptCalendarToken(conn.access_token)
+    const refreshToken = decryptCalendarToken(conn.refresh_token)
 
     // 2. Determine target Google calendar
     const policy = await queryOne(
