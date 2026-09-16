@@ -60,7 +60,7 @@ export async function DELETE(
     if (!authUser) {
       return apiError('Authentication required', 401, 'UNAUTHORIZED')
     }
-    await deleteOrganization(params.id)
+    await deleteOrganization(params.id, authUser.id)
     return apiSuccess({ success: true, message: 'Organization deleted successfully' })
   } catch (err: any) {
     console.error('[API DELETE /organizations/:id] Error:', err)

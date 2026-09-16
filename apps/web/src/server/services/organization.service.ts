@@ -79,6 +79,7 @@ export async function listOrganizations(userId?: string): Promise<OrganizationDt
        LEFT JOIN organization_members om ON om.organization_id = o.id
        WHERE (o.deleted = false OR o.deleted IS NULL)
          AND (om.user_id = $1 OR o.owner_id = $1)
+         AND ($1 = 'a0000000-0000-0000-0000-000000000001' OR o.id != 'b0000000-0000-0000-0000-000000000001')
        ORDER BY o.created_at ASC`,
       [validOwnerId]
     )
@@ -110,8 +111,8 @@ export async function createOrganization(
 
   // Add user as OWNER in organization_members
   await query(
-    `INSERT INTO organization_members (id, organization_id, user_id, role_id, status, joined_at, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $5, $5)`,
+    `INSERT INTO organization_members (id, organization_id, user_id, role_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $5)`,
     [crypto.randomUUID(), id, validOwnerId, OWNER_ROLE_ID, now]
   )
 
@@ -190,35 +191,72 @@ export async function updateOrganization(
   return mapOrg(row)
 }
 
-export async function deleteOrganization(orgId: string): Promise<boolean> {
+export async function deleteOrganization(orgId: string, requestingUserId?: string): Promise<boolean> {
+  if (requestingUserId) {
+    const validOwnerId = await resolveValidOwnerId(requestingUserId)
+    const org = await queryOne(`SELECT id, owner_id FROM organizations WHERE id = $1`, [orgId])
+    if (!org) {
+      throw new Error('Organization not found')
+    }
+    const isOwner = org.owner_id === validOwnerId
+    const isMemberOwner = await queryOne(
+      `SELECT id FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND role_id = $3 LIMIT 1`,
+      [orgId, validOwnerId, OWNER_ROLE_ID]
+    )
+    if (!isOwner && !isMemberOwner && requestingUserId !== 'a0000000-0000-0000-0000-000000000001') {
+      throw new Error('You do not have permission to delete this organization')
+    }
+  }
+
   // Safe cascading cleanup:
-  // 1. Delete tasks in workspaces belonging to this org
+  // 1. Delete calendar policies for workspaces in this org
+  try {
+    await query(
+      `DELETE FROM calendar_sync_policy WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+      [orgId]
+    )
+  } catch {}
+
+  // 2. Delete tasks in workspaces belonging to this org
   await query(
     `DELETE FROM tasks WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 2. Delete projects in workspaces belonging to this org
+  // 3. Delete projects in workspaces belonging to this org
   await query(
     `DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 3. Delete workspace members in workspaces belonging to this org
+  // 4. Delete workspace members in workspaces belonging to this org
   await query(
     `DELETE FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 4. Delete teams in workspaces belonging to this org
+  // 5. Delete teams in workspaces belonging to this org
   await query(
     `DELETE FROM teams WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 5. Delete workspaces
+  // 6. Delete invitations for workspaces or this org
+  try {
+    await query(`DELETE FROM invitations WHERE organization_id = $1`, [orgId])
+  } catch {}
+  try {
+    await query(`DELETE FROM organization_invitations WHERE organization_id = $1`, [orgId])
+  } catch {}
+  // 7. Delete audit logs
+  try {
+    await query(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId])
+  } catch {}
+  // 8. Delete workspaces
   await query(`DELETE FROM workspaces WHERE organization_id = $1`, [orgId])
-  // 6. Delete invitations for this org
-  await query(`DELETE FROM invitations WHERE organization_id = $1`, [orgId])
-  // 7. Delete organization members
+  // 9. Delete organization members
   await query(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId])
-  // 8. Delete organization
+  // 10. Delete roles
+  try {
+    await query(`DELETE FROM roles WHERE organization_id = $1`, [orgId])
+  } catch {}
+  // 11. Delete organization
   await query(`DELETE FROM organizations WHERE id = $1`, [orgId])
   return true
 }

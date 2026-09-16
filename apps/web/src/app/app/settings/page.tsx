@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -98,6 +99,36 @@ export default function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
 
+  // Mounted check for React Portal
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Filter organizations strictly for the logged-in user, never leaking TaskFlow HQ demo to non-admins
+  const visibleOrganizations = useMemo(() => {
+    const unique = new Map<string, typeof organizations[0]>()
+    for (const org of organizations) {
+      if (org.id === 'b0000000-0000-0000-0000-000000000001' && user?.email !== 'admin@taskflow.dev') {
+        continue
+      }
+      if (!unique.has(org.id)) {
+        unique.set(org.id, org)
+      }
+    }
+    return Array.from(unique.values())
+  }, [organizations, user?.email])
+
+  // If user has cached TaskFlow HQ from legacy session, auto-switch to their actual organization
+  useEffect(() => {
+    if (currentOrg?.id === 'b0000000-0000-0000-0000-000000000001' && user?.email !== 'admin@taskflow.dev') {
+      const valid = visibleOrganizations[0] || null
+      if (valid) {
+        setCurrentOrg(valid)
+      }
+    }
+  }, [currentOrg?.id, visibleOrganizations, user?.email, setCurrentOrg])
+
   useEffect(() => {
     if (user?.avatarUrl) {
       setAvatarPreview(user.avatarUrl)
@@ -114,11 +145,33 @@ export default function SettingsPage() {
   const [deleteOrgConfirmText, setDeleteOrgConfirmText] = useState('')
   const [isDeletingOrg, setIsDeletingOrg] = useState(false)
 
+  // Sync org form fields when active organization switches
+  useEffect(() => {
+    if (currentOrg) {
+      setOrgName(currentOrg.name)
+      setOrgLogoPreview(currentOrg.logoUrl || null)
+    } else {
+      setOrgName('')
+      setOrgLogoPreview(null)
+    }
+  }, [currentOrg?.id, currentOrg?.name, currentOrg?.logoUrl])
+
   // Workspace state
   const [wsName, setWsName] = useState(currentWorkspace?.name || '')
   const [wsColor, setWsColor] = useState(currentWorkspace?.color || '#6366F1')
   const [isDeleteWsModalOpen, setIsDeleteWsModalOpen] = useState(false)
   const [isDeletingWs, setIsDeletingWs] = useState(false)
+
+  // Sync workspace form fields when active workspace switches
+  useEffect(() => {
+    if (currentWorkspace) {
+      setWsName(currentWorkspace.name)
+      setWsColor(currentWorkspace.color || '#6366F1')
+    } else {
+      setWsName('')
+      setWsColor('#6366F1')
+    }
+  }, [currentWorkspace?.id, currentWorkspace?.name, currentWorkspace?.color])
 
   // Projects state
   const [selectedWsId, setSelectedWsId] = useState<string>('')
@@ -332,9 +385,9 @@ export default function SettingsPage() {
     try {
       setIsDeletingOrg(true)
       await deleteOrganization(currentOrg.id)
-      showToast('Organization deleted successfully')
       setIsDeleteOrgModalOpen(false)
       setDeleteOrgConfirmText('')
+      showToast('Organization deleted successfully')
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete organization')
     } finally {
@@ -742,7 +795,7 @@ export default function SettingsPage() {
                 <p className="text-[11px] text-muted-foreground mt-0.5">Switch between organizations or review your accounts.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {organizations.map((org) => {
+                {visibleOrganizations.map((org) => {
                   const isCurrent = org.id === currentOrg?.id
                   return (
                     <div
@@ -1294,8 +1347,8 @@ export default function SettingsPage() {
       )}
 
       {/* Modal: Create Project */}
-      {isCreateProjModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      {mounted && isCreateProjModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -1386,12 +1439,13 @@ export default function SettingsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Edit Project */}
-      {editingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      {mounted && editingProject && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -1479,12 +1533,13 @@ export default function SettingsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Delete Project Confirmation */}
-      {deletingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      {mounted && deletingProject && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
@@ -1519,12 +1574,13 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Delete Workspace Confirmation */}
-      {isDeleteWsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      {mounted && isDeleteWsModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
@@ -1559,12 +1615,13 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Delete Organization Confirmation */}
-      {isDeleteOrgModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      {mounted && isDeleteOrgModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
@@ -1619,8 +1676,10 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
 }
+

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
+import { useWorkspaceStore } from './workspace-store'
 
 export interface Organization {
   id: string
@@ -185,13 +186,23 @@ export const useOrgStore = create<OrgState>((set, get) => ({
 
   deleteOrganization: async (orgId: string) => {
     await apiClient.delete(`/api/v1/organizations/${orgId}`)
-    set((state) => {
-      const filtered = state.organizations.filter((o) => o.id !== orgId)
-      const nextOrg = state.currentOrg?.id === orgId ? (filtered[0] || null) : state.currentOrg
-      return {
-        organizations: filtered,
-        currentOrg: nextOrg,
-      }
+    const filtered = get().organizations.filter((o) => o.id !== orgId)
+    const nextOrg = get().currentOrg?.id === orgId ? (filtered[0] || null) : get().currentOrg
+    set({
+      organizations: filtered,
+      currentOrg: nextOrg,
     })
+    if (nextOrg) {
+      useWorkspaceStore.getState().fetchWorkspaces(nextOrg.id).then((wss) => {
+        if (wss && wss.length > 0) {
+          useWorkspaceStore.getState().setCurrentWorkspace(wss[0])
+        } else {
+          useWorkspaceStore.getState().setCurrentWorkspace(null)
+        }
+      })
+    } else {
+      useWorkspaceStore.getState().setCurrentWorkspace(null)
+    }
   },
 }))
+
