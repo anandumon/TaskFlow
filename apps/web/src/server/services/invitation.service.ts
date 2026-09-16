@@ -53,22 +53,32 @@ export async function createInvitation(
   const now = new Date()
   const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000)
 
-  let orgName = 'Organization'
-  if (input.organizationId) {
-    const o = await queryOne(`SELECT name FROM organizations WHERE id = $1`, [input.organizationId])
-    if (o) orgName = o.name
+  let prjName = 'Project'
+  if (input.projectId) {
+    const p = await queryOne(`SELECT name, workspace_id FROM projects WHERE id = $1`, [input.projectId])
+    if (p) {
+      prjName = p.name
+      if (!input.workspaceId && p.workspace_id) {
+        input.workspaceId = p.workspace_id
+      }
+    }
   }
 
   let wsName = 'Workspace'
   if (input.workspaceId) {
-    const w = await queryOne(`SELECT name FROM workspaces WHERE id = $1`, [input.workspaceId])
-    if (w) wsName = w.name
+    const w = await queryOne(`SELECT name, organization_id FROM workspaces WHERE id = $1`, [input.workspaceId])
+    if (w) {
+      wsName = w.name
+      if (!input.organizationId && w.organization_id) {
+        input.organizationId = w.organization_id
+      }
+    }
   }
 
-  let prjName = 'Project'
-  if (input.projectId) {
-    const p = await queryOne(`SELECT name FROM projects WHERE id = $1`, [input.projectId])
-    if (p) prjName = p.name
+  let orgName = 'Organization'
+  if (input.organizationId) {
+    const o = await queryOne(`SELECT name FROM organizations WHERE id = $1`, [input.organizationId])
+    if (o) orgName = o.name
   }
 
   const row = await queryOne(
@@ -148,13 +158,18 @@ export async function getInvitationsForResource(
     const params = [resourceId]
 
     if (scope === 'ORGANIZATION') {
-      sql += ` AND organization_id = $1`
+      sql += ` AND (
+        organization_id = $1 
+        OR workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+        OR project_id IN (SELECT p.id FROM projects p JOIN workspaces w ON p.workspace_id = w.id WHERE w.organization_id = $1)
+      )`
     } else if (scope === 'WORKSPACE') {
       sql += ` AND workspace_id = $1`
     } else if (scope === 'PROJECT') {
       sql += ` AND project_id = $1`
     }
 
+    sql += ` ORDER BY created_at DESC`
     const rows = await query(sql, params)
     return rows.map(mapInvitation)
   } catch (err) {

@@ -253,23 +253,51 @@ export default function TeamsPage() {
         throw new Error('Please select or create a project first before sending an invitation.')
       }
 
-      await apiClient.post(`/api/v1/projects/${targetProjectId}/invitations`, {
+      const res = await apiClient.post<any>(`/api/v1/projects/${targetProjectId}/invitations`, {
         email: cleanEmail,
+        name: inviteName.trim() || undefined,
         role: inviteRole.toUpperCase(),
         roleName: inviteRole,
+        organizationId: currentOrg?.id,
+        workspaceId: currentWorkspace?.id,
       })
 
+      const targetProj = projects.find((p) => p.id === targetProjectId)
+      const newInv = res.data
+
+      // Optimistically add to membersList immediately so it renders instantly
+      setMembersList((prev) => [
+        {
+          id: newInv?.id || `inv-${Date.now()}`,
+          name: inviteName.trim() || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          role: inviteRole,
+          status: 'Pending Invitation',
+          isOwner: false,
+          isInvitation: true,
+          invitationToken: newInv?.token,
+          projectId: targetProjectId,
+          projectName: targetProj?.name || 'Project',
+        },
+        ...prev.filter((m) => m.email?.toLowerCase() !== cleanEmail),
+      ])
+
+      // 1. Reset input fields
       setInviteEmail('')
       setInviteName('')
-      setIsModalOpen(false)
-      setToastMessage(`Invitation sent to ${cleanEmail}!`)
-      setTimeout(() => setToastMessage(null), 3500)
 
-      // Reload real DB data immediately
+      // 2. Close the modal card immediately!
+      setIsModalOpen(false)
+
+      // 3. Show clear success message toast
+      setToastMessage(`✉️ Invitation email sent successfully to ${cleanEmail}!`)
+      setTimeout(() => setToastMessage(null), 4500)
+
+      // 4. Reload full DB data to stay completely synchronized
       await loadData()
     } catch (err: any) {
       setToastMessage(err?.response?.data?.message || err?.message || 'Failed to send invitation')
-      setTimeout(() => setToastMessage(null), 4000)
+      setTimeout(() => setToastMessage(null), 4500)
     } finally {
       setIsSubmitting(false)
     }
@@ -406,8 +434,8 @@ export default function TeamsPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
-          <CheckCircle2 className="w-4 h-4" />
+        <div className="fixed top-6 right-6 z-[100] flex items-center gap-2.5 bg-emerald-600/95 border border-emerald-400/40 text-white px-5 py-3.5 rounded-2xl shadow-2xl animate-fade-in text-xs font-bold tracking-wide">
+          <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
