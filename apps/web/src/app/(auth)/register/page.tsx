@@ -37,6 +37,10 @@ function RegisterContent() {
     const qEmail = searchParams.get('email')
     const qName = searchParams.get('name')
     const qReason = searchParams.get('reason')
+    const qToken = searchParams.get('token') || searchParams.get('invite_token')
+    if (qToken && typeof window !== 'undefined') {
+      localStorage.setItem('tf_invite_token', qToken)
+    }
 
     if (qEmail) {
       // Decode and clean malformed %10 to @
@@ -401,7 +405,16 @@ function RegisterContent() {
           {/* Already have an account */}
           <p className="text-center text-xs text-muted-foreground pt-1">
             Already have an account?{' '}
-            <Link href="/login" className="text-primary font-bold hover:underline">
+            <Link
+              href={
+                searchParams.get('token') || searchParams.get('invite_token')
+                  ? `/login?invite_token=${encodeURIComponent(
+                      (searchParams.get('token') || searchParams.get('invite_token'))!
+                    )}`
+                  : '/login'
+              }
+              className="text-primary font-bold hover:underline"
+            >
               Sign in
             </Link>
           </p>

@@ -33,6 +33,10 @@ function LoginContent() {
     const qVerified = searchParams.get('verified')
     const qGoogleRegistered = searchParams.get('google_registered')
     const qReason = searchParams.get('reason')
+    const qToken = searchParams.get('token') || searchParams.get('invite_token')
+    if (qToken && typeof window !== 'undefined') {
+      localStorage.setItem('tf_invite_token', qToken)
+    }
     if (qEmail) {
       setEmail(qEmail)
     }
@@ -80,9 +84,15 @@ function LoginContent() {
         `/api/v1/auth/check-user?email=${encodeURIComponent(cleanEmail)}`
       )
 
+      const activeInviteToken =
+        searchParams.get('token') ||
+        searchParams.get('invite_token') ||
+        (typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null)
+
       if (!checkRes.data?.exists) {
         // User does not exist -> redirect to signup / register page
-        router.push(`/register?email=${encodeURIComponent(cleanEmail)}&reason=not_found`)
+        const invParam = activeInviteToken ? `&invite_token=${encodeURIComponent(activeInviteToken)}` : ''
+        router.push(`/register?email=${encodeURIComponent(cleanEmail)}&reason=not_found${invParam}`)
         return
       }
 
@@ -90,6 +100,20 @@ function LoginContent() {
         email: cleanEmail,
         password,
       })
+
+      // Check if there is an active invite token to accept immediately
+      if (activeInviteToken) {
+        try {
+          const res = await apiClient.post<any>(`/api/v1/invitations/${activeInviteToken}/accept`, {})
+          if (typeof window !== 'undefined') localStorage.removeItem('tf_invite_token')
+          if (res.data?.projectId) {
+            router.push(`/app/projects/${res.data.projectId}`)
+            return
+          }
+        } catch (invErr) {
+          console.warn('Auto-accept invite on login error:', invErr)
+        }
+      }
 
       // 3. Valid credentials -> take inside
       router.push('/app/home')
@@ -318,7 +342,13 @@ function LoginContent() {
 
             <Link
               id="create-account-btn"
-              href="/register"
+              href={
+                searchParams.get('token') || searchParams.get('invite_token')
+                  ? `/register?invite_token=${encodeURIComponent(
+                      (searchParams.get('token') || searchParams.get('invite_token'))!
+                    )}`
+                  : '/register'
+              }
               className="w-full h-10 rounded-xl border border-primary/35 hover:border-primary/70 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow active:scale-98"
             >
               Create account
@@ -326,7 +356,16 @@ function LoginContent() {
 
             <p className="text-center text-xs text-muted-foreground pt-0.5">
               Don&apos;t have a TaskFlow account?{' '}
-              <Link href="/register" className="text-primary font-bold hover:underline">
+              <Link
+                href={
+                  searchParams.get('token') || searchParams.get('invite_token')
+                    ? `/register?invite_token=${encodeURIComponent(
+                        (searchParams.get('token') || searchParams.get('invite_token'))!
+                      )}`
+                    : '/register'
+                }
+                className="text-primary font-bold hover:underline"
+              >
                 Sign up
               </Link>
             </p>

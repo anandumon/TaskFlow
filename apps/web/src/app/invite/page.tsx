@@ -54,8 +54,11 @@ function InviteContent() {
   const [accepting, setAccepting] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Auth tab: 'register' | 'login'
-  const [authMode, setAuthMode] = useState<'register' | 'login'>('register')
+  const qMode = searchParams.get('mode')
+  // Auth tab: 'login' (default) | 'register'
+  const [authMode, setAuthMode] = useState<'register' | 'login'>(
+    qMode === 'register' ? 'register' : 'login'
+  )
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [authEmail, setAuthEmail] = useState('')
@@ -80,7 +83,7 @@ function InviteContent() {
         localStorage.setItem('tf_auth_mode', authMode === 'register' ? 'signup' : 'signin')
       }
 
-      const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+      const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://task-flow-seven-ochre.vercel.app'
       const mode = authMode === 'register' ? 'signup' : 'signin'
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
@@ -116,6 +119,20 @@ function InviteContent() {
         setInvitation(res.data)
         if (res.data.email) {
           setAuthEmail(res.data.email)
+          if (!qMode) {
+            try {
+              const checkRes = await apiClient.get<{ email: string; exists: boolean }>(
+                `/api/v1/auth/check-user?email=${encodeURIComponent(res.data.email)}`
+              )
+              if (checkRes.data?.exists) {
+                setAuthMode('login')
+              } else {
+                setAuthMode('register')
+              }
+            } catch {
+              setAuthMode('login')
+            }
+          }
         }
       } catch (err: any) {
         setError(
@@ -197,8 +214,25 @@ function InviteContent() {
     setAuthError(null)
 
     try {
-      if (authMode === 'register') {
-        // Register user account
+      if (authMode === 'login') {
+        // Quick verify if account exists to guide user smoothly
+        const checkRes = await apiClient
+          .get<{ email: string; exists: boolean }>(
+            `/api/v1/auth/check-user?email=${encodeURIComponent(authEmail.trim().toLowerCase())}`
+          )
+          .catch(() => ({ data: { exists: true } }))
+
+        if (checkRes.data && !checkRes.data.exists) {
+          setAuthMode('register')
+          setAuthError('No TaskFlow account found for this email. Please choose a password to create your account and join!')
+          setAuthSubmitting(false)
+          return
+        }
+
+        // Login existing user
+        await login(authEmail.trim().toLowerCase(), password)
+      } else {
+        // Register new user account
         await register({
           firstName: firstName.trim() || 'Team',
           lastName: lastName.trim() || 'Member',
@@ -209,11 +243,8 @@ function InviteContent() {
         try {
           await login(authEmail.trim().toLowerCase(), password)
         } catch {
-          // If requires verification or auto login failed, let user sign in
+          // Continue to accept
         }
-      } else {
-        // Login existing user
-        await login(authEmail.trim().toLowerCase(), password)
       }
 
       // Once authenticated, accept invitation immediately
@@ -383,25 +414,31 @@ function InviteContent() {
                 <div className="flex rounded-2xl bg-white/5 p-1 border border-white/10 text-xs">
                   <button
                     type="button"
-                    onClick={() => setAuthMode('register')}
-                    className={`flex-1 py-2 rounded-xl font-bold transition-all text-center ${
-                      authMode === 'register'
-                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                        : 'text-white/60 hover:text-white'
-                    }`}
-                  >
-                    Create Account &amp; Join
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('login')}
-                    className={`flex-1 py-2 rounded-xl font-bold transition-all text-center ${
+                    onClick={() => {
+                      setAuthMode('login')
+                      setAuthError(null)
+                    }}
+                    className={`flex-1 py-2 rounded-xl font-bold transition-all text-center cursor-pointer ${
                       authMode === 'login'
                         ? 'bg-primary text-white shadow-sm shadow-primary/30'
                         : 'text-white/60 hover:text-white'
                     }`}
                   >
                     Sign In to Existing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('register')
+                      setAuthError(null)
+                    }}
+                    className={`flex-1 py-2 rounded-xl font-bold transition-all text-center cursor-pointer ${
+                      authMode === 'register'
+                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
+                        : 'text-white/60 hover:text-white'
+                    }`}
+                  >
+                    Create Account &amp; Join
                   </button>
                 </div>
 
@@ -541,6 +578,36 @@ function InviteContent() {
                       </>
                     )}
                   </button>
+
+                  {authMode === 'login' ? (
+                    <div className="text-center pt-2">
+                      <span className="text-xs text-white/50">Don&apos;t have an account yet? </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('register')
+                          setAuthError(null)
+                        }}
+                        className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                      >
+                        Create an account &rarr;
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-center pt-2">
+                      <span className="text-xs text-white/50">Already have an account? </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('login')
+                          setAuthError(null)
+                        }}
+                        className="text-xs text-primary font-bold hover:underline cursor-pointer"
+                      >
+                        Sign in instead &rarr;
+                      </button>
+                    </div>
+                  )}
                 </form>
               </div>
             )}

@@ -1,15 +1,18 @@
 import { query, queryOne } from '../db/postgres'
 import crypto from 'crypto'
+import { getAppBaseUrl } from '../utils/url'
 
 export interface InvitationDto {
   id: string
   email: string
   organizationId?: string
   organizationName?: string
+  orgName?: string
   workspaceId?: string
   workspaceName?: string
   projectId?: string
   projectName?: string
+  inviterName?: string
   scope: string
   role: string
   token: string
@@ -18,16 +21,18 @@ export interface InvitationDto {
   createdAt: string
 }
 
-function mapInvitation(row: any): InvitationDto {
+function mapInvitation(row: any, inviterName?: string): InvitationDto {
   return {
     id: String(row.id),
     email: row.email,
     organizationId: row.organization_id ? String(row.organization_id) : undefined,
     organizationName: row.organization_name || 'Organization',
+    orgName: row.organization_name || 'Organization',
     workspaceId: row.workspace_id ? String(row.workspace_id) : undefined,
     workspaceName: row.workspace_name || 'Workspace',
     projectId: row.project_id ? String(row.project_id) : undefined,
     projectName: row.project_name || 'Project',
+    inviterName: inviterName || row.inviter_name || 'A team member',
     scope: row.scope || 'ORGANIZATION',
     role: row.role || 'MEMBER',
     token: row.token,
@@ -119,8 +124,8 @@ export async function createInvitation(
   try {
     const inviter = await queryOne(`SELECT first_name, last_name, email FROM users WHERE id = $1`, [creatorId])
     const inviterName = inviter ? `${inviter.first_name || ''} ${inviter.last_name || ''}`.trim() || inviter.email : 'A team member'
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const inviteUrl = `${appUrl}/invitations/accept?token=${token}`
+    const appUrl = getAppBaseUrl()
+    const inviteUrl = `${appUrl}/invite?token=${token}`
 
     const { sendProjectInvitationEmail } = await import('./email.service')
     await sendProjectInvitationEmail(
@@ -145,7 +150,7 @@ export async function getPendingInvitationsForUser(email: string): Promise<Invit
       `SELECT * FROM invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING'`,
       [email.trim()]
     )
-    return rows.map(mapInvitation)
+    return rows.map((r) => mapInvitation(r))
   } catch (err) {
     console.warn('[invitation.service] getPendingInvitationsForUser error:', err)
     return []
@@ -153,9 +158,27 @@ export async function getPendingInvitationsForUser(email: string): Promise<Invit
 }
 
 export async function getInvitationByToken(token: string): Promise<InvitationDto | null> {
-  const row = await queryOne(`SELECT * FROM invitations WHERE token = $1`, [token])
+  const isId = token.length === 36 && token.includes('-')
+  const row = await queryOne(
+    `SELECT i.*, 
+            u.display_name as inviter_display_name, 
+            u.first_name as inviter_first_name, 
+            u.last_name as inviter_last_name, 
+            u.email as inviter_email
+     FROM invitations i
+     LEFT JOIN users u ON i.invited_by = u.id
+     WHERE ${isId ? 'i.id = $1' : 'i.token = $1 OR i.token_hash = $1'}`,
+    [token]
+  )
   if (!row) return null
-  return mapInvitation(row)
+
+  const inviterName =
+    row.inviter_display_name ||
+    `${row.inviter_first_name || ''} ${row.inviter_last_name || ''}`.trim() ||
+    row.inviter_email ||
+    'A team member'
+
+  return mapInvitation(row, inviterName)
 }
 
 export async function getInvitationsForResource(
@@ -180,7 +203,7 @@ export async function getInvitationsForResource(
 
     sql += ` ORDER BY created_at DESC`
     const rows = await query(sql, params)
-    return rows.map(mapInvitation)
+    return rows.map((r) => mapInvitation(r))
   } catch (err) {
     return []
   }
@@ -202,21 +225,49 @@ export async function acceptInvitation(
   await query(`UPDATE invitations SET status = 'ACCEPTED', updated_at = $1 WHERE id = $2`, [now, inv.id])
 
   if (inv.workspace_id) {
-    await query(
-      `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $5)
-       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
-      [crypto.randomUUID(), inv.workspace_id, userId, inv.role || 'MEMBER', now]
-    )
+    try {
+      const existingWm = await queryOne(
+        `SELECT id FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
+        [inv.workspace_id, userId]
+      )
+      if (existingWm) {
+        await query(
+          `UPDATE workspace_members SET role = $1, updated_at = $2 WHERE id = $3`,
+          [inv.role || 'MEMBER', now, existingWm.id]
+        )
+      } else {
+        await query(
+          `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $5)`,
+          [crypto.randomUUID(), inv.workspace_id, userId, inv.role || 'MEMBER', now]
+        )
+      }
+    } catch (wmErr) {
+      console.warn('[invitation.service] workspace_members upsert warning:', wmErr)
+    }
   }
 
   if (inv.organization_id) {
-    await query(
-      `INSERT INTO organization_members (id, organization_id, user_id, role, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $5)
-       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
-      [crypto.randomUUID(), inv.organization_id, userId, inv.role || 'MEMBER', now]
-    )
+    try {
+      const existingOm = await queryOne(
+        `SELECT id FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
+        [inv.organization_id, userId]
+      )
+      if (existingOm) {
+        await query(
+          `UPDATE organization_members SET role = $1, updated_at = $2 WHERE id = $3`,
+          [inv.role || 'MEMBER', now, existingOm.id]
+        )
+      } else {
+        await query(
+          `INSERT INTO organization_members (id, organization_id, user_id, role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $5)`,
+          [crypto.randomUUID(), inv.organization_id, userId, inv.role || 'MEMBER', now]
+        )
+      }
+    } catch (omErr) {
+      console.warn('[invitation.service] organization_members upsert warning:', omErr)
+    }
   }
 
   return mapInvitation({ ...inv, status: 'ACCEPTED' })
