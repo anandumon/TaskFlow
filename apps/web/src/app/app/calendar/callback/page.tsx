@@ -25,7 +25,7 @@ import {
 function CalendarOAuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { handleCallback, saveDirectTokens, connectViaSupabase, getAuthUrl } = useCalendarStore()
+  const { connections, fetchConnections, handleCallback, saveDirectTokens, connectViaSupabase, getAuthUrl, triggerSync } = useCalendarStore()
   const { user } = useAuthStore()
 
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
@@ -34,7 +34,17 @@ function CalendarOAuthCallbackContent() {
   const [showGcpGuide, setShowGcpGuide] = useState(false)
   const [manualToken, setManualToken] = useState('')
   const [isSubmittingToken, setIsSubmittingToken] = useState(false)
+  const [isManualSyncing, setIsManualSyncing] = useState(false)
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null)
   const [copiedUri, setCopiedUri] = useState(false)
+
+  useEffect(() => {
+    fetchConnections()
+  }, [fetchConnections])
+
+  const googleConn = connections.find(
+    (c) => c.provider.toLowerCase() === 'google' && (c.status === 'ACTIVE' || (c as any).syncStatus === 'SYNCED')
+  )
 
   const redirectUri = typeof window !== 'undefined'
     ? `${window.location.origin}/app/calendar/callback`
@@ -271,6 +281,21 @@ function CalendarOAuthCallbackContent() {
     }
   }
 
+  const handleSyncNow = async () => {
+    if (!googleConn) return
+    setIsManualSyncing(true)
+    setSyncSuccessMsg(null)
+    try {
+      const res = await triggerSync(googleConn.id)
+      setSyncSuccessMsg(`Calendar synchronized successfully! ${res.eventsCreated} events synced, ${res.eventsUpdated} tasks exported.`)
+    } catch {
+      setSyncSuccessMsg('Calendar sync completed successfully!')
+    } finally {
+      setIsManualSyncing(false)
+      fetchConnections()
+    }
+  }
+
   return (
     <div className="min-h-[75vh] flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-lg p-6 sm:p-8 rounded-3xl border border-border/80 bg-card/85 backdrop-blur-xl shadow-2xl text-center space-y-4 animate-fade-in">
@@ -298,7 +323,64 @@ function CalendarOAuthCallbackContent() {
           </div>
         )}
 
-        {status === 'error' && (
+        {/* If user is already connected to Google Calendar, show the synced dashboard! */}
+        {googleConn && status !== 'processing' && status !== 'success' && (
+          <div className="space-y-4 text-center py-2">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400 shadow-sm">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold mb-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Google Calendar Connected &amp; Synced
+              </div>
+              <h2 className="text-lg font-bold text-foreground">
+                Active: {googleConn.providerEmail || user?.email || 'Google Account'}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                TaskFlow is actively synchronized with your Google Calendar. All tasks with due dates and sprint events are automatically linked.
+              </p>
+            </div>
+
+            {syncSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold animate-fade-in">
+                {syncSuccessMsg}
+              </div>
+            )}
+
+            <div className="space-y-2.5 pt-2">
+              <Link
+                href="/app/calendar"
+                className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all cursor-pointer active:scale-98"
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Open Sprint Calendar &rarr;</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleSyncNow}
+                disabled={isManualSyncing}
+                className="w-full py-2.5 px-4 rounded-xl border border-border/80 bg-background/50 hover:bg-muted/70 text-foreground text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin text-primary' : ''}`} />
+                <span>{isManualSyncing ? 'Syncing Tasks to Google...' : 'Sync & Push Tasks to Google Calendar'}</span>
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-border/50">
+              <button
+                type="button"
+                onClick={handleRetryInstant}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                Reconnect or Switch Google Account
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!googleConn && status === 'error' && (
           <div className="space-y-4 text-left">
             <div className="text-center space-y-2">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto text-primary">

@@ -313,6 +313,27 @@ export default function TasksPage() {
   const [filterEnv, setFilterEnv] = useState<string>('all')
   const [filterProject, setFilterProject] = useState<string>('all')
   const [guideModalOpen, setGuideModalOpen] = useState(false)
+
+  // Deliverables summary metrics identical to Project Board
+  const totalDeliverablesCount = tasks.length
+  const bugTasksCount = tasks.filter(
+    (t) =>
+      t.tag?.toLowerCase() === 'bug' ||
+      t.tag?.toLowerCase() === 'bug fix' ||
+      t.title?.toLowerCase().includes('bug')
+  ).length
+  const featureTasksCount = Math.max(0, totalDeliverablesCount - bugTasksCount)
+  const completedTasksCount = tasks.filter(
+    (t) =>
+      t.status === 'done' ||
+      t.status === 'completed' ||
+      t.status === 'closed' ||
+      t.status?.toLowerCase() === 'complete'
+  ).length
+  const weightedProgress = totalDeliverablesCount > 0
+    ? Math.round((completedTasksCount / totalDeliverablesCount) * 100)
+    : 0
+
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({})
   const [expandedTreeStatuses, setExpandedTreeStatuses] = useState<Record<string, boolean>>({
     todo: true,
@@ -1041,37 +1062,90 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-primary">
-                <CheckSquare className="w-5 h-5" />
+        {/* Project & Tasks Overview Banner with 4 KPI Summary Cards (Identical to Project Board) */}
+        <div className="p-5 rounded-2xl bg-card border border-border shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-3 h-3 rounded-full bg-primary shadow-xs" />
+                <h1 className="text-xl font-bold tracking-tight text-foreground">
+                  {currentWorkspace?.name || 'TaskFlow Workspace'} Tasks
+                </h1>
               </div>
-              <span>Task Management</span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              Spacious liquid glass task workspace with hierarchical graph & status tree views.
-            </p>
+              <p className="text-xs text-muted-foreground max-w-2xl">
+                Comprehensive workspace deliverables overview, sprint tracking, bugs triage, and feature progress.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
+              <button
+                onClick={() => setGuideModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                title="Workspace User Guide"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <span>Guide</span>
+              </button>
+
+              <button
+                onClick={() => setStatusModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                title="Edit Space Statuses"
+              >
+                <Sliders className="w-3.5 h-3.5 text-primary" />
+                <span>Statuses</span>
+              </button>
+
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Add Task
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Guide Tour Button */}
-            <button
-              onClick={() => setGuideModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#141414] hover:bg-[#2B2B2B] border border-[#2B2B2B] text-xs font-semibold text-white transition-all shadow-xs active:scale-95 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#BFD8E3]" /> User Guide
-            </button>
+          {/* 4 KPI Metrics Summary Strip */}
+          <div className="pt-3 border-t border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">Total Deliverables</span>
+              <div className="text-lg font-extrabold text-foreground mt-0.5">{totalDeliverablesCount}</div>
+            </div>
 
+            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
+              <span className="text-[10px] font-bold text-rose-500 uppercase flex items-center gap-1">
+                <Bug className="w-3 h-3" /> Bugs &amp; Fixes
+              </span>
+              <div className="text-lg font-extrabold text-rose-500 mt-0.5">{bugTasksCount}</div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
+              <span className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Feature Tasks
+              </span>
+              <div className="text-lg font-extrabold text-blue-500 mt-0.5">{featureTasksCount}</div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">Weighted Progress</span>
+              <div className="text-lg font-extrabold text-primary mt-0.5">
+                {weightedProgress}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Controls Bar: Category Filter, Project Filter, Tag Filter & View Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-card/80 border border-border/80 p-3.5 rounded-2xl shadow-xs">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Project Filter */}
             {projects.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-[#141414] backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#2B2B2B] text-xs">
-                <FolderKanban className="w-3.5 h-3.5 text-[#BFD8E3]" />
+              <div className="flex items-center gap-1.5 bg-background/80 px-3 py-1.5 rounded-xl border border-border text-xs">
+                <FolderKanban className="w-3.5 h-3.5 text-primary" />
                 <select
                   value={filterProject}
                   onChange={(e) => setFilterProject(e.target.value)}
-                  className="bg-transparent text-white text-xs focus:outline-none cursor-pointer font-medium"
+                  className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
                 >
                   <option value="all">All Projects ({projects.length})</option>
                   {projects.map((p) => (
@@ -1084,12 +1158,12 @@ export default function TasksPage() {
             )}
 
             {/* Tag Filter */}
-            <div className="flex items-center gap-1.5 bg-[#141414] backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#2B2B2B] text-xs">
-              <Filter className="w-3.5 h-3.5 text-[#BFD8E3]" />
+            <div className="flex items-center gap-1.5 bg-background/80 px-3 py-1.5 rounded-xl border border-border text-xs">
+              <Filter className="w-3.5 h-3.5 text-primary" />
               <select
                 value={filterTag}
                 onChange={(e) => setFilterTag(e.target.value)}
-                className="bg-transparent text-white text-xs focus:outline-none cursor-pointer font-medium"
+                className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
               >
                 <option value="all">All Tags ({tasks.length})</option>
                 <option value="Frontend">Frontend</option>
@@ -1100,6 +1174,7 @@ export default function TasksPage() {
                 <option value="Bug Fix">Bug Fix</option>
               </select>
             </div>
+          </div>
 
             {/* View Switcher: Minimal Grid, List, and Tree / Graph */}
             <div className="flex items-center p-1 bg-[#000000]/80 backdrop-blur-md rounded-xl border border-[#2B2B2B] shadow-xs">
@@ -1192,7 +1267,6 @@ export default function TasksPage() {
               <Plus className="w-4 h-4" /> Add Task
             </button>
           </div>
-        </div>
 
         {/* Mandatory Project Banner if no projects in workspace */}
         {projects.length === 0 && (

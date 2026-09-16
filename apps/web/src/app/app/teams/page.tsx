@@ -63,7 +63,32 @@ export default function TeamsPage() {
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const [membersList, setMembersList] = useState<MemberItem[]>([])
+  const [membersList, setMembersList] = useState<MemberItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('taskflow_cached_teams_members')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
+      } catch {}
+    }
+    const currentUser = useAuthStore.getState().user
+    if (currentUser) {
+      return [
+        {
+          id: currentUser.id || 'owner',
+          name: currentUser.displayName || `${currentUser.firstName || 'Owner'} ${currentUser.lastName || ''}`.trim() || 'User',
+          email: currentUser.email || '',
+          avatarUrl: currentUser.avatarUrl,
+          role: 'Owner',
+          status: 'Active',
+          isOwner: true,
+        },
+      ]
+    }
+    return []
+  })
   const [pendingForMe, setPendingForMe] = useState<any[]>([])
 
   // Ensure organization and workspace are loaded if user enters page directly
@@ -76,6 +101,19 @@ export default function TeamsPage() {
       })
     }
   }, [currentOrg, fetchOrganizations, fetchWorkspaces])
+
+  // Sync current user's avatar into the members list immediately if updated
+  useEffect(() => {
+    if (user?.avatarUrl) {
+      setMembersList((prev) =>
+        prev.map((m) =>
+          m.email?.toLowerCase() === user.email?.toLowerCase() || m.isOwner
+            ? { ...m, avatarUrl: user.avatarUrl, name: user.displayName || m.name }
+            : m
+        )
+      )
+    }
+  }, [user?.avatarUrl, user?.displayName, user?.email])
 
   // Load workspace projects
   useEffect(() => {
@@ -90,16 +128,23 @@ export default function TeamsPage() {
     }
   }, [projects, selectedProjectId])
 
-  // Fetch real persistent members and invitations from DB
+  // Fetch real persistent members and invitations from DB with instant caching
   const loadData = useCallback(async () => {
-    if (!currentOrg?.id) return
+    let targetOrgId = currentOrg?.id
+    if (!targetOrgId) {
+      const orgs = await fetchOrganizations()
+      if (orgs && orgs.length > 0) {
+        targetOrgId = orgs[0].id
+      }
+    }
+    if (!targetOrgId) return
 
     setIsLoadingMembers(true)
     try {
-      // 1. Fetch DB members
+      // 1. Fetch DB members, invitations, and pending in parallel
       const [membersRes, invsRes, pendingMeRes] = await Promise.allSettled([
-        apiClient.get<any[]>(`/api/v1/organizations/${currentOrg.id}/members`),
-        apiClient.get<any[]>(`/api/v1/organizations/${currentOrg.id}/invitations`),
+        apiClient.get<any[]>(`/api/v1/organizations/${targetOrgId}/members`),
+        apiClient.get<any[]>(`/api/v1/organizations/${targetOrgId}/invitations`),
         apiClient.get<any[]>('/api/v1/invitations/pending-for-me'),
       ])
 
@@ -202,6 +247,11 @@ export default function TeamsPage() {
       })
 
       setMembersList(combined)
+      if (typeof window !== 'undefined' && combined.length > 0) {
+        try {
+          sessionStorage.setItem('taskflow_cached_teams_members', JSON.stringify(combined))
+        } catch {}
+      }
     } catch {
       // ignore
     } finally {

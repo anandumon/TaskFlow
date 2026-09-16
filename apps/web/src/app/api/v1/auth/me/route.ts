@@ -54,17 +54,33 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { firstName, lastName, displayName, avatarUrl } = body
 
-    await queryOne(
-      `UPDATE users 
-       SET first_name = COALESCE($1, first_name),
-           last_name = COALESCE($2, last_name),
-           display_name = COALESCE($3, display_name),
-           avatar_url = COALESCE($4, avatar_url),
-           updated_at = NOW()
-       WHERE id = $5
-       RETURNING id, email, first_name, last_name, display_name, avatar_url`,
-      [firstName ?? null, lastName ?? null, displayName ?? null, avatarUrl ?? null, authUser.id]
-    )
+    const hasAvatar = Object.prototype.hasOwnProperty.call(body, 'avatarUrl')
+    const cleanAvatar = avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '' ? avatarUrl.trim() : null
+
+    if (hasAvatar) {
+      await queryOne(
+        `UPDATE users 
+         SET first_name = COALESCE($1, first_name),
+             last_name = COALESCE($2, last_name),
+             display_name = COALESCE($3, display_name),
+             avatar_url = $4,
+             updated_at = NOW()
+         WHERE id = $5
+         RETURNING id, email, first_name, last_name, display_name, avatar_url`,
+        [firstName ?? null, lastName ?? null, displayName ?? null, cleanAvatar, authUser.id]
+      )
+    } else {
+      await queryOne(
+        `UPDATE users 
+         SET first_name = COALESCE($1, first_name),
+             last_name = COALESCE($2, last_name),
+             display_name = COALESCE($3, display_name),
+             updated_at = NOW()
+         WHERE id = $4
+         RETURNING id, email, first_name, last_name, display_name, avatar_url`,
+        [firstName ?? null, lastName ?? null, displayName ?? null, authUser.id]
+      )
+    }
 
     const updated = await queryOne(
       `SELECT id, email, first_name, last_name, display_name, avatar_url, status, email_verified FROM users WHERE id = $1`,

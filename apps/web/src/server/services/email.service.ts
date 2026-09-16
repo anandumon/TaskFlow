@@ -477,6 +477,7 @@ export async function sendCalendarSyncNotificationEmail(
   recipientName: string,
   calendarEmail: string,
   eventCount: number,
+  tasksExported = 0,
   calendarUrl = 'http://localhost:3000/app/calendar'
 ): Promise<boolean> {
   const safeRecipient = escapeHtml(recipientName || 'there')
@@ -515,7 +516,8 @@ export async function sendCalendarSyncNotificationEmail(
     </div>
     <div class="card">
       <div class="card-row"><span>Calendar Account:</span><strong>${safeCalendar}</strong></div>
-      <div class="card-row"><span>Events Synced:</span><strong style="color: #38bdf8;">${eventCount}</strong></div>
+      <div class="card-row"><span>Google Events Synced:</span><strong style="color: #38bdf8;">${eventCount}</strong></div>
+      <div class="card-row"><span>TaskFlow Tasks Added to Google:</span><strong style="color: #818cf8;">${tasksExported}</strong></div>
       <div class="card-row"><span>Status:</span><strong style="color: #34d399;">Active &amp; Connected</strong></div>
     </div>
     <div style="text-align: center; margin: 28px 0;">
@@ -530,7 +532,7 @@ export async function sendCalendarSyncNotificationEmail(
     await transporter.sendMail({
       from: `"TaskFlow Calendar" <${MAIL_USERNAME}>`,
       to: recipientEmail,
-      subject: `📅 Google Calendar Connected: ${eventCount} Events Synced`,
+      subject: `📅 Google Calendar Connected: ${eventCount} Events Synced${tasksExported > 0 ? `, ${tasksExported} Tasks Added` : ''}`,
       html,
     })
     console.log(`✔ [EMAIL] Calendar sync email sent to: ${recipientEmail}`)

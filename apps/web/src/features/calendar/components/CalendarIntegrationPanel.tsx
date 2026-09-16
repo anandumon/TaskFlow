@@ -280,94 +280,14 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
                 </button>
               </div>
             ) : (
-              <div className="space-y-2">
-                <button
-                  onClick={handleConnectGoogleViaSupabase}
-                  disabled={isConnectingGoogle}
-                  className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>{isConnectingGoogle ? 'Connecting...' : 'Connect Google Calendar (Instant)'}</span>
-                </button>
-
-                <div className="pt-1 border-t border-border/40">
-                  <button
-                    type="button"
-                    onClick={() => setShowDirectSetup(!showDirectSetup)}
-                    className="w-full flex items-center justify-between text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 cursor-pointer"
-                  >
-                    <span>Google Cloud Console Setup & Direct OAuth</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showDirectSetup ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {showDirectSetup && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-background/80 border border-border/60 space-y-2 text-[10px] text-muted-foreground animate-fade-in">
-                      <p className="leading-tight">
-                        Register redirect URI in Google Cloud Console:
-                      </p>
-                      <div className="flex items-center gap-1 bg-muted/60 px-2 py-1 rounded-lg border border-border/70 font-mono text-[9px] text-foreground select-all">
-                        <span className="truncate flex-1">
-                          {typeof window !== 'undefined' ? `${window.location.origin}/app/calendar/callback` : 'http://localhost:3000/app/calendar/callback'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleCopyUri}
-                          className="shrink-0 p-1 hover:bg-background rounded text-foreground transition-colors cursor-pointer"
-                          title="Copy URI"
-                        >
-                          {copiedUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                        <a
-                          href="https://console.cloud.google.com/apis/credentials"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary hover:underline font-semibold"
-                        >
-                          Credentials Console ↗
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => handleConnect('google')}
-                          className="font-semibold text-foreground hover:underline cursor-pointer"
-                        >
-                          Direct OAuth Connect
-                        </button>
-                      </div>
-
-                      <div className="pt-1 border-t border-border/40">
-                        <button
-                          type="button"
-                          onClick={() => setShowDirectTokenForm(!showDirectTokenForm)}
-                          className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                        >
-                          {showDirectTokenForm ? 'Hide Token Input' : 'Or connect with Access Token'}
-                        </button>
-
-                        {showDirectTokenForm && (
-                          <form onSubmit={handleSaveDirectToken} className="mt-1.5 space-y-1.5 animate-fade-in">
-                            <input
-                              type="password"
-                              value={directAccessToken}
-                              onChange={(e) => setDirectAccessToken(e.target.value)}
-                              placeholder="Google access token (ya29...)"
-                              className="w-full px-2 py-1 rounded-lg bg-background border border-border text-[11px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                            />
-                            <button
-                              type="submit"
-                              disabled={isSubmittingDirectToken || !directAccessToken.trim()}
-                              className="w-full py-1 rounded-lg bg-primary text-primary-foreground text-[10px] font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              {isSubmittingDirectToken ? 'Linking...' : 'Connect Access Token'}
-                            </button>
-                          </form>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <button
+                onClick={handleConnectGoogleViaSupabase}
+                disabled={isConnectingGoogle}
+                className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>{isConnectingGoogle ? 'Connecting...' : 'Connect Google Calendar (Instant)'}</span>
+              </button>
             )}
           </div>
         </div>
@@ -387,90 +307,30 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
                 <div>
                   <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
                     Microsoft Outlook
-                    {microsoftConn && (
-                      <span className="text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                        Connected
-                      </span>
-                    )}
+                    <span className="text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/30">
+                      Coming Soon
+                    </span>
                   </h3>
                   <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">
-                    {microsoftConn?.providerEmail ? microsoftConn.providerEmail : 'Personal, Work & School 365'}
+                    Personal, Work &amp; School 365
                   </p>
                 </div>
               </div>
             </div>
 
-            {microsoftConn ? (
-              <div className="mt-2.5 pt-2.5 border-t border-border/50 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-muted-foreground text-[11px]">
-                  <span>Status:</span>
-                  <span className="text-foreground font-medium flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                    {microsoftConn.status || 'ACTIVE'}
-                  </span>
-                </div>
-                {microsoftConn.lastSyncAt && (
-                  <div className="flex items-center justify-between text-muted-foreground text-[11px]">
-                    <span>Last Synced:</span>
-                    <span className="text-foreground font-medium">
-                      {new Date(microsoftConn.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                )}
-                {calendars[microsoftConn.id] && calendars[microsoftConn.id].length > 0 && (
-                  <div className="pt-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                      Target Calendar
-                    </label>
-                    <select
-                      className="w-full bg-background border border-border/80 rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      value={policy?.externalCalendarId || ''}
-                      onChange={(e) => updatePolicy({ externalCalendarId: e.target.value })}
-                    >
-                      {calendars[microsoftConn.id].map((cal) => (
-                        <option key={cal.id} value={cal.id}>
-                          {cal.name} {cal.isPrimary ? '(Primary)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                Connect Outlook or Microsoft 365 business calendar with delta query sync and Teams meeting links.
-              </p>
-            )}
+            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+              Connect Outlook or Microsoft 365 business calendar with delta query sync and Teams meeting links.
+            </p>
           </div>
 
-          <div className="mt-3.5 pt-2.5 border-t border-border/50 flex items-center gap-2">
-            {microsoftConn ? (
-              <>
-                <button
-                  onClick={() => handleManualSync(microsoftConn)}
-                  disabled={syncingId === microsoftConn.id}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-500 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncingId === microsoftConn.id ? 'animate-spin' : ''}`} />
-                  <span>{syncingId === microsoftConn.id ? 'Syncing...' : 'Sync Now'}</span>
-                </button>
-                <button
-                  onClick={() => handleDisconnect(microsoftConn)}
-                  className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                  title="Disconnect Microsoft Outlook"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => handleConnect('microsoft')}
-                className="w-full inline-flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-md shadow-cyan-500/20 transition-all cursor-pointer active:scale-95"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Connect Microsoft Outlook</span>
-              </button>
-            )}
+          <div className="mt-3.5 pt-2.5 border-t border-border/50">
+            <button
+              disabled
+              className="w-full inline-flex items-center justify-center gap-2 bg-muted/60 text-muted-foreground border border-border/70 px-3.5 py-2.5 rounded-xl text-xs font-semibold cursor-not-allowed opacity-75"
+            >
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>Microsoft Outlook Coming Soon</span>
+            </button>
           </div>
         </div>
       </div>

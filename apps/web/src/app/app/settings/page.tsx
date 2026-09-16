@@ -114,23 +114,61 @@ export default function SettingsPage() {
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('File size must be under 2MB')
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Avatar image must be under 5MB')
       return
     }
     const reader = new FileReader()
     reader.onload = async (event) => {
-      const dataUrl = event.target?.result as string
-      setAvatarPreview(dataUrl)
-      try {
-        setIsUploadingAvatar(true)
-        await updateUserAvatar(dataUrl)
-        showToast('Profile avatar uploaded successfully!')
-      } catch (err: any) {
-        showToast(err?.message || 'Failed to update avatar')
-      } finally {
-        setIsUploadingAvatar(false)
+      const rawDataUrl = event.target?.result as string
+      // Auto-compress high-res uploads to an optimal 600px square for instant load and DB storage
+      const img = new Image()
+      img.onload = async () => {
+        let finalDataUrl = rawDataUrl
+        const maxDim = 600
+        if (img.width > maxDim || img.height > maxDim) {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+          if (width > height) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          } else {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height)
+            finalDataUrl = canvas.toDataURL('image/jpeg', 0.88)
+          }
+        }
+        setAvatarPreview(finalDataUrl)
+        try {
+          setIsUploadingAvatar(true)
+          await updateUserAvatar(finalDataUrl)
+          showToast('Profile avatar uploaded and saved to database!')
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to update avatar')
+        } finally {
+          setIsUploadingAvatar(false)
+        }
       }
+      img.onerror = async () => {
+        setAvatarPreview(rawDataUrl)
+        try {
+          setIsUploadingAvatar(true)
+          await updateUserAvatar(rawDataUrl)
+          showToast('Profile avatar uploaded and saved!')
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to update avatar')
+        } finally {
+          setIsUploadingAvatar(false)
+        }
+      }
+      img.src = rawDataUrl
     }
     reader.readAsDataURL(file)
   }
@@ -140,7 +178,7 @@ export default function SettingsPage() {
       setIsUploadingAvatar(true)
       await updateUserAvatar('')
       setAvatarPreview(null)
-      showToast('Profile avatar removed')
+      showToast('Profile avatar removed from profile and database')
     } catch (err: any) {
       showToast('Failed to remove avatar')
     } finally {
@@ -151,8 +189,8 @@ export default function SettingsPage() {
   const handleOrgLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !currentOrg) return
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Logo file size must be under 2MB')
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size must be under 5MB')
       return
     }
     const reader = new FileReader()
@@ -176,10 +214,12 @@ export default function SettingsPage() {
     e.preventDefault()
     try {
       const { apiClient } = await import('@/lib/api-client')
+      const targetAvatar = avatarPreview !== undefined ? avatarPreview : (user?.avatarUrl || null)
       await apiClient.patch('/api/v1/auth/me', {
         firstName,
         lastName,
         displayName: `${firstName} ${lastName}`.trim(),
+        avatarUrl: targetAvatar,
       })
       useAuthStore.setState((state) => ({
         user: state.user
@@ -188,10 +228,11 @@ export default function SettingsPage() {
               firstName,
               lastName,
               displayName: `${firstName} ${lastName}`.trim(),
+              avatarUrl: targetAvatar || undefined,
             }
           : null,
       }))
-      showToast('Profile settings saved successfully!')
+      showToast('Profile settings and avatar saved successfully!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to update profile')
     }
@@ -314,7 +355,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-sm font-bold text-foreground">Profile Avatar & Bio</h3>
               <p className="text-xs text-muted-foreground">Personalize your identity across boards, sprint calendar, and member views.</p>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex flex-wrap items-center gap-2 mt-2">
                 <label
                   htmlFor="avatar-upload-input"
                   className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-xs font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
@@ -333,6 +374,9 @@ export default function SettingsPage() {
                     <span>Remove</span>
                   </button>
                 )}
+                <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-md border border-border/40">
+                  Max 5MB (JPG, PNG, WebP)
+                </span>
               </div>
             </div>
           </div>

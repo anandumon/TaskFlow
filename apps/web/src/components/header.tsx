@@ -66,6 +66,107 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
     return null
   }, [pathname, projects])
 
+  // Real-time task due date alerts: Overdue, 0 days left (today), 1, 2, 3 days left
+  const taskDueAlerts = useMemo(() => {
+    const alerts: {
+      id: string
+      taskId: string
+      title: string
+      type: 'overdue' | 'today' | 'day1' | 'day2' | 'day3'
+      badgeText: string
+      badgeClass: string
+      description: string
+      daysDiff: number
+    }[] = []
+
+    const now = new Date()
+    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+
+    tasks.forEach((t) => {
+      if (
+        t.status === 'done' ||
+        t.status === 'completed' ||
+        t.status === 'closed' ||
+        t.status?.toLowerCase() === 'complete'
+      ) return
+
+      if (!t.dueDate) return
+
+      let taskTime: number | null = null
+      if (t.dueDate === 'Today') {
+        taskTime = todayDateOnly
+      } else {
+        const parsed = new Date(t.dueDate)
+        if (!isNaN(parsed.getTime())) {
+          taskTime = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime()
+        }
+      }
+
+      if (taskTime === null) return
+
+      const diffDays = Math.round((taskTime - todayDateOnly) / (1000 * 60 * 60 * 24))
+
+      if (diffDays < 0) {
+        alerts.push({
+          id: `due-${t.id}`,
+          taskId: t.id,
+          title: t.title,
+          type: 'overdue',
+          badgeText: `Past Due (${Math.abs(diffDays)}d ago)`,
+          badgeClass: 'bg-rose-500/15 text-rose-500 border border-rose-500/30',
+          description: `Task past due date by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'}. Immediate action recommended.`,
+          daysDiff: diffDays,
+        })
+      } else if (diffDays === 0) {
+        alerts.push({
+          id: `due-${t.id}`,
+          taskId: t.id,
+          title: t.title,
+          type: 'today',
+          badgeText: '0 Days Left (Due Today)',
+          badgeClass: 'bg-amber-500/15 text-amber-500 border border-amber-500/30',
+          description: 'Task is due today! Complete deliverable before end of sprint.',
+          daysDiff: 0,
+        })
+      } else if (diffDays === 1) {
+        alerts.push({
+          id: `due-${t.id}`,
+          taskId: t.id,
+          title: t.title,
+          type: 'day1',
+          badgeText: '1 Day Left (Due Tomorrow)',
+          badgeClass: 'bg-orange-500/15 text-orange-400 border border-orange-500/30',
+          description: 'Due tomorrow! High priority deadline upcoming.',
+          daysDiff: 1,
+        })
+      } else if (diffDays === 2) {
+        alerts.push({
+          id: `due-${t.id}`,
+          taskId: t.id,
+          title: t.title,
+          type: 'day2',
+          badgeText: '2 Days Left',
+          badgeClass: 'bg-blue-500/15 text-blue-400 border border-blue-500/30',
+          description: 'Due in 2 days. Keep sprint velocity on track.',
+          daysDiff: 2,
+        })
+      } else if (diffDays === 3) {
+        alerts.push({
+          id: `due-${t.id}`,
+          taskId: t.id,
+          title: t.title,
+          type: 'day3',
+          badgeText: '3 Days Left',
+          badgeClass: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30',
+          description: 'Due in 3 days. Milestone deliverable upcoming.',
+          daysDiff: 3,
+        })
+      }
+    })
+
+    return alerts.sort((a, b) => a.daysDiff - b.daysDiff)
+  }, [tasks])
+
   const fetchPendingInvitations = useCallback(async () => {
     if (!user) return
     try {
@@ -252,12 +353,12 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
               title="Notifications"
             >
               <Bell className="w-4 h-4" />
-              {pendingInvitations.length > 0 ? (
+              {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)) > 0 ? (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center shadow-md animate-pulse">
-                  {pendingInvitations.length}
+                  {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)}
                 </span>
               ) : (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary/70 ring-2 ring-background" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-muted-foreground/30" />
               )}
             </button>
 
@@ -265,10 +366,10 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
               <div className="absolute right-0 top-full mt-2 w-88 max-w-[90vw] sm:w-96 bg-popover border border-border rounded-2xl shadow-2xl z-50 p-4 animate-scale-in space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-border">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-foreground">Notifications & Alerts</span>
-                    {pendingInvitations.length > 0 && (
+                    <span className="text-xs font-bold text-foreground">Notifications &amp; Alerts</span>
+                    {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)) > 0 && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
-                        {pendingInvitations.length} new
+                        {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)} active
                       </span>
                     )}
                   </div>
@@ -328,7 +429,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                               ) : (
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                               )}
-                              Accept & Join
+                              Accept &amp; Join
                             </button>
                             <button
                               onClick={() => handleDeclineInvite(inv)}
@@ -343,40 +444,53 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                     </div>
                   )}
 
-                  {!clearedNotifications ? (
-                    <>
-                      <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/15 text-xs flex gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                          <Clock className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-foreground text-[11px]">Due Date Alert: Due Today</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            Milestones scheduled in your isolated database.
-                          </div>
-                        </div>
+                  {/* Task Due Date Alerts Section (Overdue, 0, 1, 2, 3 days left) */}
+                  {!clearedNotifications && taskDueAlerts.length > 0 && (
+                    <div className="space-y-2 pb-2">
+                      <div className="text-[11px] font-bold text-foreground flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-primary">
+                          <Clock className="w-3.5 h-3.5" /> Task Due Date Alerts ({taskDueAlerts.length})
+                        </span>
+                        <Link
+                          href="/app/tasks"
+                          onClick={() => setNotificationsOpen(false)}
+                          className="text-[10px] text-muted-foreground hover:text-primary transition-colors font-medium"
+                        >
+                          View all &rarr;
+                        </Link>
                       </div>
 
-                      <div className="p-2.5 rounded-xl bg-accent/40 text-xs flex gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                          <Sparkles className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-foreground text-[11px]">Clean Slate Ready</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                            All project &amp; task updates are saved directly to your isolated database.
-                          </div>
-                        </div>
+                      <div className="space-y-1.5">
+                        {taskDueAlerts.map((alert) => (
+                          <Link
+                            key={alert.id}
+                            href={`/app/tasks/${alert.taskId}`}
+                            onClick={() => setNotificationsOpen(false)}
+                            className="p-2.5 rounded-xl bg-card border border-border/70 hover:border-primary/40 hover:bg-accent/40 block text-xs space-y-1 transition-all group shadow-xs"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-foreground group-hover:text-primary transition-colors truncate max-w-[200px]">
+                                {alert.title}
+                              </span>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${alert.badgeClass}`}>
+                                {alert.badgeText}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground leading-snug">
+                              {alert.description}
+                            </p>
+                          </Link>
+                        ))}
                       </div>
-                    </>
-                  ) : (
-                    pendingInvitations.length === 0 && (
-                      <div className="p-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1.5">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-500/80" />
-                        <span className="font-bold text-foreground">All caught up!</span>
-                        <span className="text-[11px]">No unread alerts or notifications.</span>
-                      </div>
-                    )
+                    </div>
+                  )}
+
+                  {((clearedNotifications || taskDueAlerts.length === 0) && pendingInvitations.length === 0) && (
+                    <div className="p-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500/80" />
+                      <span className="font-bold text-foreground">All caught up!</span>
+                      <span className="text-[11px]">No active due date alerts or pending invitations.</span>
+                    </div>
                   )}
                 </div>
               </div>
