@@ -24,6 +24,7 @@ export interface ExternalCalendar {
   isPrimary: boolean
   canRead: boolean
   canWrite: boolean
+  externalCalendarId?: string
 }
 
 export interface CalendarSyncPolicy {
@@ -31,6 +32,7 @@ export interface CalendarSyncPolicy {
   workspaceId?: string
   calendarConnectionId?: string
   externalCalendarId?: string
+  targetCalendarId?: string
   syncTasks: boolean
   syncProjects: boolean
   syncDeadlines: boolean
@@ -87,6 +89,8 @@ interface CalendarState {
   fetchPolicy: (workspaceId?: string) => Promise<CalendarSyncPolicy>
   updatePolicy: (policy: Partial<CalendarSyncPolicy>) => Promise<CalendarSyncPolicy>
   triggerSync: (connectionId: string) => Promise<CalendarSyncResult>
+  createDedicatedCalendar: (connectionId: string, name?: string) => Promise<ExternalCalendar>
+  clearCalendarEvents: (connectionId: string) => Promise<{ deletedCount: number; message: string }>
   disconnect: (connectionId: string) => Promise<void>
   fetchUnifiedEvents: (workspaceId?: string, start?: string, end?: string) => Promise<CalendarUnifiedEvent[]>
 }
@@ -280,6 +284,32 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       return res.data
     } catch (err: any) {
       set({ error: err.message || 'Sync failed', isSyncing: false })
+      throw err
+    }
+  },
+
+  createDedicatedCalendar: async (connectionId: string, name = 'TaskFlow') => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await apiClient.post<ExternalCalendar>(`/api/v1/calendar/connections/${connectionId}/create-calendar`, { name })
+      await get().fetchCalendars(connectionId)
+      await get().fetchPolicy()
+      set({ isLoading: false })
+      return res.data
+    } catch (err: any) {
+      set({ error: err.message || 'Failed to create dedicated calendar', isLoading: false })
+      throw err
+    }
+  },
+
+  clearCalendarEvents: async (connectionId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await apiClient.post<{ deletedCount: number; message: string }>(`/api/v1/calendar/connections/${connectionId}/clear-events`, {})
+      set({ isLoading: false })
+      return res.data
+    } catch (err: any) {
+      set({ error: err.message || 'Failed to clear calendar events', isLoading: false })
       throw err
     }
   },

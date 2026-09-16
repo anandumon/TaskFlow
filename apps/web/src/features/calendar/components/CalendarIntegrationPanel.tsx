@@ -17,7 +17,10 @@ import {
   ShieldCheck,
   Check,
   ChevronDown,
-  Copy
+  ChevronUp,
+  Copy,
+  Plus,
+  HelpCircle
 } from 'lucide-react'
 import { useCalendarStore, CalendarConnection } from '@/stores/calendar-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -37,8 +40,11 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
     isSyncing,
     error,
     fetchConnections,
+    fetchCalendars,
     getAuthUrl,
     connectWithPopup,
+    createDedicatedCalendar,
+    clearCalendarEvents,
     connectViaSupabase,
     saveDirectTokens,
     fetchPolicy,
@@ -51,6 +57,9 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
   const [copiedUri, setCopiedUri] = useState(false)
   const [showDirectSetup, setShowDirectSetup] = useState(false)
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false)
+  const [isCreatingCal, setIsCreatingCal] = useState(false)
+  const [isClearingEvents, setIsClearingEvents] = useState(false)
+  const [showGCalHelp, setShowGCalHelp] = useState(false)
   const [directAccessToken, setDirectAccessToken] = useState('')
   const [isSubmittingDirectToken, setIsSubmittingDirectToken] = useState(false)
   const [showDirectTokenForm, setShowDirectTokenForm] = useState(false)
@@ -123,6 +132,31 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
     } catch (err: any) {
       notify(`Connection error: ${err.message || 'Error'}`)
       setIsConnectingGoogle(false)
+    }
+  }
+
+  const handleCreateDedicatedCalendar = async (connId: string) => {
+    setIsCreatingCal(true)
+    try {
+      const newCal = await createDedicatedCalendar(connId, 'TaskFlow')
+      notify(`Created dedicated "${newCal.name}" calendar in Google! Your college and personal calendars remain untouched.`)
+    } catch (err: any) {
+      notify(`Failed to create calendar: ${err.message || 'Error'}`)
+    } finally {
+      setIsCreatingCal(false)
+    }
+  }
+
+  const handleClearTaskFlowEvents = async (connId: string) => {
+    if (!confirm('Clear all tasks previously synced by TaskFlow from this Google Calendar?')) return
+    setIsClearingEvents(true)
+    try {
+      const res = await clearCalendarEvents(connId)
+      notify(res.message || `Cleared ${res.deletedCount} TaskFlow events.`)
+    } catch (err: any) {
+      notify(`Failed to clear events: ${err.message || 'Error'}`)
+    } finally {
+      setIsClearingEvents(false)
     }
   }
 
@@ -247,24 +281,125 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
                     </span>
                   </div>
                 )}
-                {calendars[googleConn.id] && calendars[googleConn.id].length > 0 && (
-                  <div className="pt-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                      Target Calendar
-                    </label>
-                    <select
-                      className="w-full bg-background border border-border/80 rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      value={policy?.externalCalendarId || 'primary'}
-                      onChange={(e) => updatePolicy({ externalCalendarId: e.target.value })}
-                    >
-                      {calendars[googleConn.id].map((cal) => (
-                        <option key={cal.id} value={cal.id}>
-                          {cal.name} {cal.isPrimary ? '(Primary)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {calendars[googleConn.id] && calendars[googleConn.id].length > 0 && (() => {
+                  const rawList = calendars[googleConn.id]
+                  const sortedList = [...rawList].sort((a, b) => {
+                    const aIsTf = a.name.toLowerCase().includes('taskflow')
+                    const bIsTf = b.name.toLowerCase().includes('taskflow')
+                    if (aIsTf && !bIsTf) return -1
+                    if (!aIsTf && bIsTf) return 1
+                    if (a.isPrimary && !b.isPrimary) return -1
+                    if (!a.isPrimary && b.isPrimary) return 1
+                    return a.name.localeCompare(b.name)
+                  })
+
+                  const hasDedicated = sortedList.some(c => c.name.toLowerCase().includes('taskflow'))
+                  const currentTarget =
+                    policy?.externalCalendarId ||
+                    policy?.targetCalendarId ||
+                    (sortedList.find(c => c.isPrimary)?.externalCalendarId ||
+                      sortedList.find(c => c.isPrimary)?.id ||
+                      sortedList[0]?.externalCalendarId ||
+                      sortedList[0]?.id ||
+                      'primary')
+
+                  return (
+                    <div className="pt-2 border-t border-border/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                          Target Google Calendar
+                        </label>
+                        {!hasDedicated && (
+                          <button
+                            type="button"
+                            onClick={() => handleCreateDedicatedCalendar(googleConn.id)}
+                            disabled={isCreatingCal}
+                            className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{isCreatingCal ? 'Creating...' : '+ New "TaskFlow" Calendar'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        className="w-full bg-background/80 border border-border/80 rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                        value={currentTarget}
+                        onChange={(e) =>
+                          updatePolicy({
+                            externalCalendarId: e.target.value,
+                            targetCalendarId: e.target.value,
+                          })
+                        }
+                      >
+                        {sortedList.map((cal) => {
+                          const val = cal.externalCalendarId || cal.id
+                          return (
+                            <option key={cal.id} value={val}>
+                              {cal.name.toLowerCase().includes('taskflow') ? '⭐ ' : ''}
+                              {cal.name} {cal.isPrimary ? '(Primary Account)' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        Tasks sync only to this selected calendar. Create a separate <strong>"TaskFlow"</strong> calendar to keep your personal &amp; college class calendars 100% clean.
+                      </p>
+
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCreateDedicatedCalendar(googleConn.id)}
+                          disabled={isCreatingCal}
+                          className="px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-[10px] font-medium text-foreground transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Plus className="w-2.5 h-2.5 text-primary" />
+                          <span>{isCreatingCal ? 'Creating...' : 'Create New Fresh Calendar'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleClearTaskFlowEvents(googleConn.id)}
+                          disabled={isClearingEvents}
+                          className="px-2 py-1 rounded-md hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 text-[10px] font-medium transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="Delete all TaskFlow events from this calendar"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                          <span>{isClearingEvents ? 'Clearing...' : 'Clear Synced Events'}</span>
+                        </button>
+                      </div>
+
+                      {/* Google Calendar Management Help Accordion */}
+                      <div className="pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowGCalHelp(!showGCalHelp)}
+                          className="text-[10px] text-muted-foreground/80 hover:text-foreground flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <HelpCircle className="w-3 h-3" />
+                          <span>How to delete or hide calendars in Google Calendar?</span>
+                          {showGCalHelp ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+
+                        {showGCalHelp && (
+                          <div className="mt-1.5 p-2.5 rounded-lg bg-muted/40 border border-border/50 text-[10px] text-muted-foreground space-y-1 animate-fade-in leading-relaxed">
+                            <p className="font-semibold text-foreground">To delete a calendar in Google Calendar:</p>
+                            <ol className="list-decimal list-inside space-y-0.5 pl-0.5">
+                              <li>Open <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-primary hover:underline">calendar.google.com ↗</a></li>
+                              <li>Under <strong>My calendars</strong> on the left, hover over the calendar.</li>
+                              <li>Click the three dots (<span className="font-bold">⋮</span>) &rarr; <strong>Settings and sharing</strong>.</li>
+                              <li>Scroll to the very bottom and click <strong>Delete</strong>.</li>
+                            </ol>
+                            <p className="text-[9px] pt-1 text-muted-foreground/70">
+                              Tip: You can also uncheck the box next to any calendar in Google Calendar to show/hide its events without deleting it.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
