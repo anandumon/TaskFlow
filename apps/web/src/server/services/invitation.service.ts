@@ -81,17 +81,25 @@ export async function createInvitation(
     if (o) orgName = o.name
   }
 
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const roleName = (input.role || 'Member').toLowerCase()
+  let roleId: string = 'a0000000-0000-0000-0000-000000000004'
+  if (roleName.includes('admin')) roleId = 'a0000000-0000-0000-0000-000000000002'
+  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000003'
+  else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
+
   const row = await queryOne(
     `INSERT INTO invitations (
-      id, email, role, scope, organization_id, organization_name,
+      id, email, role, role_id, scope, organization_id, organization_name,
       workspace_id, workspace_name, project_id, project_name,
-      token, status, invited_by, expires_at, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING', $12, $13, $14, $14)
+      token, token_hash, status, invited_by, expires_at, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'PENDING', $14, $15, $16, $16)
     RETURNING *`,
     [
       id,
       input.email.toLowerCase().trim(),
       input.role || 'MEMBER',
+      roleId,
       input.scope || 'ORGANIZATION',
       input.organizationId || null,
       orgName,
@@ -100,6 +108,7 @@ export async function createInvitation(
       input.projectId || null,
       prjName,
       token,
+      tokenHash,
       creatorId,
       expiresAt,
       now,
@@ -183,7 +192,7 @@ export async function acceptInvitation(
 ): Promise<InvitationDto> {
   const isId = tokenOrId.length === 36 && tokenOrId.includes('-')
   const inv = await queryOne(
-    `SELECT * FROM invitations WHERE ${isId ? 'id = $1' : 'token = $1'}`,
+    `SELECT * FROM invitations WHERE ${isId ? 'id = $1' : 'token = $1 OR token_hash = $1'}`,
     [tokenOrId]
   )
 

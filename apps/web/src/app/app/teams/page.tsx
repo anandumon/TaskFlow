@@ -26,6 +26,7 @@ import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore } from '@/stores/project-store'
 import { apiClient } from '@/lib/api-client'
+import { Portal } from '@/components/ui/portal'
 
 interface MemberItem {
   id: string
@@ -107,13 +108,13 @@ export default function TeamsPage() {
     if (user?.avatarUrl) {
       setMembersList((prev) =>
         prev.map((m) =>
-          m.email?.toLowerCase() === user.email?.toLowerCase() || m.isOwner
+          (user.id && m.id === user.id) || (m.email?.toLowerCase() === user.email?.toLowerCase())
             ? { ...m, avatarUrl: user.avatarUrl, name: user.displayName || m.name }
             : m
         )
       )
     }
-  }, [user?.avatarUrl, user?.displayName, user?.email])
+  }, [user?.avatarUrl, user?.displayName, user?.email, user?.id])
 
   // Load workspace projects
   useEffect(() => {
@@ -186,15 +187,18 @@ export default function TeamsPage() {
         else if (m.role?.toUpperCase() === 'GUEST') roleDisplay = 'Guest'
 
         const displayName =
-          m.firstName || m.lastName
+          m.name ||
+          (m.firstName || m.lastName
             ? `${m.firstName || ''} ${m.lastName || ''}`.trim()
-            : emailLower.split('@')[0] || 'User'
+            : emailLower.split('@')[0] || 'User')
+
+        const isCurrentUser = Boolean(user && (m.userId === user.id || (m.email && emailLower === user.email?.toLowerCase())))
 
         combined.push({
           id: m.id || m.userId || `mem-${Math.random()}`,
           name: displayName,
           email: m.email || '',
-          avatarUrl: m.avatarUrl || (user && (m.userId === user.id || emailLower === user.email?.toLowerCase()) ? user.avatarUrl : undefined),
+          avatarUrl: m.avatarUrl || (isCurrentUser ? user?.avatarUrl : undefined),
           role: roleDisplay,
           status: 'Active',
           isOwner,
@@ -288,6 +292,16 @@ export default function TeamsPage() {
 
     setIsSubmitting(true)
     const cleanEmail = inviteEmail.trim().toLowerCase()
+    const targetEmail = cleanEmail
+    const invitedName = inviteName.trim()
+    const selectedRole = inviteRole
+
+    // Close the modal card immediately upon clicking Send Invitation
+    setIsModalOpen(false)
+    setInviteEmail('')
+    setInviteName('')
+    setToastMessage(`✉️ Sending invitation to ${targetEmail}...`)
+    setIsSubmitting(true)
 
     try {
       // Always guarantee a valid project ID target
@@ -304,10 +318,10 @@ export default function TeamsPage() {
       }
 
       const res = await apiClient.post<any>(`/api/v1/projects/${targetProjectId}/invitations`, {
-        email: cleanEmail,
-        name: inviteName.trim() || undefined,
-        role: inviteRole.toUpperCase(),
-        roleName: inviteRole,
+        email: targetEmail,
+        name: invitedName || undefined,
+        role: selectedRole.toUpperCase(),
+        roleName: selectedRole,
         organizationId: currentOrg?.id,
         workspaceId: currentWorkspace?.id,
       })
@@ -319,9 +333,9 @@ export default function TeamsPage() {
       setMembersList((prev) => [
         {
           id: newInv?.id || `inv-${Date.now()}`,
-          name: inviteName.trim() || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          role: inviteRole,
+          name: invitedName || targetEmail.split('@')[0],
+          email: targetEmail,
+          role: selectedRole,
           status: 'Pending Invitation',
           isOwner: false,
           isInvitation: true,
@@ -329,21 +343,14 @@ export default function TeamsPage() {
           projectId: targetProjectId,
           projectName: targetProj?.name || 'Project',
         },
-        ...prev.filter((m) => m.email?.toLowerCase() !== cleanEmail),
+        ...prev.filter((m) => m.email?.toLowerCase() !== targetEmail),
       ])
 
-      // 1. Reset input fields
-      setInviteEmail('')
-      setInviteName('')
-
-      // 2. Close the modal card immediately!
-      setIsModalOpen(false)
-
-      // 3. Show clear success message toast
-      setToastMessage(`✉️ Invitation email sent successfully to ${cleanEmail}!`)
+      // Show clear success message toast
+      setToastMessage(`✉️ Invitation email sent successfully to ${targetEmail}!`)
       setTimeout(() => setToastMessage(null), 4500)
 
-      // 4. Reload full DB data to stay completely synchronized
+      // Reload full DB data to stay completely synchronized
       await loadData()
     } catch (err: any) {
       setToastMessage(err?.response?.data?.message || err?.message || 'Failed to send invitation')
@@ -780,296 +787,300 @@ export default function TeamsPage() {
 
       {/* Dedicated Interactive Modal: Pending Invites Inspector */}
       {isInvitesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-5 animate-scale-in max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-primary/15 text-primary">
-                  <Mail className="w-5 h-5" />
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-5 animate-scale-in max-h-[85vh] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">Invitations &amp; Access Requests</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Total pending invitations: {totalPendingInvites}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-foreground">Invitations &amp; Access Requests</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Total pending invitations: {totalPendingInvites}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsInvitesModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Section 1: Incoming Invitations Sent to Me */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <span>Invitations For You</span>
-                  <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
-                    {incomingInvites.length}
-                  </span>
-                </h4>
-              </div>
-
-              {incomingInvites.length === 0 ? (
-                <div className="p-4 rounded-2xl bg-muted/20 border border-border/50 text-xs text-muted-foreground text-center">
-                  No pending invitations waiting for your acceptance.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {incomingInvites.map((inv) => (
-                    <div
-                      key={inv.id}
-                      className="p-4 rounded-2xl border border-primary/30 bg-primary/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
-                    >
-                      <div className="space-y-1">
-                        <div className="font-bold text-foreground text-xs flex items-center gap-2">
-                          <span>{inv.projectName || 'Project Workspace'}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold uppercase">
-                            {inv.role || 'Member'}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          From organization: <strong className="text-foreground">{inv.orgName || 'Organization'}</strong>
-                          {inv.inviterName && <span> by {inv.inviterName}</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        <button
-                          onClick={() => handleDeclineMyInvite(inv)}
-                          className="px-3 py-1.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:bg-accent transition-all cursor-pointer"
-                        >
-                          Decline
-                        </button>
-                        <button
-                          onClick={() => {
-                            handleAcceptMyInvite(inv)
-                            setIsInvitesModalOpen(false)
-                          }}
-                          disabled={isAcceptingInvite}
-                          className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
-                        >
-                          {isAcceptingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Accept &amp; Join
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Section 2: Outgoing Invitations Sent to Team Members */}
-            <div className="space-y-3 pt-3 border-t border-border/60">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <span>Pending Sent Invitations</span>
-                  <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
-                    {outgoingInvites.length}
-                  </span>
-                </h4>
                 <button
-                  onClick={() => {
-                    setIsInvitesModalOpen(false)
-                    setIsModalOpen(true)
-                  }}
-                  className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  onClick={() => setIsInvitesModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" /> New Invite
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {outgoingInvites.length === 0 ? (
-                <div className="p-4 rounded-2xl bg-muted/20 border border-border/50 text-xs text-muted-foreground text-center">
-                  No active pending outgoing invitations. All invited members have joined!
+              {/* Section 1: Incoming Invitations Sent to Me */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <span>Invitations For You</span>
+                    <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
+                      {incomingInvites.length}
+                    </span>
+                  </h4>
                 </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {outgoingInvites.map((inv) => (
-                    <div
-                      key={inv.id}
-                      className="p-3.5 rounded-2xl border border-border bg-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-xs text-foreground flex items-center gap-2">
-                          <span>{inv.email}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-bold">
-                            {inv.role}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Assigned to: <strong className="text-foreground">{inv.projectName || 'General'}</strong>
-                          {inv.invitationToken && (
-                            <span className="ml-2 font-mono text-[10px] text-primary">
-                              Code: {inv.invitationToken.substring(0, 8)}...
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        {inv.invitationToken && (
-                          <button
-                            onClick={() => handleCopyInviteToken(inv.invitationToken)}
-                            className="px-2.5 py-1.5 rounded-xl border border-border hover:bg-accent text-[11px] font-semibold text-foreground flex items-center gap-1 cursor-pointer transition-all"
-                            title="Copy invitation token"
-                          >
-                            {copiedToken === inv.invitationToken ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                <span className="text-emerald-500">Copied!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                                <span>Copy Token</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleRemoveMember(inv)}
-                          className="px-2.5 py-1.5 rounded-xl border border-destructive/30 hover:bg-destructive/10 text-[11px] font-semibold text-destructive flex items-center gap-1 cursor-pointer transition-all"
-                          title="Revoke invitation"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Revoke</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div className="flex justify-end pt-3 border-t border-border">
-              <button
-                type="button"
-                onClick={() => setIsInvitesModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer shadow-sm"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Interactive Modal: Invite Member */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Mail className="w-4 h-4 text-primary" /> Invite Team Member
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="colleague@company.com"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  autoFocus
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Full Name (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Jordan Miller"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Role Permission</label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <option value="Admin">Admin (Can manage workspaces &amp; billing)</option>
-                  <option value="Manager">Manager (Can manage projects &amp; sprints)</option>
-                  <option value="Member">Member (Can edit tasks &amp; comments)</option>
-                  <option value="Guest">Guest (Read-only access)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <FolderKanban className="w-3.5 h-3.5 text-primary" /> Assign to Project
-                </label>
-                {projects.length > 0 ? (
-                  <select
-                    value={selectedProjectId || projects[0]?.id}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                {incomingInvites.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-muted/20 border border-border/50 text-xs text-muted-foreground text-center">
+                    No pending invitations waiting for your acceptance.
+                  </div>
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
-                    <FolderKanban className="w-3.5 h-3.5 shrink-0" />
-                    <span>General Project (will be auto-created in workspace)</span>
+                  <div className="space-y-2.5">
+                    {incomingInvites.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="p-4 rounded-2xl border border-primary/30 bg-primary/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="font-bold text-foreground text-xs flex items-center gap-2">
+                            <span>{inv.projectName || 'Project Workspace'}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold uppercase">
+                              {inv.role || 'Member'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            From organization: <strong className="text-foreground">{inv.orgName || 'Organization'}</strong>
+                            {inv.inviterName && <span> by {inv.inviterName}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          <button
+                            onClick={() => handleDeclineMyInvite(inv)}
+                            className="px-3 py-1.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground hover:bg-accent transition-all cursor-pointer"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleAcceptMyInvite(inv)
+                              setIsInvitesModalOpen(false)
+                            }}
+                            disabled={isAcceptingInvite}
+                            className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
+                          >
+                            {isAcceptingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                            Accept &amp; Join
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
 
-              <div className="p-3 rounded-xl bg-accent/30 border border-border/50 text-[11px] text-muted-foreground leading-relaxed space-y-1">
-                <div className="font-semibold text-foreground flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-primary" /> Automatic Setup Included
+              {/* Section 2: Outgoing Invitations Sent to Team Members */}
+              <div className="space-y-3 pt-3 border-t border-border/60">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <span>Pending Sent Invitations</span>
+                    <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold">
+                      {outgoingInvites.length}
+                    </span>
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setIsInvitesModalOpen(false)
+                      setIsModalOpen(true)
+                    }}
+                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> New Invite
+                  </button>
                 </div>
-                <p>
-                  The recipient will receive an email and an in-app notification to join. The organization, workspace, and project will be automatically attached upon sign in or accepting.
-                </p>
+
+                {outgoingInvites.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-muted/20 border border-border/50 text-xs text-muted-foreground text-center">
+                    No active pending outgoing invitations. All invited members have joined!
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {outgoingInvites.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="p-3.5 rounded-2xl border border-border bg-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-xs text-foreground flex items-center gap-2">
+                            <span>{inv.email}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-bold">
+                              {inv.role}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Assigned to: <strong className="text-foreground">{inv.projectName || 'General'}</strong>
+                            {inv.invitationToken && (
+                              <span className="ml-2 font-mono text-[10px] text-primary">
+                                Code: {inv.invitationToken.substring(0, 8)}...
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          {inv.invitationToken && (
+                            <button
+                              onClick={() => handleCopyInviteToken(inv.invitationToken)}
+                              className="px-2.5 py-1.5 rounded-xl border border-border hover:bg-accent text-[11px] font-semibold text-foreground flex items-center gap-1 cursor-pointer transition-all"
+                              title="Copy invitation token"
+                            >
+                              {copiedToken === inv.invitationToken ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                  <span className="text-emerald-500">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                                  <span>Copy Token</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRemoveMember(inv)}
+                            className="px-2.5 py-1.5 rounded-xl border border-destructive/30 hover:bg-destructive/10 text-[11px] font-semibold text-destructive flex items-center gap-1 cursor-pointer transition-all"
+                            title="Revoke invitation"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Revoke</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <div className="flex justify-end pt-3 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors"
+                  onClick={() => setIsInvitesModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer shadow-sm"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !inviteEmail.trim()}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>Send Invitation Email</>
-                  )}
+                  Done
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
+        </Portal>
+      )}
+
+      {/* Interactive Modal: Invite Member */}
+      {isModalOpen && (
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-primary" /> Invite Team Member
+                </h3>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleInvite} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="colleague@company.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Full Name (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Jordan Miller"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Role Permission</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="Admin">Admin (Can manage workspaces &amp; billing)</option>
+                    <option value="Manager">Manager (Can manage projects &amp; sprints)</option>
+                    <option value="Member">Member (Can edit tasks &amp; comments)</option>
+                    <option value="Guest">Guest (Read-only access)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <FolderKanban className="w-3.5 h-3.5 text-primary" /> Assign to Project
+                  </label>
+                  {projects.length > 0 ? (
+                    <select
+                      value={selectedProjectId || projects[0]?.id}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
+                      <FolderKanban className="w-3.5 h-3.5 shrink-0" />
+                      <span>General Project (will be auto-created in workspace)</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-xl bg-accent/30 border border-border/50 text-[11px] text-muted-foreground leading-relaxed space-y-1">
+                  <div className="font-semibold text-foreground flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-primary" /> Automatic Setup Included
+                  </div>
+                  <p>
+                    The recipient will receive an email and an in-app notification to join. The organization, workspace, and project will be automatically attached upon sign in or accepting.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !inviteEmail.trim()}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>Send Invitation Email</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </Portal>
       )}
     </div>
   )
