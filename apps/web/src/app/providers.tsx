@@ -3,6 +3,7 @@
 import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
+import { TaskFlowThemeProvider } from '@/lib/theme/theme-context'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -25,7 +26,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         enableSystem
         disableTransitionOnChange
       >
-        {children}
+        <TaskFlowThemeProvider>{children}</TaskFlowThemeProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

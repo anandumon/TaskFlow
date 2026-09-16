@@ -336,3 +336,17 @@ INSERT INTO role_permissions (id, role_id, permission_id)
 SELECT uuid_generate_v4(), 'a0000000-0000-0000-0000-000000000005', id FROM permissions
 WHERE code IN ('workspace.view', 'space.view', 'project.view', 'task.view', 'task.comment', 'dashboard.view', 'document.view')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- ── 20. User Theme Preferences Table ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS user_theme_preferences (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    theme_id        VARCHAR(50) NOT NULL DEFAULT 'NEUTRAL',
+    theme_type      VARCHAR(20) NOT NULL DEFAULT 'PRESET',
+    custom_theme    JSONB DEFAULT NULL,
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_theme_preferences_user_id ON user_theme_preferences(user_id);
+

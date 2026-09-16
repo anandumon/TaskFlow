@@ -23,9 +23,11 @@ import {
   Upload,
   Camera,
   Loader2,
+  Palette,
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
+import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
@@ -40,12 +42,14 @@ export default function SettingsPage() {
     (currentOrg as any)?.role === 'ADMIN' ||
     (currentOrg as any)?.isOwner === true
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'organization' | 'workspace' | 'teams' | 'security' | 'calendar'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'teams' | 'security' | 'calendar'>('profile')
 
   useEffect(() => {
     const tab = searchParams.get('tab')
     if (tab === 'calendar') {
       setActiveTab('calendar')
+    } else if (tab === 'appearance' || tab === 'theme') {
+      setActiveTab('appearance')
     } else if (tab === 'security' && isOrgAdminOrOwner) {
       setActiveTab('security')
     }
@@ -277,6 +281,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'appearance', label: 'Appearance & Theme', icon: Palette },
     { id: 'organization', label: 'Organization', icon: Building2 },
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
     { id: 'teams', label: 'Teams & Units', icon: Users },
@@ -452,6 +457,11 @@ export default function SettingsPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Appearance & Theme Tab */}
+      {activeTab === 'appearance' && (
+        <ThemeSettingsView onShowToast={showToast} />
       )}
 
       {/* Organization Tab */}
