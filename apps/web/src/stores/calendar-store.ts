@@ -79,7 +79,8 @@ interface CalendarState {
 
   fetchConnections: () => Promise<CalendarConnection[]>
   getAuthUrl: (provider: 'google' | 'microsoft', workspaceId?: string) => Promise<string>
-  connectViaSupabase: (provider: 'google') => Promise<void>
+  connectWithPopup: (provider?: 'google' | 'microsoft', workspaceId?: string) => Promise<void>
+  connectViaSupabase: (provider?: 'google') => Promise<void>
   saveDirectTokens: (provider: string, accessToken: string, refreshToken?: string, email?: string) => Promise<CalendarConnection>
   handleCallback: (provider: 'google' | 'microsoft', code: string, workspaceId?: string) => Promise<CalendarConnection>
   fetchCalendars: (connectionId: string) => Promise<ExternalCalendar[]>
@@ -133,6 +134,26 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
     if (error) throw error
   },
 
+  connectWithPopup: async (provider = 'google', workspaceId) => {
+    const authUrl = await get().getAuthUrl(provider, workspaceId)
+    if (typeof window === 'undefined') return
+
+    const width = 500
+    const height = 650
+    const left = window.screenX + (window.outerWidth - width) / 2
+    const top = window.screenY + (window.outerHeight - height) / 2
+
+    const popup = window.open(
+      authUrl,
+      'google_calendar_oauth',
+      `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no`
+    )
+
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      window.location.href = authUrl
+    }
+  },
+
   saveDirectTokens: async (provider: string, accessToken: string, refreshToken?: string, email?: string) => {
     set({ isLoading: true, error: null })
     try {
@@ -151,11 +172,29 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   },
 
   getAuthUrl: async (provider, workspaceId) => {
+    const clientId =
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+      '467128497270-r9o4vs5bdk699dtl58qpoij7k86f4j7t.apps.googleusercontent.com'
+    const redirectUri =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/app/calendar/callback`
+        : 'http://localhost:3000/app/calendar/callback'
+
+    if (provider === 'google') {
+      const scope = encodeURIComponent(
+        'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events openid email profile'
+      )
+      const state = encodeURIComponent(
+        JSON.stringify({ provider: 'google', workspaceId, popup: true })
+      )
+      return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&include_granted_scopes=true&state=${state}`
+    }
+
     const params = new URLSearchParams()
     if (workspaceId) params.append('workspaceId', workspaceId)
-    if (typeof window !== 'undefined') {
-      params.append('redirectUri', `${window.location.origin}/app/calendar/callback`)
-    }
+    params.append('redirectUri', redirectUri)
     const url = `/api/v1/calendar/connect/${provider}?${params.toString()}`
     const res = await apiClient.get<{ authorizationUrl: string }>(url)
     return res.data.authorizationUrl

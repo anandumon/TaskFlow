@@ -103,18 +103,30 @@ function CalendarOAuthCallbackContent() {
         return
       }
 
+      const notifySuccessAndNavigate = () => {
+        if (!active) return
+        setStatus('success')
+        if (typeof window !== 'undefined' && window.opener) {
+          try {
+            window.opener.postMessage({ type: 'CALENDAR_CONNECTED', success: true }, '*')
+          } catch {}
+          setTimeout(() => {
+            window.close()
+          }, 1200)
+        } else {
+          setTimeout(() => {
+            router.push('/app/calendar?connected=true')
+          }, 1400)
+        }
+      }
+
       // 3. If hash or query contains provider_token directly
       const effectiveProviderToken = hashProviderToken || queryProviderToken
       if (effectiveProviderToken) {
         try {
           const userEmail = user?.email || undefined
           await saveDirectTokens('google', effectiveProviderToken, hashProviderRefreshToken || undefined, userEmail)
-          if (active) {
-            setStatus('success')
-            setTimeout(() => {
-              router.push('/app/calendar?connected=true')
-            }, 1200)
-          }
+          notifySuccessAndNavigate()
           return
         } catch (err: any) {
           if (active) {
@@ -136,12 +148,7 @@ function CalendarOAuthCallbackContent() {
 
             if (providerToken) {
               await saveDirectTokens('google', providerToken, providerRefreshToken || undefined, sessionEmail || undefined)
-              if (active) {
-                setStatus('success')
-                setTimeout(() => {
-                  router.push('/app/calendar?connected=true')
-                }, 1200)
-              }
+              notifySuccessAndNavigate()
               return
             }
           }
@@ -172,12 +179,7 @@ function CalendarOAuthCallbackContent() {
 
         try {
           await handleCallback(provider, queryCode, workspaceId)
-          if (active) {
-            setStatus('success')
-            setTimeout(() => {
-              router.push('/app/calendar?connected=true')
-            }, 1200)
-          }
+          notifySuccessAndNavigate()
           return
         } catch (err: any) {
           console.warn('Direct OAuth code exchange failed, checking Supabase session fallback:', err)
@@ -186,12 +188,7 @@ function CalendarOAuthCallbackContent() {
             const { data } = await supabase.auth.exchangeCodeForSession(queryCode)
             if (data?.session && (data.session as any)?.provider_token) {
               await saveDirectTokens('google', (data.session as any).provider_token, (data.session as any).provider_refresh_token, data.session.user?.email || user?.email)
-              if (active) {
-                setStatus('success')
-                setTimeout(() => {
-                  router.push('/app/calendar?connected=true')
-                }, 1200)
-              }
+              notifySuccessAndNavigate()
               return
             }
           } catch {}
@@ -213,12 +210,7 @@ function CalendarOAuthCallbackContent() {
 
         if (providerToken) {
           await saveDirectTokens('google', providerToken, providerRefreshToken || undefined, sessionEmail || undefined)
-          if (active) {
-            setStatus('success')
-            setTimeout(() => {
-              router.push('/app/calendar?connected=true')
-            }, 1200)
-          }
+          notifySuccessAndNavigate()
           return
         }
       } catch (err: any) {
@@ -243,10 +235,13 @@ function CalendarOAuthCallbackContent() {
     try {
       setStatus('processing')
       setErrorMessage(null)
-      await connectViaSupabase('google')
+      const url = await getAuthUrl('google')
+      if (url) {
+        window.location.href = url
+      }
     } catch (err: any) {
       setStatus('error')
-      setErrorMessage(err.message || 'Failed to connect via Supabase.')
+      setErrorMessage(err.message || 'Failed to initiate Google Calendar connection.')
     }
   }
 
@@ -318,7 +313,9 @@ function CalendarOAuthCallbackContent() {
             </div>
             <h2 className="text-lg font-bold text-foreground">Calendar Connected Successfully!</h2>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
-              Your Google Calendar is linked with TaskFlow. All sprint tasks, due dates, and deliverable milestones are syncing. Redirecting to Sprint Calendar...
+              {typeof window !== 'undefined' && window.opener
+                ? 'Your Google Calendar is linked with TaskFlow. Closing this window and returning to TaskFlow...'
+                : 'Your Google Calendar is linked with TaskFlow. All sprint tasks, due dates, and deliverable milestones are syncing. Redirecting to Sprint Calendar...'}
             </p>
           </div>
         )}

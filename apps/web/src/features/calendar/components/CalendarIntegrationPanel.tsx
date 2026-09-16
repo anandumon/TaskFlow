@@ -38,6 +38,7 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
     error,
     fetchConnections,
     getAuthUrl,
+    connectWithPopup,
     connectViaSupabase,
     saveDirectTokens,
     fetchPolicy,
@@ -86,6 +87,18 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
     })
   }, [currentWorkspace?.id])
 
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'CALENDAR_CONNECTED') {
+        setIsConnectingGoogle(false)
+        fetchConnections()
+        notify('Google Calendar connected successfully!')
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [fetchConnections])
+
   const notify = (msg: string) => {
     setBannerNotice(msg)
     if (onSuccess) onSuccess(msg)
@@ -103,10 +116,10 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
     }
   }
 
-  const handleConnectGoogleViaSupabase = async () => {
+  const handleConnectGoogle = async () => {
     try {
       setIsConnectingGoogle(true)
-      await connectViaSupabase('google')
+      await connectWithPopup('google', currentWorkspace?.id)
     } catch (err: any) {
       notify(`Connection error: ${err.message || 'Error'}`)
       setIsConnectingGoogle(false)
@@ -281,12 +294,12 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
               </div>
             ) : (
               <button
-                onClick={handleConnectGoogleViaSupabase}
+                onClick={handleConnectGoogle}
                 disabled={isConnectingGoogle}
                 className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>{isConnectingGoogle ? 'Connecting...' : 'Connect Google Calendar (Instant)'}</span>
+                <span>{isConnectingGoogle ? 'Opening Google Sign-In...' : 'Connect Google Calendar'}</span>
               </button>
             )}
           </div>
