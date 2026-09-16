@@ -18,6 +18,7 @@ export interface OrgMemberDto {
   userId: string
   email: string
   name: string
+  avatarUrl?: string
   role: string
   roleId: string
   joinedAt: string
@@ -141,7 +142,7 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
   try {
     const rows = await query(
       `SELECT om.id, om.organization_id, om.user_id, om.role_id, om.created_at, om.joined_at,
-              u.email, u.display_name, u.first_name, u.last_name,
+              u.email, u.display_name, u.first_name, u.last_name, u.avatar_url,
               r.name as role_name
        FROM organization_members om
        LEFT JOIN users u ON om.user_id = u.id
@@ -156,6 +157,7 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
       userId: String(m.user_id),
       email: m.email || '',
       name: m.display_name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Member',
+      avatarUrl: m.avatar_url || undefined,
       role: m.role_name || 'Member',
       roleId: String(m.role_id || MEMBER_ROLE_ID),
       joinedAt: m.joined_at ? new Date(m.joined_at).toISOString() : (m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString()),
@@ -168,4 +170,22 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
 
 export async function removeOrgMember(orgId: string, memberId: string): Promise<void> {
   await query(`DELETE FROM organization_members WHERE organization_id = $1 AND id = $2`, [orgId, memberId])
+}
+
+export async function updateOrganization(
+  orgId: string,
+  input: { name?: string; logoUrl?: string; plan?: string }
+): Promise<OrganizationDto | null> {
+  const row = await queryOne(
+    `UPDATE organizations
+     SET name = COALESCE($1, name),
+         logo_url = COALESCE($2, logo_url),
+         plan = COALESCE($3, plan),
+         updated_at = NOW()
+     WHERE id = $4
+     RETURNING *`,
+    [input.name ?? null, input.logoUrl ?? null, input.plan ?? null, orgId]
+  )
+  if (!row) return null
+  return mapOrg(row)
 }

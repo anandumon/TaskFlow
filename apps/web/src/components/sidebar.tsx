@@ -143,9 +143,17 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-card/60 hover:bg-card/95 border border-border/70 hover:border-primary/40 backdrop-blur-md shadow-sm text-xs font-semibold text-foreground transition-all duration-200 cursor-pointer group"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#004A6B] via-[#00638E] to-[#8CB9CC] text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-[#00638E]/30 group-hover:scale-105 transition-transform">
-                  {currentOrg?.name?.charAt(0)?.toUpperCase() || 'O'}
-                </div>
+                {currentOrg?.logoUrl ? (
+                  <img
+                    src={currentOrg.logoUrl}
+                    alt="Org"
+                    className="w-7 h-7 rounded-xl object-cover shrink-0 shadow-sm border border-border/50 group-hover:scale-105 transition-transform"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#004A6B] via-[#00638E] to-[#8CB9CC] text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-[#00638E]/30 group-hover:scale-105 transition-transform">
+                    {currentOrg?.name?.charAt(0)?.toUpperCase() || 'O'}
+                  </div>
+                )}
                 <div className="text-left truncate min-w-0">
                   <div className="truncate font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
                     {currentOrg?.name || 'My Organization'}
@@ -181,9 +189,13 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                           }`}
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          <div className="w-5 h-5 rounded-lg bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {org.name.charAt(0).toUpperCase()}
-                          </div>
+                          {org.logoUrl ? (
+                            <img src={org.logoUrl} alt={org.name} className="w-5 h-5 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-lg bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {org.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <span className="truncate">{org.name}</span>
                         </div>
                         {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
@@ -357,9 +369,17 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
 
         <div className="flex items-center justify-between px-2 py-1">
           <div className="flex items-center gap-2 truncate">
-            <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-              {user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
-            </div>
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt="Avatar"
+                className="w-7 h-7 rounded-full object-cover shrink-0 border border-primary/40 shadow-xs"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                {user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+              </div>
+            )}
             <div className="truncate">
               <p className="text-xs font-bold text-foreground truncate">
                 {user?.firstName ? `${user.firstName} ${user.lastName || ''}` : user?.email}

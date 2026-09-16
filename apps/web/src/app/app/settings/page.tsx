@@ -19,16 +19,26 @@ import {
   Lock,
   KeyRound,
   X,
-  Calendar
+  Calendar,
+  Upload,
+  Camera,
+  Loader2,
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
-  const { user } = useAuthStore()
-  const { currentOrg, setCurrentOrg } = useOrgStore()
+  const { user, updateUserAvatar } = useAuthStore()
+  const { currentOrg, setCurrentOrg, updateOrg } = useOrgStore()
   const { currentWorkspace, setCurrentWorkspace, teams } = useWorkspaceStore()
+
+  const isOrgAdminOrOwner =
+    !currentOrg ||
+    currentOrg?.ownerId === user?.id ||
+    (currentOrg as any)?.role === 'OWNER' ||
+    (currentOrg as any)?.role === 'ADMIN' ||
+    (currentOrg as any)?.isOwner === true
 
   const [activeTab, setActiveTab] = useState<'profile' | 'organization' | 'workspace' | 'teams' | 'security' | 'calendar'>('profile')
 
@@ -36,17 +46,37 @@ export default function SettingsPage() {
     const tab = searchParams.get('tab')
     if (tab === 'calendar') {
       setActiveTab('calendar')
+    } else if (tab === 'security' && isOrgAdminOrOwner) {
+      setActiveTab('security')
     }
-  }, [searchParams])
+  }, [searchParams, isOrgAdminOrOwner])
+
+  useEffect(() => {
+    if (!isOrgAdminOrOwner && activeTab === 'security') {
+      setActiveTab('profile')
+    }
+  }, [isOrgAdminOrOwner, activeTab])
 
   // Profile state
   const [firstName, setFirstName] = useState(user?.firstName || 'Admin')
   const [lastName, setLastName] = useState(user?.lastName || 'User')
   const [jobTitle, setJobTitle] = useState('Chief System Architect')
   const [timezone, setTimezone] = useState('UTC (GMT+0:00)')
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  useEffect(() => {
+    if (user?.avatarUrl) {
+      setAvatarPreview(user.avatarUrl)
+    }
+    if (user?.firstName) setFirstName(user.firstName)
+    if (user?.lastName) setLastName(user.lastName)
+  }, [user])
 
   // Org state
   const [orgName, setOrgName] = useState(currentOrg?.name || '')
+  const [orgLogoPreview, setOrgLogoPreview] = useState<string | null>(currentOrg?.logoUrl || null)
+  const [isUploadingOrgLogo, setIsUploadingOrgLogo] = useState(false)
 
   // Workspace state
   const [wsName, setWsName] = useState(currentWorkspace?.name || '')
@@ -55,7 +85,8 @@ export default function SettingsPage() {
   // Sync with store when currentOrg or currentWorkspace loads
   React.useEffect(() => {
     if (currentOrg?.name) setOrgName(currentOrg.name)
-  }, [currentOrg?.name])
+    if (currentOrg?.logoUrl) setOrgLogoPreview(currentOrg.logoUrl)
+  }, [currentOrg?.name, currentOrg?.logoUrl])
 
   React.useEffect(() => {
     if (currentWorkspace?.name) setWsName(currentWorkspace.name)
@@ -80,17 +111,102 @@ export default function SettingsPage() {
     setTimeout(() => setToastMessage(null), 3000)
   }
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault()
-    showToast('Profile settings saved successfully!')
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('File size must be under 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      setAvatarPreview(dataUrl)
+      try {
+        setIsUploadingAvatar(true)
+        await updateUserAvatar(dataUrl)
+        showToast('Profile avatar uploaded successfully!')
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to update avatar')
+      } finally {
+        setIsUploadingAvatar(false)
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
-  const handleSaveOrg = (e: React.FormEvent) => {
+  const handleRemoveAvatar = async () => {
+    try {
+      setIsUploadingAvatar(true)
+      await updateUserAvatar('')
+      setAvatarPreview(null)
+      showToast('Profile avatar removed')
+    } catch (err: any) {
+      showToast('Failed to remove avatar')
+    } finally {
+      setIsUploadingAvatar(false)
+    }
+  }
+
+  const handleOrgLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !currentOrg) return
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Logo file size must be under 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      setOrgLogoPreview(dataUrl)
+      try {
+        setIsUploadingOrgLogo(true)
+        await updateOrg(currentOrg.id, { logoUrl: dataUrl, name: orgName })
+        showToast('Organization logo uploaded successfully!')
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to update logo')
+      } finally {
+        setIsUploadingOrgLogo(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const { apiClient } = await import('@/lib/api-client')
+      await apiClient.patch('/api/v1/auth/me', {
+        firstName,
+        lastName,
+        displayName: `${firstName} ${lastName}`.trim(),
+      })
+      useAuthStore.setState((state) => ({
+        user: state.user
+          ? {
+              ...state.user,
+              firstName,
+              lastName,
+              displayName: `${firstName} ${lastName}`.trim(),
+            }
+          : null,
+      }))
+      showToast('Profile settings saved successfully!')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update profile')
+    }
+  }
+
+  const handleSaveOrg = async (e: React.FormEvent) => {
     e.preventDefault()
     if (currentOrg) {
-      setCurrentOrg({ ...currentOrg, name: orgName })
+      try {
+        await updateOrg(currentOrg.id, { name: orgName })
+        showToast('Organization settings updated!')
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to update organization')
+      }
     }
-    showToast('Organization settings updated!')
   }
 
   const handleSaveWorkspace = (e: React.FormEvent) => {
@@ -104,12 +220,15 @@ export default function SettingsPage() {
   const handleCreateTeam = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newTeamName.trim()) return
-    setCustomTeams(prev => [...prev, {
-      id: Date.now().toString(),
-      name: newTeamName.trim(),
-      memberCount: 1,
-      color: newTeamColor,
-    }])
+    setCustomTeams((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        name: newTeamName.trim(),
+        memberCount: 1,
+        color: newTeamColor,
+      },
+    ])
     setNewTeamName('')
     setIsTeamModalOpen(false)
     showToast(`Team '${newTeamName}' created!`)
@@ -121,7 +240,7 @@ export default function SettingsPage() {
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
     { id: 'teams', label: 'Teams & Units', icon: Users },
     { id: 'calendar', label: 'Calendar & Sync', icon: Calendar },
-    { id: 'security', label: 'Security & Keys', icon: ShieldCheck },
+    ...(isOrgAdminOrOwner ? [{ id: 'security', label: 'Security & Keys', icon: ShieldCheck }] : []),
   ]
 
   return (
@@ -165,12 +284,56 @@ export default function SettingsPage() {
       {activeTab === 'profile' && (
         <form onSubmit={handleSaveProfile} className="space-y-6 max-w-2xl bg-card border border-border/80 p-6 rounded-2xl shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center text-xl font-bold shadow-md">
-              {firstName.charAt(0) || 'A'}
+            <div className="relative group">
+              {avatarPreview ? (
+                <img
+                  src={avatarPreview}
+                  alt="Avatar"
+                  className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-primary/30"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center text-xl font-bold shadow-md">
+                  {firstName.charAt(0) || 'A'}
+                </div>
+              )}
+              <label
+                htmlFor="avatar-upload-input"
+                className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
+              >
+                <Camera className="w-4 h-4 mb-0.5" />
+                <span>Change</span>
+              </label>
+              <input
+                id="avatar-upload-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarFileChange}
+              />
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">Profile Avatar & Bio</h3>
-              <p className="text-xs text-muted-foreground">Personalize your identity across boards and teams.</p>
+              <p className="text-xs text-muted-foreground">Personalize your identity across boards, sprint calendar, and member views.</p>
+              <div className="flex items-center gap-2 mt-2">
+                <label
+                  htmlFor="avatar-upload-input"
+                  className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-xs font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  {isUploadingAvatar ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                  <span>Upload Photo</span>
+                </label>
+                {avatarPreview && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    disabled={isUploadingAvatar}
+                    className="px-2.5 py-1 rounded-lg bg-card border border-rose-500/30 text-rose-400 text-xs font-semibold hover:bg-rose-500/10 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -252,12 +415,45 @@ export default function SettingsPage() {
         <form onSubmit={handleSaveOrg} className="space-y-6 max-w-2xl bg-card/70 backdrop-blur-xl border border-border/80 p-7 rounded-3xl shadow-xl animate-fade-in">
           <div className="flex items-center justify-between gap-4 pb-5 border-b border-border/60">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-md shadow-primary/25 font-bold text-lg">
-                {currentOrg?.name?.charAt(0)?.toUpperCase() || <Building2 className="w-6 h-6" />}
+              <div className="relative group shrink-0">
+                {orgLogoPreview ? (
+                  <img
+                    src={orgLogoPreview}
+                    alt="Org Logo"
+                    className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-primary/30"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-md shadow-primary/25 font-bold text-lg">
+                    {currentOrg?.name?.charAt(0)?.toUpperCase() || <Building2 className="w-6 h-6" />}
+                  </div>
+                )}
+                <label
+                  htmlFor="org-logo-upload-input"
+                  className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
+                >
+                  <Camera className="w-4 h-4 mb-0.5" />
+                  <span>Change</span>
+                </label>
+                <input
+                  id="org-logo-upload-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleOrgLogoFileChange}
+                />
               </div>
               <div>
-                <h3 className="text-base font-bold text-foreground tracking-tight">Organization Profile</h3>
-                <p className="text-xs text-muted-foreground">Manage your organization identity, billing plan, and workspace scope.</p>
+                <h3 className="text-base font-bold text-foreground tracking-tight">Organization Profile & Brand</h3>
+                <p className="text-xs text-muted-foreground">Upload organization logo, manage billing plan, and workspace scope.</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <label
+                    htmlFor="org-logo-upload-input"
+                    className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-[11px] font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                  >
+                    {isUploadingOrgLogo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                    <span>Upload Logo</span>
+                  </label>
+                </div>
               </div>
             </div>
             <span className="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20 shrink-0">

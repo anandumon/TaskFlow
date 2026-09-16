@@ -30,6 +30,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([])
   const [actioningToken, setActioningToken] = useState<string | null>(null)
   const [headerToast, setHeaderToast] = useState<string | null>(null)
+  const [clearedNotifications, setClearedNotifications] = useState(false)
 
   // Ensure organization and workspace are always loaded for both users
   useEffect(() => {
@@ -271,12 +272,26 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                       </span>
                     )}
                   </div>
-                  <span
-                    onClick={() => setNotificationsOpen(false)}
-                    className="text-[10px] text-primary hover:underline cursor-pointer font-semibold"
-                  >
-                    Close
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setClearedNotifications(true)
+                        setPendingInvitations([])
+                        setHeaderToast('All notifications cleared')
+                        setTimeout(() => setHeaderToast(null), 2500)
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-destructive cursor-pointer font-semibold transition-colors"
+                      title="Clear all alerts"
+                    >
+                      Clear all
+                    </button>
+                    <span
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-[10px] text-primary hover:underline cursor-pointer font-semibold"
+                    >
+                      Close
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
@@ -328,33 +343,64 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                     </div>
                   )}
 
-                  <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/15 text-xs flex gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                      <Clock className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-foreground text-[11px]">Due Date Alert: Due Today</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                        &quot;Replace AccessChannel enum validation&quot; is in <strong>DONE</strong>.
+                  {!clearedNotifications ? (
+                    <>
+                      <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/15 text-xs flex gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
+                          <Clock className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-foreground text-[11px]">Due Date Alert: Due Today</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            Milestones scheduled in your isolated database.
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="p-2.5 rounded-xl bg-accent/40 text-xs flex gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-foreground text-[11px]">Clean Slate Ready</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                        All project &amp; task updates are saved directly to your isolated database.
+                      <div className="p-2.5 rounded-xl bg-accent/40 text-xs flex gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-foreground text-[11px]">Clean Slate Ready</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                            All project &amp; task updates are saved directly to your isolated database.
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </>
+                  ) : (
+                    pendingInvitations.length === 0 && (
+                      <div className="p-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500/80" />
+                        <span className="font-bold text-foreground">All caught up!</span>
+                        <span className="text-[11px]">No unread alerts or notifications.</span>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             )}
           </div>
+
+          {/* User Profile Avatar Link */}
+          <Link
+            href="/app/settings"
+            className="flex items-center gap-2 p-0.5 rounded-xl hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer"
+            title="Profile & Settings"
+          >
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user?.firstName || 'User'}
+                className="w-7 h-7 rounded-full object-cover border border-primary/40 shadow-xs"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                {user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+              </div>
+            )}
+          </Link>
         </div>
       </header>
     </>

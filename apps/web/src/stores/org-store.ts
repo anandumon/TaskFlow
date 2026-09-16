@@ -77,6 +77,7 @@ interface OrgState {
   fetchMembers: (orgId: string) => Promise<OrgMember[]>
   addMember: (orgId: string, userId: string, roleId?: string) => Promise<OrgMember>
   removeMember: (orgId: string, memberId: string) => Promise<void>
+  updateOrg: (orgId: string, data: { name?: string; logoUrl?: string }) => Promise<Organization>
 }
 
 export const useOrgStore = create<OrgState>((set, get) => ({
@@ -169,5 +170,15 @@ export const useOrgStore = create<OrgState>((set, get) => ({
     set((state) => ({
       members: state.members.filter((m) => m.id !== memberId),
     }))
+  },
+
+  updateOrg: async (orgId: string, data: { name?: string; logoUrl?: string }) => {
+    const res = await apiClient.patch<Organization>(`/api/v1/organizations/${orgId}`, data)
+    const updated = res.data
+    set((state) => ({
+      organizations: state.organizations.map((o) => (o.id === orgId ? updated : o)),
+      currentOrg: state.currentOrg?.id === orgId ? updated : state.currentOrg,
+    }))
+    return updated
   },
 }))

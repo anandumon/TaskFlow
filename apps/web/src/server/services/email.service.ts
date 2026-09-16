@@ -472,4 +472,73 @@ export async function sendPasswordResetEmail(
   }
 }
 
+export async function sendCalendarSyncNotificationEmail(
+  recipientEmail: string,
+  recipientName: string,
+  calendarEmail: string,
+  eventCount: number,
+  calendarUrl = 'http://localhost:3000/app/calendar'
+): Promise<boolean> {
+  const safeRecipient = escapeHtml(recipientName || 'there')
+  const safeCalendar = escapeHtml(calendarEmail || 'Google Calendar')
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Google Calendar Sync Successful</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0c0817; color: #f3f4f6; margin: 0; padding: 32px 16px; }
+    .container { max-width: 520px; margin: 0 auto; background: linear-gradient(135deg, #161129 0%, #1a1435 100%); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 20px; padding: 36px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); }
+    .brand-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+    .brand-title { font-size: 22px; font-weight: 800; color: #ffffff; }
+    .success-badge { display: inline-block; font-size: 11px; font-weight: 700; color: #10b981; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); padding: 4px 12px; border-radius: 9999px; margin-bottom: 16px; }
+    .headline { font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 12px; }
+    .description { font-size: 14px; color: #9ca3af; line-height: 1.6; margin-bottom: 24px; }
+    .card { background-color: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px 20px; margin: 20px 0; }
+    .card-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .btn { display: inline-block; background: linear-gradient(135deg, #00638e, #004a6b); color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 14px 36px; border-radius: 12px; }
+    .footer { font-size: 11px; color: #4b5563; text-align: center; margin-top: 28px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand-header">
+      <span style="font-size: 24px;">📅</span>
+      <span class="brand-title">TaskFlow Calendar</span>
+    </div>
+    <div class="success-badge">✔ Calendar Connected &amp; Synced</div>
+    <div class="headline">Google Calendar Synced Successfully</div>
+    <div class="description">
+      Hello <strong>${safeRecipient}</strong>,<br>
+      Your TaskFlow workspace has been synchronized with your Google Calendar account.
+    </div>
+    <div class="card">
+      <div class="card-row"><span>Calendar Account:</span><strong>${safeCalendar}</strong></div>
+      <div class="card-row"><span>Events Synced:</span><strong style="color: #38bdf8;">${eventCount}</strong></div>
+      <div class="card-row"><span>Status:</span><strong style="color: #34d399;">Active &amp; Connected</strong></div>
+    </div>
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="${calendarUrl}" class="btn">View Sprint Calendar &rarr;</a>
+    </div>
+    <div class="footer">&copy; 2026 TaskFlow Inc. All rights reserved.</div>
+  </div>
+</body>
+</html>`
+
+  try {
+    await transporter.sendMail({
+      from: `"TaskFlow Calendar" <${MAIL_USERNAME}>`,
+      to: recipientEmail,
+      subject: `📅 Google Calendar Connected: ${eventCount} Events Synced`,
+      html,
+    })
+    console.log(`✔ [EMAIL] Calendar sync email sent to: ${recipientEmail}`)
+    return true
+  } catch (err: any) {
+    console.error(`⚠ [EMAIL] Failed to send calendar sync email:`, err?.message || err)
+    return false
+  }
+}
+
 

@@ -40,6 +40,7 @@ interface AuthState {
   resendCode: (email: string) => Promise<string>
   logout: () => Promise<void>
   loadUser: () => Promise<void>
+  updateUserAvatar: (avatarUrl: string) => Promise<void>
   clearError: () => void
 }
 
@@ -276,6 +277,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user: null, isAuthenticated: false, isLoading: false })
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false })
+    }
+  },
+
+  updateUserAvatar: async (avatarUrl: string) => {
+    try {
+      const res = await apiClient.patch<any>('/api/v1/auth/me', { avatarUrl })
+      const u = res.data
+      set((state) => ({
+        user: state.user ? { ...state.user, avatarUrl: u?.avatarUrl || avatarUrl } : null
+      }))
+    } catch (err: any) {
+      console.error('Failed to update avatar:', err)
+      throw err
     }
   },
 

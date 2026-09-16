@@ -31,6 +31,7 @@ interface MemberItem {
   id: string
   name: string
   email: string
+  avatarUrl?: string
   role: 'Owner' | 'Admin' | 'Manager' | 'Member' | 'Guest'
   status: 'Active' | 'Pending Invitation'
   isOwner: boolean
@@ -148,6 +149,7 @@ export default function TeamsPage() {
           id: m.id || m.userId || `mem-${Math.random()}`,
           name: displayName,
           email: m.email || '',
+          avatarUrl: m.avatarUrl || (user && (m.userId === user.id || emailLower === user.email?.toLowerCase()) ? user.avatarUrl : undefined),
           role: roleDisplay,
           status: 'Active',
           isOwner,
@@ -165,6 +167,7 @@ export default function TeamsPage() {
             id: user.id || 'owner',
             name: user.displayName || `${user.firstName || 'Owner'} ${user.lastName || ''}`.trim(),
             email: user.email,
+            avatarUrl: user.avatarUrl,
             role: 'Owner',
             status: 'Active',
             isOwner: true,
@@ -612,9 +615,17 @@ export default function TeamsPage() {
                       <div className="text-muted-foreground/40 hover:text-foreground cursor-grab active:cursor-grabbing p-0.5 shrink-0">
                         <GripVertical className="w-4 h-4" />
                       </div>
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center font-bold text-xs shadow-inner shrink-0">
-                        {m.name.charAt(0).toUpperCase()}
-                      </div>
+                      {m.avatarUrl ? (
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.name}
+                          className="w-8 h-8 rounded-xl object-cover shadow-sm border border-primary/30 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center font-bold text-xs shadow-inner shrink-0">
+                          {m.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <div className="font-semibold text-foreground flex items-center gap-1.5">
                           {m.name}
