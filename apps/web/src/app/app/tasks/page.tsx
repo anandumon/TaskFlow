@@ -30,6 +30,7 @@ import {
   Bell,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   Loader2,
   LayoutGrid,
   Workflow,
@@ -304,6 +305,7 @@ export default function TasksPage() {
   // View modes: 'grid' (minimal spacious liquid glass), 'list', 'tree' (graph / tree view)
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('grid')
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>('all')
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'all' | 'bugs' | 'features'>('all')
 
   const [selectedAlertDate, setSelectedAlertDate] = useState<string>(todayStr)
   const [isDispatchingDateAlert, setIsDispatchingDateAlert] = useState<boolean>(false)
@@ -1036,7 +1038,17 @@ export default function TasksPage() {
     const matchesEnv = filterEnv === 'all' || t.environment?.toUpperCase() === filterEnv.toUpperCase()
     const matchesProj = filterProject === 'all' || t.projectId === filterProject
     const matchesStatusTab = selectedStatusTab === 'all' || t.status === selectedStatusTab || (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
-    return matchesTag && matchesEnv && matchesProj && matchesStatusTab
+    const isBug =
+      t.tag?.toLowerCase() === 'bug' ||
+      t.tag?.toLowerCase() === 'bug fix' ||
+      t.title?.toLowerCase().includes('bug')
+    const matchesCategory =
+      activeCategoryTab === 'all'
+        ? true
+        : activeCategoryTab === 'bugs'
+        ? isBug
+        : !isBug
+    return matchesTag && matchesEnv && matchesProj && matchesStatusTab && matchesCategory
   })
 
   // Ordered tasks according to drag and drop custom position
@@ -1063,15 +1075,20 @@ export default function TasksPage() {
         )}
 
         {/* Project & Tasks Overview Banner with 4 KPI Summary Cards (Identical to Project Board) */}
-        <div className="p-5 rounded-2xl bg-card border border-border shadow-sm space-y-4">
+        <div className="p-6 rounded-3xl border border-border/80 bg-card/70 backdrop-blur-md shadow-sm relative overflow-hidden space-y-4">
+          <div className="absolute top-0 left-0 right-0 h-1 rounded-t-3xl bg-primary" />
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <div className="flex items-center gap-2.5">
-                <div className="w-3 h-3 rounded-full bg-primary shadow-xs" />
-                <h1 className="text-xl font-bold tracking-tight text-foreground">
-                  {currentWorkspace?.name || 'TaskFlow Workspace'} Tasks
-                </h1>
-              </div>
+              <Link
+                href="/app/projects"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors mb-1"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Projects &amp; Pipelines
+              </Link>
+              <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+                {currentWorkspace?.name || 'TaskFlow Workspace'} Deliverables
+              </h1>
               <p className="text-xs text-muted-foreground max-w-2xl">
                 Comprehensive workspace deliverables overview, sprint tracking, bugs triage, and feature progress.
               </p>
@@ -1097,7 +1114,10 @@ export default function TasksPage() {
               </button>
 
               <button
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setNewTaskDue(todayStr)
+                  setIsModalOpen(true)
+                }}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Add Task
@@ -1137,6 +1157,39 @@ export default function TasksPage() {
 
         {/* Controls Bar: Category Filter, Project Filter, Tag Filter & View Switcher */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-card/80 border border-border/80 p-3.5 rounded-2xl shadow-xs">
+          {/* Category Tabs (All Tasks, Bugs & Fixes, Features) matching Screenshot 2 */}
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
+            <button
+              onClick={() => setActiveCategoryTab('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                activeCategoryTab === 'all'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'bg-muted/70 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All Tasks ({tasks.length})
+            </button>
+            <button
+              onClick={() => setActiveCategoryTab('bugs')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 ${
+                activeCategoryTab === 'bugs'
+                  ? 'bg-rose-500 text-white shadow-xs'
+                  : 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/20'
+              }`}
+            >
+              <Bug className="w-3.5 h-3.5" /> Bugs &amp; Fixes ({bugTasksCount})
+            </button>
+            <button
+              onClick={() => setActiveCategoryTab('features')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 ${
+                activeCategoryTab === 'features'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Features ({featureTasksCount})
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             {/* Project Filter */}
             {projects.length > 0 && (
@@ -1245,27 +1298,6 @@ export default function TasksPage() {
                 )}
               </button>
             </div>
-
-            {/* Statuses Modal Trigger */}
-            <button
-              onClick={() => setStatusModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2B2B2B] bg-[#141414] hover:bg-[#2B2B2B] text-xs font-semibold text-white transition-all shadow-xs active:scale-95 cursor-pointer"
-              title="Edit Space Statuses"
-            >
-              <Sliders className="w-3.5 h-3.5 text-[#BFD8E3]" />
-              <span className="hidden sm:inline">Statuses</span>
-            </button>
-
-            {/* Create Task Button */}
-            <button
-              onClick={() => {
-                setNewTaskDue(todayStr)
-                setIsModalOpen(true)
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white text-xs font-bold shadow-md shadow-[#00638E]/30 transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> Add Task
-            </button>
           </div>
 
         {/* Mandatory Project Banner if no projects in workspace */}
