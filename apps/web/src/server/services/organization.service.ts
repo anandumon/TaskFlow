@@ -192,24 +192,34 @@ export async function updateOrganization(
 }
 
 export async function deleteOrganization(orgId: string, requestingUserId?: string): Promise<boolean> {
-  if (requestingUserId) {
-    const validOwnerId = await resolveValidOwnerId(requestingUserId)
-    const org = await queryOne(`SELECT id, owner_id FROM organizations WHERE id = $1`, [orgId])
-    if (!org) {
-      throw new Error('Organization not found')
-    }
-    const isOwner = org.owner_id === validOwnerId
-    const isMemberOwner = await queryOne(
-      `SELECT id FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND role_id = $3 LIMIT 1`,
-      [orgId, validOwnerId, OWNER_ROLE_ID]
-    )
-    if (!isOwner && !isMemberOwner && requestingUserId !== 'a0000000-0000-0000-0000-000000000001') {
-      throw new Error('You do not have permission to delete this organization')
-    }
+  const org = await queryOne(`SELECT id, owner_id FROM organizations WHERE id = $1`, [orgId])
+  if (!org) {
+    return true
   }
 
-  // Safe cascading cleanup:
+  let validOwnerId = ''
+  if (requestingUserId) {
+    validOwnerId = await resolveValidOwnerId(requestingUserId)
+  }
+
+  const isOwner = !validOwnerId || org.owner_id === validOwnerId || requestingUserId === 'a0000000-0000-0000-0000-000000000001'
+
+  // If user is a member (not owner), completely remove the organization for this user:
+  if (!isOwner && validOwnerId) {
+    await query(
+      `DELETE FROM workspace_members WHERE user_id = $1 AND workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $2)`,
+      [validOwnerId, orgId]
+    )
+    await query(
+      `DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
+      [orgId, validOwnerId]
+    )
+    return true
+  }
+
+  // Safe cascading cleanup for owner deletion:
   // 1. Delete calendar policies for workspaces in this org
+
   try {
     await query(
       `DELETE FROM calendar_sync_policy WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,

@@ -38,7 +38,7 @@ import { useProjectStore, Project } from '@/stores/project-store'
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const { user, updateUserAvatar } = useAuthStore()
-  const { organizations, currentOrg, setCurrentOrg, updateOrg, deleteOrganization, fetchOrganizations } = useOrgStore()
+  const { organizations, currentOrg, setCurrentOrg, updateOrg, deleteOrganization, fetchOrganizations, createOrganization } = useOrgStore()
   const { workspaces, currentWorkspace, setCurrentWorkspace, updateWorkspace, deleteWorkspace, fetchWorkspaces, teams } = useWorkspaceStore()
   const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading: isProjectsLoading } = useProjectStore()
 
@@ -136,6 +136,19 @@ export default function SettingsPage() {
     if (user?.firstName) setFirstName(user.firstName)
     if (user?.lastName) setLastName(user.lastName)
   }, [user])
+
+  // Mandatory Org & Workspace creation state when no orgs exist
+  const [mandatoryOrgName, setMandatoryOrgName] = useState('')
+  const [mandatoryWsName, setMandatoryWsName] = useState('')
+  const [mandatoryWsColor, setMandatoryWsColor] = useState('#3B82F6')
+  const [isCreatingMandatoryOrg, setIsCreatingMandatoryOrg] = useState(false)
+
+  // Optional "+ New Organization" modal state
+  const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false)
+  const [newOrgModalName, setNewOrgModalName] = useState('')
+  const [newOrgModalWsName, setNewOrgModalWsName] = useState('')
+  const [newOrgModalWsColor, setNewOrgModalWsColor] = useState('#3B82F6')
+  const [isCreatingNewOrgModal, setIsCreatingNewOrgModal] = useState(false)
 
   // Org state
   const [orgName, setOrgName] = useState(currentOrg?.name || '')
@@ -376,6 +389,55 @@ export default function SettingsPage() {
     }
   }
 
+  const handleCreateOrgAndWs = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mandatoryOrgName.trim()) {
+      showToast('Organization name is required')
+      return
+    }
+    if (!mandatoryWsName.trim()) {
+      showToast('Initial workspace name is required')
+      return
+    }
+    try {
+      setIsCreatingMandatoryOrg(true)
+      const newOrg = await createOrganization(mandatoryOrgName.trim(), mandatoryWsName.trim(), mandatoryWsColor)
+      showToast('Organization and workspace created successfully!')
+      setMandatoryOrgName('')
+      setMandatoryWsName('')
+      await fetchOrganizations()
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create organization')
+    } finally {
+      setIsCreatingMandatoryOrg(false)
+    }
+  }
+
+  const handleCreateNewOrgModal = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newOrgModalName.trim()) {
+      showToast('Organization name is required')
+      return
+    }
+    try {
+      setIsCreatingNewOrgModal(true)
+      const newOrg = await createOrganization(
+        newOrgModalName.trim(),
+        newOrgModalWsName.trim() || 'Main Workspace',
+        newOrgModalWsColor
+      )
+      showToast(`Created organization "${newOrg.name}"!`)
+      setIsCreateOrgModalOpen(false)
+      setNewOrgModalName('')
+      setNewOrgModalWsName('')
+      await fetchOrganizations()
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create organization')
+    } finally {
+      setIsCreatingNewOrgModal(false)
+    }
+  }
+
   const handleDeleteOrg = async () => {
     if (!currentOrg) return
     if (deleteOrgConfirmText.trim().toLowerCase() !== currentOrg.name.trim().toLowerCase()) {
@@ -384,10 +446,29 @@ export default function SettingsPage() {
     }
     try {
       setIsDeletingOrg(true)
-      await deleteOrganization(currentOrg.id)
-      setIsDeleteOrgModalOpen(false)
+      const orgToDeleteId = currentOrg.id
+      setIsDeleteOrgModalOpen(false) // Close modal immediately!
       setDeleteOrgConfirmText('')
+      await deleteOrganization(orgToDeleteId)
       showToast('Organization deleted successfully')
+
+      // Ensure store and active organization are updated to the next available organization
+      const freshOrgs = await fetchOrganizations()
+      const remaining = freshOrgs.filter(
+        (o) =>
+          o.id !== orgToDeleteId &&
+          (o.id !== 'b0000000-0000-0000-0000-000000000001' || user?.email === 'admin@taskflow.dev')
+      )
+      if (remaining.length > 0) {
+        setCurrentOrg(remaining[0])
+        const wss = await fetchWorkspaces(remaining[0].id)
+        if (wss && wss.length > 0) {
+          setCurrentWorkspace(wss[0])
+        }
+      } else {
+        setCurrentOrg(null)
+        setCurrentWorkspace(null)
+      }
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete organization')
     } finally {
@@ -691,8 +772,83 @@ export default function SettingsPage() {
         <ThemeSettingsView onShowToast={showToast} />
       )}
 
-      {/* Organization Tab */}
-      {activeTab === 'organization' && (
+      {/* Organization Tab - Mandatory Creation if No Orgs Exist */}
+      {activeTab === 'organization' && visibleOrganizations.length === 0 && (
+        <div className="space-y-6 max-w-2xl bg-card/90 backdrop-blur-xl border border-primary/40 p-7 rounded-3xl shadow-xl animate-fade-in">
+          <div className="flex items-center gap-3.5 pb-5 border-b border-border/60">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-primary/25">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-foreground tracking-tight">Create Organization & Workspace</h3>
+                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                  Mandatory
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">You currently have no active organization. Create one to continue collaborating.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleCreateOrgAndWs} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground">Organization Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Acme Corporation"
+                value={mandatoryOrgName}
+                onChange={(e) => setMandatoryOrgName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground">Initial Workspace Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Engineering & Product"
+                value={mandatoryWsName}
+                onChange={(e) => setMandatoryWsName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground">Workspace Theme Color</label>
+              <div className="flex items-center gap-2 pt-1">
+                {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setMandatoryWsColor(c)}
+                    className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
+                      mandatoryWsColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border/60">
+              <button
+                type="submit"
+                disabled={isCreatingMandatoryOrg || !mandatoryOrgName.trim() || !mandatoryWsName.trim()}
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreatingMandatoryOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                <span>Create Organization & Workspace</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Organization Tab - Existing Organizations */}
+      {activeTab === 'organization' && visibleOrganizations.length > 0 && (
         <form onSubmit={handleSaveOrg} className="space-y-6 max-w-2xl bg-card/70 backdrop-blur-xl border border-border/80 p-7 rounded-3xl shadow-xl animate-fade-in">
           <div className="flex items-center justify-between gap-4 pb-5 border-b border-border/60">
             <div className="flex items-center gap-3.5">
@@ -788,53 +944,61 @@ export default function SettingsPage() {
           </div>
 
           {/* Organizations Directory & Switcher */}
-          {organizations.length > 0 && (
-            <div className="space-y-3 pt-6 border-t border-border/60">
+          <div className="space-y-3 pt-6 border-t border-border/60">
+            <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Organizations</h4>
                 <p className="text-[11px] text-muted-foreground mt-0.5">Switch between organizations or review your accounts.</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {visibleOrganizations.map((org) => {
-                  const isCurrent = org.id === currentOrg?.id
-                  return (
-                    <div
-                      key={org.id}
-                      onClick={() => !isCurrent && setCurrentOrg(org)}
-                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
-                        isCurrent
-                          ? 'bg-primary/5 border-primary/40 shadow-sm'
-                          : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {org.logoUrl ? (
-                          <img src={org.logoUrl} alt={org.name} className="w-8 h-8 rounded-xl object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                            {org.name?.charAt(0)?.toUpperCase() || 'O'}
-                          </div>
-                        )}
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
-                          <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
-                        </div>
-                      </div>
-                      {isCurrent ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
-                          Switch
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateOrgModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Organization</span>
+              </button>
             </div>
-          )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {visibleOrganizations.map((org) => {
+                const isCurrent = org.id === currentOrg?.id
+                return (
+                  <div
+                    key={org.id}
+                    onClick={() => !isCurrent && setCurrentOrg(org)}
+                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                      isCurrent
+                        ? 'bg-primary/5 border-primary/40 shadow-sm'
+                        : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {org.logoUrl ? (
+                        <img src={org.logoUrl} alt={org.name} className="w-8 h-8 rounded-xl object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                          {org.name?.charAt(0)?.toUpperCase() || 'O'}
+                        </div>
+                      )}
+                      <div className="truncate">
+                        <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
+                      </div>
+                    </div>
+                    {isCurrent ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
+                        Switch
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
 
           {/* Danger Zone: Delete Organization */}
           <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
@@ -1679,7 +1843,88 @@ export default function SettingsPage() {
         </div>,
         document.body
       )}
+      {/* Modal: New Organization Modal */}
+      {mounted && isCreateOrgModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" /> Create New Organization
+              </h3>
+              <button
+                onClick={() => setIsCreateOrgModalOpen(false)}
+                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewOrgModal} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Organization Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Acme Corporation"
+                  value={newOrgModalName}
+                  onChange={(e) => setNewOrgModalName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Initial Workspace Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Main Workspace"
+                  value={newOrgModalWsName}
+                  onChange={(e) => setNewOrgModalWsName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Workspace Theme Color</label>
+                <div className="flex items-center gap-2 pt-1">
+                  {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => setNewOrgModalWsColor(c)}
+                      className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
+                        newOrgModalWsColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOrgModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingNewOrgModal || !newOrgModalName.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {isCreatingNewOrgModal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Create Organization</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
+
 

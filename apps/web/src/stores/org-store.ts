@@ -139,6 +139,10 @@ export const useOrgStore = create<OrgState>((set, get) => ({
         currentOrg: newOrg,
         isLoading: false,
       }))
+      const wss = await useWorkspaceStore.getState().fetchWorkspaces(newOrg.id)
+      if (wss && wss.length > 0) {
+        useWorkspaceStore.getState().setCurrentWorkspace(wss[0])
+      }
       return newOrg
     } catch (err: any) {
       set({ error: err?.message || 'Failed to create organization', isLoading: false })
