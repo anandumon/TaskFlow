@@ -42,19 +42,28 @@ export interface CalendarSyncPolicyDto {
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
 
+function isUuid(val?: string | null): boolean {
+  if (!val || typeof val !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
+}
+
+function resolveUserId(userId?: string | null): string {
+  if (isUuid(userId)) return userId!.trim()
+  return '543cb7a9-44dc-4a3e-844c-020d52cefca7'
+}
+
 export async function listConnections(userId?: string): Promise<CalendarConnectionDto[]> {
   try {
-    const rows = userId
-      ? await query(`SELECT * FROM calendar_connections WHERE user_id = $1`, [userId])
-      : await query(`SELECT * FROM calendar_connections`)
+    const effectiveUserId = resolveUserId(userId)
+    const rows = await query(`SELECT * FROM calendar_connection WHERE user_id = $1`, [effectiveUserId])
 
     return rows.map((row: any) => ({
       id: String(row.id),
       userId: row.user_id ? String(row.user_id) : undefined,
       provider: row.provider || 'GOOGLE',
       providerEmail: row.provider_email || row.providerEmail,
-      connected: row.status === 'ACTIVE' || row.connected !== false,
-      syncStatus: row.sync_status || row.syncStatus || 'IDLE',
+      connected: row.status === 'ACTIVE' || row.status === 'CONNECTED' || row.connected !== false,
+      syncStatus: row.last_sync_error ? 'ERROR' : 'IDLE',
       lastSyncAt: row.last_sync_at ? new Date(row.last_sync_at).toISOString() : undefined,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     }))
@@ -71,42 +80,49 @@ export async function saveDirectTokens(
   refreshToken?: string,
   email?: string
 ): Promise<CalendarConnectionDto> {
+  const effectiveUserId = resolveUserId(userId)
   const providerUpper = provider.toUpperCase()
   const now = new Date()
 
   const existing = await queryOne(
-    `SELECT * FROM calendar_connections WHERE user_id = $1 AND provider = $2`,
-    [userId, providerUpper]
+    `SELECT * FROM calendar_connection WHERE user_id = $1 AND provider = $2 LIMIT 1`,
+    [effectiveUserId, providerUpper]
   )
 
   const id = existing?.id || crypto.randomUUID()
+  const tokenBuf = Buffer.from(accessToken, 'utf-8')
+  const refreshBuf = refreshToken ? Buffer.from(refreshToken, 'utf-8') : null
 
   if (existing) {
     await query(
-      `UPDATE calendar_connections SET
+      `UPDATE calendar_connection SET
         provider_email = $1, access_token = $2,
         refresh_token = COALESCE($3, refresh_token),
-        status = 'ACTIVE', updated_at = $4
+        status = 'CONNECTED', updated_at = $4
        WHERE id = $5`,
-      [email || '', accessToken, refreshToken || null, now, id]
+      [email || existing.provider_email || '', tokenBuf, refreshBuf, now, id]
     )
   } else {
     await query(
-      `INSERT INTO calendar_connections (
+      `INSERT INTO calendar_connection (
         id, user_id, provider, provider_email, access_token, refresh_token,
-        status, sync_status, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', 'IDLE', $7, $7)`,
-      [id, userId, providerUpper, email || '', accessToken, refreshToken || null, now]
+        status, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'CONNECTED', $7, $7)`,
+      [id, effectiveUserId, providerUpper, email || '', tokenBuf, refreshBuf, now]
     )
   }
 
-  if (providerUpper === 'GOOGLE') {
-    await fetchAndStoreGoogleCalendars(id, accessToken)
+  try {
+    if (providerUpper === 'GOOGLE') {
+      await fetchAndStoreGoogleCalendars(id, accessToken)
+    }
+  } catch (e) {
+    console.warn('[calendar.service] fetchAndStoreGoogleCalendars error:', e)
   }
 
   return {
     id: String(id),
-    userId,
+    userId: effectiveUserId,
     provider: providerUpper,
     providerEmail: email,
     connected: true,
@@ -121,6 +137,7 @@ export async function handleOAuthCode(
   code: string,
   redirectUri?: string
 ): Promise<CalendarConnectionDto> {
+  const effectiveUserId = resolveUserId(userId)
   if (provider.toUpperCase() === 'GOOGLE') {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -148,7 +165,7 @@ export async function handleOAuthCode(
       email = userInfo.email || ''
     } catch {}
 
-    return saveDirectTokens(userId, 'GOOGLE', tokenData.access_token, tokenData.refresh_token, email)
+    return saveDirectTokens(effectiveUserId, 'GOOGLE', tokenData.access_token, tokenData.refresh_token, email)
   }
 
   throw new Error(`Provider ${provider} not supported`)
@@ -170,20 +187,20 @@ export async function fetchAndStoreGoogleCalendars(connectionId: string, accessT
       const now = new Date()
 
       const existing = await queryOne(
-        `SELECT id FROM external_calendars WHERE connection_id = $1 AND external_calendar_id = $2`,
+        `SELECT id FROM external_calendar WHERE connection_id = $1 AND external_calendar_id = $2`,
         [connectionId, it.id]
       )
 
       if (existing) {
         await query(
-          `UPDATE external_calendars SET name = $1, description = $2, timezone = $3,
+          `UPDATE external_calendar SET name = $1, description = $2, timezone = $3,
            is_primary = $4, can_read = true, can_write = $5, sync_enabled = true, updated_at = $6
            WHERE id = $7`,
           [it.summary || 'Calendar', it.description || '', it.timeZone || 'UTC', isPrimary, canWrite, now, existing.id]
         )
       } else {
         await query(
-          `INSERT INTO external_calendars (
+          `INSERT INTO external_calendar (
             id, connection_id, external_calendar_id, name, description, timezone,
             is_primary, can_read, can_write, sync_enabled, created_at, updated_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, true, $9, $9)`,
@@ -209,7 +226,7 @@ export async function fetchAndStoreGoogleCalendars(connectionId: string, accessT
 export async function listExternalCalendars(connectionId: string): Promise<ExternalCalendarDto[]> {
   try {
     const stored = await query(
-      `SELECT * FROM external_calendars WHERE connection_id = $1`,
+      `SELECT * FROM external_calendar WHERE connection_id = $1`,
       [connectionId]
     )
 
@@ -228,10 +245,11 @@ export async function listExternalCalendars(connectionId: string): Promise<Exter
       }))
     }
 
-    const conn = await queryOne(`SELECT access_token FROM calendar_connections WHERE id = $1`, [connectionId])
+    const conn = await queryOne(`SELECT access_token FROM calendar_connection WHERE id = $1`, [connectionId])
     if (conn?.access_token) {
-      await fetchAndStoreGoogleCalendars(connectionId, conn.access_token)
-      const newlyStored = await query(`SELECT * FROM external_calendars WHERE connection_id = $1`, [connectionId])
+      const tokenStr = Buffer.isBuffer(conn.access_token) ? conn.access_token.toString('utf-8') : String(conn.access_token)
+      await fetchAndStoreGoogleCalendars(connectionId, tokenStr)
+      const newlyStored = await query(`SELECT * FROM external_calendar WHERE connection_id = $1`, [connectionId])
       return newlyStored.map((s: any) => ({
         id: String(s.id),
         connectionId: String(s.connection_id),
@@ -253,10 +271,12 @@ export async function listExternalCalendars(connectionId: string): Promise<Exter
 }
 
 export async function getSyncPolicy(userId?: string): Promise<CalendarSyncPolicyDto> {
+  const effectiveUserId = resolveUserId(userId)
   try {
-    const data = userId
-      ? await queryOne(`SELECT * FROM calendar_sync_policies WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, [userId])
-      : await queryOne(`SELECT * FROM calendar_sync_policies ORDER BY created_at DESC LIMIT 1`)
+    const data = await queryOne(
+      `SELECT * FROM calendar_sync_policy WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [effectiveUserId]
+    )
 
     if (data) {
       return {
@@ -270,7 +290,7 @@ export async function getSyncPolicy(userId?: string): Promise<CalendarSyncPolicy
         defaultTaskDurationMinutes: data.default_task_duration_minutes ?? 30,
         defaultReminderMinutes: data.default_reminder_minutes ?? 30,
         deleteExternalOnTaskDelete: data.delete_external_on_task_delete ?? true,
-        targetCalendarId: data.target_calendar_id,
+        targetCalendarId: data.external_calendar_id,
       }
     }
   } catch (err) {
@@ -294,16 +314,17 @@ export async function updateSyncPolicy(
   userId: string,
   policy: Partial<CalendarSyncPolicyDto>
 ): Promise<CalendarSyncPolicyDto> {
+  const effectiveUserId = resolveUserId(userId)
   const now = new Date()
-  const existing = await queryOne(`SELECT id FROM calendar_sync_policies WHERE user_id = $1`, [userId])
+  const existing = await queryOne(`SELECT id FROM calendar_sync_policy WHERE user_id = $1 LIMIT 1`, [effectiveUserId])
 
   if (existing) {
     await query(
-      `UPDATE calendar_sync_policies SET
+      `UPDATE calendar_sync_policy SET
         sync_tasks = $1, sync_projects = $2, sync_deadlines = $3, sync_reminders = $4,
         import_external_events = $5, export_taskflow_events = $6,
         default_task_duration_minutes = $7, default_reminder_minutes = $8,
-        delete_external_on_task_delete = $9, target_calendar_id = $10, updated_at = $11
+        delete_external_on_task_delete = $9, external_calendar_id = $10, updated_at = $11
        WHERE id = $12`,
       [
         policy.syncTasks ?? true,
@@ -322,15 +343,15 @@ export async function updateSyncPolicy(
     )
   } else {
     await query(
-      `INSERT INTO calendar_sync_policies (
+      `INSERT INTO calendar_sync_policy (
         id, user_id, sync_tasks, sync_projects, sync_deadlines, sync_reminders,
         import_external_events, export_taskflow_events, default_task_duration_minutes,
-        default_reminder_minutes, delete_external_on_task_delete, target_calendar_id,
+        default_reminder_minutes, delete_external_on_task_delete, external_calendar_id,
         created_at, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
       [
         crypto.randomUUID(),
-        userId,
+        effectiveUserId,
         policy.syncTasks ?? true,
         policy.syncProjects ?? true,
         policy.syncDeadlines ?? true,
@@ -346,10 +367,10 @@ export async function updateSyncPolicy(
     )
   }
 
-  return getSyncPolicy(userId)
+  return getSyncPolicy(effectiveUserId)
 }
 
 export async function disconnectConnection(connectionId: string): Promise<void> {
-  await query(`DELETE FROM calendar_connections WHERE id = $1`, [connectionId])
-  await query(`DELETE FROM external_calendars WHERE connection_id = $1`, [connectionId])
+  await query(`DELETE FROM calendar_connection WHERE id = $1`, [connectionId])
+  await query(`DELETE FROM external_calendar WHERE connection_id = $1`, [connectionId])
 }

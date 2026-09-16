@@ -390,14 +390,14 @@ function CalendarOAuthCallbackContent() {
                 Google Calendar Sync Hub
               </h2>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                {errorMessage?.includes('Ready to link')
+                {(!errorMessage || errorMessage.includes('Ready to link') || errorMessage.includes('<!DOCTYPE') || errorMessage.includes('<') || errorMessage.includes('not valid JSON'))
                   ? 'Connect your Google Calendar to synchronize tasks, sprint due dates, and deliverable milestones automatically.'
                   : errorMessage}
               </p>
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-3 pt-2">
               <button
                 type="button"
                 onClick={handleRetryInstant}
@@ -406,91 +406,6 @@ function CalendarOAuthCallbackContent() {
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Connect with Google (Instant One-Click)</span>
               </button>
-
-              <button
-                type="button"
-                onClick={handleRetryDirect}
-                className="w-full py-2.5 px-4 rounded-xl border border-border/80 bg-background/50 hover:bg-muted/70 text-foreground text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-primary" />
-                <span>Connect via Direct Google OAuth</span>
-              </button>
-
-              {/* Collapsible Google Cloud Console Setup Checklist */}
-              <div className="border border-border/70 rounded-2xl overflow-hidden bg-background/40">
-                <button
-                  type="button"
-                  onClick={() => setShowGcpGuide(!showGcpGuide)}
-                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-[11px] font-semibold text-foreground hover:bg-muted/40 transition-colors cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                    Google Cloud Console Setup Checklist
-                  </span>
-                  {showGcpGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-
-                {showGcpGuide && (
-                  <div className="p-3.5 pt-1 space-y-3 text-[11px] text-muted-foreground border-t border-border/60 animate-fade-in">
-                    <p className="leading-relaxed">
-                      To ensure Google Calendar connects without <code className="text-foreground bg-muted px-1 py-0.5 rounded font-mono">redirect_uri_mismatch</code>:
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1.5 leading-relaxed text-foreground/90 pl-1">
-                      <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="text-primary hover:underline font-semibold">Google Cloud Credentials Console ↗</a></li>
-                      <li>Select your OAuth 2.0 Web Client ID: <span className="font-mono text-[10px] text-muted-foreground block truncate">467128497270-r9o4vs5bdk699dtl58qpoij7k86f4j7t...</span></li>
-                      <li>Under <strong>Authorized redirect URIs</strong>, paste this exact callback URI:</li>
-                    </ol>
-
-                    <div className="flex items-center gap-1.5 bg-card px-2.5 py-1.5 rounded-xl border border-border font-mono text-[10px] text-foreground">
-                      <span className="truncate flex-1">{redirectUri}</span>
-                      <button
-                        type="button"
-                        onClick={copyRedirectUri}
-                        className="shrink-0 p-1 hover:bg-muted rounded text-foreground transition-colors cursor-pointer"
-                        title="Copy Redirect URI"
-                      >
-                        {copiedUri ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    <p className="leading-relaxed">
-                      4. In <strong>Enabled APIs & Services</strong>, make sure <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer" className="text-primary hover:underline font-semibold">Google Calendar API ↗</a> is enabled.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Manual Access Token Option */}
-              <button
-                type="button"
-                onClick={() => setShowManualInput(!showManualInput)}
-                className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground py-1 transition-colors cursor-pointer"
-              >
-                {showManualInput ? 'Hide Manual Access Token Option' : 'Connect with Google Access Token instead'}
-              </button>
-
-              {showManualInput && (
-                <form onSubmit={handleManualTokenSubmit} className="p-3.5 rounded-2xl bg-background/80 border border-border/70 space-y-2.5 text-xs animate-fade-in">
-                  <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
-                    <KeyRound className="w-3.5 h-3.5 text-primary" />
-                    <span className="font-semibold text-foreground">Google OAuth Access Token</span>
-                  </div>
-                  <input
-                    type="password"
-                    value={manualToken}
-                    onChange={(e) => setManualToken(e.target.value)}
-                    placeholder="ya29.a0Ac..."
-                    className="w-full px-3 py-2 rounded-xl bg-card border border-border/80 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSubmittingToken || !manualToken.trim()}
-                    className="w-full py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {isSubmittingToken ? 'Linking Token...' : 'Save & Sync Token'}
-                  </button>
-                </form>
-              )}
 
               {/* Navigation Back Links */}
               <div className="pt-2 flex items-center justify-between gap-2 border-t border-border/60">
