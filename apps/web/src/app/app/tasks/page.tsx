@@ -1054,24 +1054,35 @@ export default function TasksPage() {
     showToast(`Task updated to ${newStatus.replace('_', ' ').toUpperCase()}`)
   }
 
-  // Delete Task
-  const handleDelete = async (taskId: string) => {
-    if (deletingTaskId) return
+  // Delete Task with confirmation
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete || isConfirmingDelete) return
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    try {
+      setIsConfirmingDelete(true)
+      await deleteTask(taskToDelete.id)
+      loadProjects(wsId)
+      showToast('Task deleted from database')
+      setTaskToDelete(null)
+      if (editingTask?.id === taskToDelete.id) setEditingTask(null)
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete task')
+    } finally {
+      setIsConfirmingDelete(false)
+    }
+  }
+
+  const handleDelete = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId)
     if (task && !canEditTask(task)) {
       showToast('You can only delete tasks assigned to you.')
       return
     }
-    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    try {
-      setDeletingTaskId(taskId)
-      await deleteTask(taskId)
-      loadProjects(wsId)
-      showToast('Task deleted from database')
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to delete task')
-    } finally {
-      setDeletingTaskId(null)
+    if (task) {
+      setTaskToDelete(task)
     }
   }
 
@@ -3686,34 +3697,49 @@ export default function TasksPage() {
                   )}
 
                   {/* Modal Footer */}
-                  <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={() => setEditingTask(null)}
-                      className="px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
-                    >
-                      {isReadOnly ? 'Close' : 'Cancel'}
-                    </button>
-                    {!isReadOnly && (
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div>
+                      {!isReadOnly && canEditTask(editingTask) && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskToDelete(editingTask)}
+                          className="px-3.5 py-2 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Task</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleSaveEdit()}
-                        disabled={isUpdatingTask || !editTitle.trim()}
-                        className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                        onClick={() => setEditingTask(null)}
+                        className="px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
                       >
-                        {isUpdatingTask ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Saving Changes...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4" />
-                            <span>Save Changes to DB</span>
-                          </>
-                        )}
+                        {isReadOnly ? 'Close' : 'Cancel'}
                       </button>
-                    )}
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEdit()}
+                          disabled={isUpdatingTask || !editTitle.trim()}
+                          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                        >
+                          {isUpdatingTask ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Saving Changes...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4" />
+                              <span>Save Changes to DB</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3721,6 +3747,49 @@ export default function TasksPage() {
           )
         })()}
       </div>
+
+      {/* Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <Portal>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Delete Task</h3>
+                  <p className="text-xs text-muted-foreground">Permanent deletion confirmation</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Are you sure you want to delete task <strong className="text-foreground">"{taskToDelete.title}"</strong>? This will permanently remove the task from the database. This action cannot be undone.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setTaskToDelete(null)}
+                  disabled={isConfirmingDelete}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteTask}
+                  disabled={isConfirmingDelete}
+                  className="px-4 py-2 rounded-xl bg-destructive text-destructive-foreground text-xs font-bold hover:bg-destructive/90 transition-all shadow-md shadow-destructive/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {isConfirmingDelete && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isConfirmingDelete ? 'Deleting...' : 'Delete Task'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
 
       <EditSpaceStatusesModal
         isOpen={statusModalOpen}

@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Check,
   GripVertical,
+  Loader2,
 } from 'lucide-react'
 import { Portal } from '@/components/ui/portal'
 import { useOrgStore } from '@/stores/org-store'
@@ -139,13 +140,29 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
+  const [isDeletingProject, setIsDeletingProject] = useState(false)
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete || isDeletingProject) return
     try {
-      await deleteProject(id)
-      showToast('Project deleted')
+      setIsDeletingProject(true)
+      await deleteProject(projectToDelete.id)
+      showToast(`Project "${projectToDelete.name}" deleted`)
+      setProjectToDelete(null)
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete project')
+    } finally {
+      setIsDeletingProject(false)
     }
+  }
+
+  const handleDelete = (id: string) => {
+    const p = projects.find((x) => x.id === id)
+    if (p) {
+      setProjectToDelete(p)
+    }
+    return Promise.resolve()
   }
 
   const allAvailableEnvs = [
@@ -569,6 +586,49 @@ export default function ProjectsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {projectToDelete && (
+        <Portal>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Delete Project</h3>
+                  <p className="text-xs text-muted-foreground">Permanent deletion confirmation</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Are you sure you want to delete project <strong className="text-foreground">"{projectToDelete.name}"</strong>? All associated deliverables, environment boards, and roadmap milestones will be permanently removed. This action cannot be undone.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setProjectToDelete(null)}
+                  disabled={isDeletingProject}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteProject}
+                  disabled={isDeletingProject}
+                  className="px-4 py-2 rounded-xl bg-destructive text-destructive-foreground text-xs font-bold hover:bg-destructive/90 transition-all shadow-md shadow-destructive/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {isDeletingProject && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isDeletingProject ? 'Deleting...' : 'Delete Project'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </Portal>

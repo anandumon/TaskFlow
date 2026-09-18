@@ -34,12 +34,18 @@ import {
   ArrowUp,
   ChevronUp,
   ChevronDown,
+  UserCheck,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore } from '@/stores/status-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { useOrgStore } from '@/stores/org-store'
+import { Portal } from '@/components/ui/portal'
+import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
+import { UserSelect, AssignableUser, getInitials, getAvatarColor } from '@/components/ui/user-select'
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
@@ -58,20 +64,27 @@ export default function ProjectDetailsPage() {
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'assignee' | 'due' | 'priority' | 'status' | 'title'>('assignee')
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all')
+  const { user } = useAuthStore()
+  const { members: orgMembers } = useOrgStore()
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const currentUserName = user?.displayName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'You'
 
-  // Add Task Modal State
+  // Add Task Modal State (Redesigned like Create Task in DB)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newTaskType, setNewTaskType] = useState<'feature' | 'bug'>('feature')
+  const [newTaskType, setNewTaskType] = useState<'feature' | 'bug' | 'custom'>('feature')
+  const [customTagInput, setCustomTagInput] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskTag, setNewTaskTag] = useState('Backend')
-  const [newTaskAssignee, setNewTaskAssignee] = useState('You')
-  const [newTaskDue, setNewTaskDue] = useState(new Date().toISOString().split('T')[0])
+  const [newTaskTag, setNewTaskTag] = useState('Feature')
+  const [newTaskAssignee, setNewTaskAssignee] = useState(currentUserName)
+  const [newTaskAssignedBy, setNewTaskAssignedBy] = useState(currentUserName)
+  const [newTaskDue, setNewTaskDue] = useState(todayStr)
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium')
-  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
   const [newTaskEnv, setNewTaskEnv] = useState<TaskEnvironment>('DEV')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isUpdatingTask, setIsUpdatingTask] = useState(false)
-  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
+  const [isDeletingTask, setIsDeletingTask] = useState(false)
 
   // Edit Task Modal State
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -204,15 +217,47 @@ export default function ProjectDetailsPage() {
   const nonBugTasks = useMemo(() => projectTasks.filter((t) => !isBugTask(t)), [projectTasks, isBugTask])
 
   // Collect all registered users/assignees added to this project
+  const availableUsers: AssignableUser[] = useMemo(() => {
+    const list: AssignableUser[] = []
+    const seen = new Set<string>()
+
+    const addUser = (name: string, email?: string, role?: string, id?: string) => {
+      const key = (email || name).toLowerCase()
+      if (!name || seen.has(key)) return
+      seen.add(key)
+      list.push({
+        id: id || key,
+        name,
+        email,
+        role: role || 'Member',
+        initials: getInitials(name),
+        color: getAvatarColor(name),
+      })
+    }
+
+    addUser(currentUserName, user?.email, 'Current User', 'current-user')
+
+    if (orgMembers && Array.isArray(orgMembers)) {
+      orgMembers.forEach((m: any) => {
+        const memberName =
+          [m.firstName, m.lastName].filter(Boolean).join(' ').trim() ||
+          m.email?.split('@')[0]?.trim() ||
+          'Member'
+        addUser(memberName, m.email, m.role, m.userId || m.id)
+      })
+    }
+
+    projectTasks.forEach((t) => {
+      if (t.assigneeName) addUser(t.assigneeName, undefined, 'Assignee')
+      if (t.reviewerName) addUser(t.reviewerName, undefined, 'Reviewer')
+    })
+
+    return list
+  }, [user, orgMembers, projectTasks, currentUserName])
+
   const availableAssignees = useMemo(() => {
-    return Array.from(
-      new Set([
-        'You',
-        'Admin User',
-        ...projectTasks.map((t) => t.assigneeName).filter(Boolean) as string[],
-      ])
-    )
-  }, [projectTasks])
+    return Array.from(new Set([currentUserName, ...availableUsers.map(u => u.name)]))
+  }, [availableUsers, currentUserName])
 
   // Filtered according to category tab & selected user
   const getFilteredTasks = useCallback((taskList: Task[]) => {
@@ -295,19 +340,29 @@ export default function ProjectDetailsPage() {
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
       setIsCreatingTask(true)
+      const finalTag =
+        newTaskType === 'feature'
+          ? 'Feature'
+          : newTaskType === 'bug'
+          ? 'Bug Fix'
+          : (customTagInput.trim() || 'Custom')
+
       await createTask(wsId, {
         title: newTaskTitle.trim(),
         projectId: projectId,
-        tag: newTaskTag,
-        assigneeName: newTaskAssignee,
-        dueDate: newTaskDue,
+        tag: finalTag,
+        assigneeName: newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName),
+        reviewerName: newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName),
+        dueDate: newTaskDue || todayStr,
         priority: newTaskPriority,
-        status: newTaskStatus,
-        environment: newTaskEnv,
+        status: 'todo', // Always defaults to todo
+        environment: newTaskEnv || 'DEV',
         subtasks: '[]',
         filesChanged: '[]',
       })
       setNewTaskTitle('')
+      setCustomTagInput('')
+      setNewTaskDue(todayStr)
       setIsModalOpen(false)
       loadProjects(wsId)
       showToast('New deliverable added to project!')
@@ -344,18 +399,29 @@ export default function ProjectDetailsPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (deletingTaskId) return
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete || isDeletingTask) return
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
-      setDeletingTaskId(id)
-      await deleteTask(id)
+      setIsDeletingTask(true)
+      await deleteTask(taskToDelete.id)
       loadProjects(wsId)
-      showToast('Task removed from project')
+      showToast(`Task "${taskToDelete.title}" deleted`)
+      setTaskToDelete(null)
+      if (editingTask?.id === taskToDelete.id) {
+        setEditingTask(null)
+      }
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete task')
     } finally {
-      setDeletingTaskId(null)
+      setIsDeletingTask(false)
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    const t = tasks.find((x) => x.id === id)
+    if (t) {
+      setTaskToDelete(t)
     }
   }
 
@@ -954,270 +1020,355 @@ export default function ProjectDetailsPage() {
         </div>
       )}
 
-      {/* --- ADD TASK MODAL (Project Pre-selected) --- */}
+      {/* --- ADD TASK / DELIVERABLE MODAL (Redesigned like Create Task in DB) --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Plus className="w-4 h-4 text-primary" /> Add Task to {project?.name}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-xl text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTask} className="space-y-4">
-              {/* Deliverable Type (Bug vs Feature) */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase">Deliverable Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewTaskType('feature')
-                      if (newTaskTag === 'Bug Fix') setNewTaskTag('Backend')
-                    }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      newTaskType === 'feature'
-                        ? 'bg-blue-600/15 border-blue-500 text-blue-500 shadow-xs'
-                        : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Feature Task</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewTaskType('bug')
-                      setNewTaskTag('Bug Fix')
-                    }}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      newTaskType === 'bug'
-                        ? 'bg-rose-600/15 border-rose-500 text-rose-500 shadow-xs'
-                        : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Bug className="w-3.5 h-3.5" />
-                    <span>Bug & Fix</span>
-                  </button>
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div className="w-full max-w-xl bg-card border border-border rounded-3xl p-5 shadow-2xl space-y-3.5 animate-scale-in backdrop-blur-xl max-h-[92vh] overflow-y-auto custom-scrollbar">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2.5 border-b border-border">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">
+                      Add Deliverable to {project?.name || 'Project'}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">Deliverable details &amp; assignments</p>
+                  </div>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase">Deliverable Title</label>
-                <input
-                  type="text"
-                  placeholder={newTaskType === 'bug' ? 'e.g. Fix memory leak in auth-service...' : 'e.g. Implement payment gateway webhook...'}
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
-                  <select
-                    value={newTaskTag}
-                    onChange={(e) => setNewTaskTag(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="Backend">Backend</option>
-                    <option value="Frontend">Frontend</option>
-                    <option value="Bug Fix">Bug Fix / Vulnerability</option>
-                    <option value="DevOps">DevOps & Infra</option>
-                    <option value="Testing">Testing & QA</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Assignee</label>
-                  <input
-                    type="text"
-                    value={newTaskAssignee}
-                    onChange={(e) => setNewTaskAssignee(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Priority</label>
-                  <select
-                    value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Status</label>
-                  <select
-                    value={newTaskStatus}
-                    onChange={(e) => setNewTaskStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="in_review">In Review</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Due Date</label>
-                  <input
-                    type="date"
-                    value={newTaskDue}
-                    onChange={(e) => setNewTaskDue(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-muted hover:bg-accent text-xs font-semibold text-foreground transition-all"
+                  className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingTask || !newTaskTitle.trim()}
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                >
-                  {isCreatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{isCreatingTask ? 'Creating...' : 'Create Deliverable'}</span>
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleCreateTask} className="space-y-3">
+                {/* Deliverable Type (Feature, Bug Fix, Custom) */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Task Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTaskType('feature')
+                        setNewTaskTag('Feature')
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        newTaskType === 'feature'
+                          ? 'bg-blue-600/15 border-blue-500 text-blue-500 shadow-xs ring-1 ring-blue-500/20'
+                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Feature</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTaskType('bug')
+                        setNewTaskTag('Bug Fix')
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        newTaskType === 'bug'
+                          ? 'bg-rose-600/15 border-rose-500 text-rose-500 shadow-xs ring-1 ring-rose-500/20'
+                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Bug className="w-3.5 h-3.5" />
+                      <span>Bug Fix</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTaskType('custom')
+                        setNewTaskTag(customTagInput.trim() || 'Custom')
+                      }}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        newTaskType === 'custom'
+                          ? 'bg-purple-600/15 border-purple-500 text-purple-400 shadow-xs ring-1 ring-purple-500/20'
+                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Custom</span>
+                    </button>
+                  </div>
+
+                  {newTaskType === 'custom' && (
+                    <div className="pt-1 animate-fade-in">
+                      <input
+                        type="text"
+                        placeholder="Enter custom type (e.g. Design, DevOps, Maintenance)..."
+                        value={customTagInput}
+                        onChange={(e) => {
+                          setCustomTagInput(e.target.value)
+                          setNewTaskTag(e.target.value.trim() || 'Custom')
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-background border border-purple-500/40 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Deliverable Title */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">
+                    Deliverable Title <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={newTaskType === 'bug' ? 'e.g. Fix memory leak in auth-service...' : 'e.g. Implement payment gateway webhook...'}
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {/* Assigned To and Assigned By */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <UserSelect
+                    label="Assigned To"
+                    icon={User}
+                    value={newTaskAssignee}
+                    onChange={setNewTaskAssignee}
+                    users={availableUsers}
+                    placeholder="Select assignee..."
+                  />
+                  <UserSelect
+                    label="Assigned By"
+                    icon={UserCheck}
+                    value={newTaskAssignedBy}
+                    onChange={setNewTaskAssignedBy}
+                    users={availableUsers}
+                    placeholder="Select assigner..."
+                  />
+                </div>
+
+                {/* Priority & Due Date (Stylish Calendar Date Picker) */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Priority</label>
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-primary" /> Due Date
+                    </label>
+                    <StylishDatePicker
+                      value={newTaskDue}
+                      onChange={setNewTaskDue}
+                      minDate={todayStr}
+                      dropDirection="up"
+                    />
+                  </div>
+                </div>
+
+                {/* Footer buttons */}
+                <div className="flex items-center justify-between pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingTask || !newTaskTitle.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isCreatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{isCreatingTask ? 'Creating...' : 'Create Deliverable'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* --- EDIT TASK MODAL --- */}
       {editingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-primary" /> Edit Deliverable
-              </h3>
-              <button
-                onClick={() => setEditingTask(null)}
-                className="p-1 rounded-xl text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
+        <Portal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
+            <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-primary" /> Edit Deliverable
+                </h3>
+                <button
+                  onClick={() => setEditingTask(null)}
+                  className="p-1 rounded-xl text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Deliverable Title</label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
+                    <input
+                      type="text"
+                      value={editTag}
+                      onChange={(e) => setEditTag(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Assignee</label>
+                    <input
+                      type="text"
+                      value={editAssignee}
+                      onChange={(e) => setEditAssignee(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Priority</label>
+                    <select
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="in_review">In Review</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Due Date</label>
+                    <StylishDatePicker
+                      value={editDue}
+                      onChange={setEditDue}
+                      minDate={todayStr}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setTaskToDelete(editingTask)}
+                    className="px-3 py-2 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Task</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTask(null)}
+                      className="px-4 py-2 rounded-xl bg-muted hover:bg-accent text-xs font-semibold text-foreground transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isUpdatingTask || !editTitle.trim()}
+                      className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 cursor-pointer"
+                    >
+                      {isUpdatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{isUpdatingTask ? 'Saving...' : 'Save Changes'}</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
             </div>
+          </div>
+        </Portal>
+      )}
 
-            <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase">Deliverable Title</label>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
-                  <input
-                    type="text"
-                    value={editTag}
-                    onChange={(e) => setEditTag(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
+      {/* Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <Portal>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
                 </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Assignee</label>
-                  <input
-                    type="text"
-                    value={editAssignee}
-                    onChange={(e) => setEditAssignee(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Delete Deliverable</h3>
+                  <p className="text-xs text-muted-foreground">Permanent deletion confirmation</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Priority</label>
-                  <select
-                    value={editPriority}
-                    onChange={(e) => setEditPriority(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Are you sure you want to delete deliverable <strong className="text-foreground">"{taskToDelete.title}"</strong>? This will permanently remove the task from this project. This action cannot be undone.
+              </p>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Status</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="in_review">In Review</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Due Date</label>
-                  <input
-                    type="date"
-                    value={editDue}
-                    onChange={(e) => setEditDue(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setEditingTask(null)}
-                  className="px-4 py-2 rounded-xl bg-muted hover:bg-accent text-xs font-semibold text-foreground transition-all"
+                  onClick={() => setTaskToDelete(null)}
+                  disabled={isDeletingTask}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={isUpdatingTask || !editTitle.trim()}
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  type="button"
+                  onClick={confirmDeleteTask}
+                  disabled={isDeletingTask}
+                  className="px-4 py-2 rounded-xl bg-destructive text-destructive-foreground text-xs font-bold hover:bg-destructive/90 transition-all shadow-md shadow-destructive/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                 >
-                  {isUpdatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{isUpdatingTask ? 'Saving...' : 'Save Changes'}</span>
+                  {isDeletingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isDeletingTask ? 'Deleting...' : 'Delete Task'}</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* ClickUp Style Edit Space Statuses Modal */}

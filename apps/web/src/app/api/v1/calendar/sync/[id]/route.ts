@@ -5,10 +5,7 @@ import { query, queryOne } from '@/server/db/postgres'
 import { sendCalendarSyncNotificationEmail } from '@/server/services/email.service'
 import { decryptCalendarToken, encryptCalendarToken } from '@/server/utils/calendar-crypto'
 
-const GOOGLE_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-  process.env.GOOGLE_CLIENT_ID ||
-  '467128497270-r9o4vs5bdk699dtl58qpoij7k86f4j7t.apps.googleusercontent.com'
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
 
 async function refreshGoogleAccessToken(refreshToken: string, connectionId: string): Promise<string | null> {

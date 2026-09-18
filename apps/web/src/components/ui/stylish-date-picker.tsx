@@ -9,6 +9,8 @@ interface StylishDatePickerProps {
   minDate?: string // 'YYYY-MM-DD'
   placeholder?: string
   className?: string
+  align?: 'left' | 'right'
+  dropDirection?: 'up' | 'down'
 }
 
 export function StylishDatePicker({
@@ -17,6 +19,8 @@ export function StylishDatePicker({
   minDate,
   placeholder = 'Select due date',
   className = '',
+  align = 'right',
+  dropDirection = 'up',
 }: StylishDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -56,7 +60,7 @@ export function StylishDatePicker({
     }
   }, [isOpen])
 
-  // Month navigation guards
+  // Month navigation guards: cannot go before minimum month
   const isPrevMonthDisabled = () => {
     const prevMonthDate = new Date(viewYear, viewMonth, 1)
     const minMonthDate = new Date(minDateObj.getFullYear(), minDateObj.getMonth(), 1)
@@ -112,6 +116,11 @@ export function StylishDatePicker({
   }
 
   const selectDate = (year: number, month: number, day: number) => {
+    const candidate = new Date(year, month, day)
+    candidate.setHours(0, 0, 0, 0)
+    // Strict validation: Reject past dates
+    if (candidate < minDateObj) return
+
     const formatted = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     onChange(formatted)
     setIsOpen(false)
@@ -122,6 +131,9 @@ export function StylishDatePicker({
     e.stopPropagation()
     const target = new Date()
     target.setDate(target.getDate() + daysAhead)
+    target.setHours(0, 0, 0, 0)
+    if (target < minDateObj) return
+
     const formatted = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
     onChange(formatted)
     setViewYear(target.getFullYear())
@@ -154,20 +166,24 @@ export function StylishDatePicker({
             {formatDisplay(value)}
           </span>
         </div>
-        <span className="text-[10px] text-primary/80 font-bold px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-          Due
+        <span className="text-[10px] text-primary/90 font-bold px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 shrink-0">
+          Due Date
         </span>
       </button>
 
       {/* Floating Stylish Calendar Popover */}
       {isOpen && (
-        <div className="absolute left-0 bottom-full mb-2 z-[110] w-72 rounded-2xl bg-[#0D1520] border border-primary/30 p-3.5 shadow-2xl shadow-black/80 animate-scale-in backdrop-blur-xl">
+        <div
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} ${
+            dropDirection === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
+          } z-[130] w-72 rounded-2xl bg-[#090E17] border border-[#00638E]/40 p-3.5 shadow-[0_15px_40px_rgba(0,0,0,0.85),0_0_20px_rgba(0,99,142,0.15)] animate-scale-in backdrop-blur-2xl`}
+        >
           {/* Quick Selector Pills */}
-          <div className="flex items-center justify-between gap-1 pb-2.5 mb-2.5 border-b border-border/40">
+          <div className="flex items-center justify-between gap-1.5 pb-2.5 mb-2.5 border-b border-border/40">
             <button
               type="button"
               onClick={(e) => setQuickDate(0, e)}
-              className="flex-1 py-1 text-[10px] font-bold rounded-lg bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 transition-all cursor-pointer text-center"
+              className="flex-1 py-1 text-[10px] font-bold rounded-lg bg-[#00638E]/20 hover:bg-[#00638E]/30 text-sky-400 border border-[#00638E]/40 transition-all cursor-pointer text-center"
             >
               Today
             </button>
@@ -188,38 +204,41 @@ export function StylishDatePicker({
           </div>
 
           {/* Month & Year Navigation */}
-          <div className="flex items-center justify-between mb-3 px-0.5">
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
             <button
               type="button"
               onClick={handlePrevMonth}
               disabled={isPrevMonthDisabled()}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              title={isPrevMonthDisabled() ? 'Cannot navigate to past months' : 'Previous month'}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            <span className="text-xs font-bold text-white tracking-wide">
-              {monthNames[viewMonth]} {viewYear}
+            <span className="text-xs font-bold text-white tracking-wide flex items-center gap-1">
+              <span>{monthNames[viewMonth]}</span>
+              <span className="text-[#00638E] dark:text-[#BFD8E3]">{viewYear}</span>
             </span>
 
             <button
               type="button"
               onClick={handleNextMonth}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Next month"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
           {/* Day of week headers */}
-          <div className="grid grid-cols-7 gap-1 text-center mb-1 text-[10px] font-bold text-slate-400">
-            <span>Su</span>
+          <div className="grid grid-cols-7 gap-1 text-center mb-1.5 text-[10px] font-bold text-slate-400">
+            <span className="text-rose-400/80">Su</span>
             <span>Mo</span>
             <span>Tu</span>
             <span>We</span>
             <span>Th</span>
             <span>Fr</span>
-            <span>Sa</span>
+            <span className="text-sky-400/80">Sa</span>
           </div>
 
           {/* Calendar Day Grid */}
@@ -244,8 +263,8 @@ export function StylishDatePicker({
                 return (
                   <div
                     key={`day-${day}`}
-                    className="w-8 h-8 flex items-center justify-center text-[11px] font-medium text-slate-600 cursor-not-allowed opacity-30 select-none"
-                    title="Past dates cannot be selected"
+                    className="w-8 h-8 flex items-center justify-center text-[11px] font-medium text-slate-600/40 cursor-not-allowed select-none rounded-lg"
+                    title="Past dates are disabled"
                   >
                     {day}
                   </div>
@@ -262,9 +281,9 @@ export function StylishDatePicker({
                   }}
                   className={`w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-primary text-white shadow-md shadow-primary/40 ring-2 ring-primary/40 scale-105'
+                      ? 'bg-gradient-to-tr from-[#00638E] to-sky-500 text-white shadow-md shadow-[#00638E]/50 ring-2 ring-sky-400/40 scale-105'
                       : isToday
-                      ? 'bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30'
+                      ? 'bg-primary/20 text-sky-400 border border-primary/50 hover:bg-primary/30'
                       : 'text-slate-200 hover:bg-white/10 hover:text-white'
                   }`}
                 >
@@ -275,16 +294,16 @@ export function StylishDatePicker({
           </div>
 
           {/* Footer note */}
-          <div className="mt-2.5 pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-slate-400 px-0.5">
-            <span className="flex items-center gap-1 text-primary">
-              <Sparkles className="w-3 h-3" /> Future dates only
+          <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-slate-400 px-0.5">
+            <span className="flex items-center gap-1 text-sky-400 font-medium">
+              <Sparkles className="w-3 h-3" /> Today &amp; future only
             </span>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="hover:text-white transition-colors"
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer text-[10px]"
             >
-              Close
+              Done
             </button>
           </div>
         </div>
