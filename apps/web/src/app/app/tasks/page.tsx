@@ -432,6 +432,9 @@ export default function TasksPage() {
   const [newSubtaskDesc, setNewSubtaskDesc] = useState('')
   const [newSubtaskDue, setNewSubtaskDue] = useState(todayStr)
   const [newSubtaskAttachments, setNewSubtaskAttachments] = useState<TaskAttachment[]>([])
+  const [isSavingTask, setIsSavingTask] = useState(false)
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   // Edit / View Task Modal State
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -794,6 +797,7 @@ export default function TasksPage() {
   // Add Task Handler (Multi-step Wizard with Description, Attachments, Subtasks & Progress)
   const handleAddTask = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+    if (isSavingTask) return
     if (!newTaskTitle.trim()) {
       showToast('Please enter a task title.')
       setCreateTaskStep(1)
@@ -813,6 +817,7 @@ export default function TasksPage() {
 
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
+      setIsSavingTask(true)
       const isDone = newTaskStatus === 'done'
       let initialProgress = 0
       if (newTaskSubtasks.length > 0) {
@@ -839,7 +844,7 @@ export default function TasksPage() {
         subtasks: JSON.stringify(newTaskSubtasks),
       })
 
-      // Reset form states
+      // Reset form states and close modal immediately
       setNewTaskTitle('')
       setNewTaskDescription('')
       setNewTaskAttachments([])
@@ -854,6 +859,8 @@ export default function TasksPage() {
       showToast('Task created and saved to database!')
     } catch (err: any) {
       showToast(err?.message || 'Task creation failed')
+    } finally {
+      setIsSavingTask(false)
     }
   }
 
@@ -962,7 +969,7 @@ export default function TasksPage() {
   // Save Edit Handler
   const handleSaveEdit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (!editingTask || !editTitle.trim()) return
+    if (isUpdatingTask || !editingTask || !editTitle.trim()) return
 
     if (!canEditTask(editingTask)) {
       showToast('You can only edit tasks assigned to you.')
@@ -971,6 +978,7 @@ export default function TasksPage() {
 
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
+      setIsUpdatingTask(true)
       const isDone = editStatus === 'done'
 
       // Calculate progress if subtasks exist
@@ -1003,6 +1011,8 @@ export default function TasksPage() {
       showToast('Task updated successfully!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to update task')
+    } finally {
+      setIsUpdatingTask(false)
     }
   }
 
@@ -1037,15 +1047,23 @@ export default function TasksPage() {
 
   // Delete Task
   const handleDelete = async (taskId: string) => {
+    if (deletingTaskId) return
     const task = tasks.find((t) => t.id === taskId)
     if (task && !canEditTask(task)) {
       showToast('You can only delete tasks assigned to you.')
       return
     }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    await deleteTask(taskId)
-    loadProjects(wsId)
-    showToast('Task deleted from database')
+    try {
+      setDeletingTaskId(taskId)
+      await deleteTask(taskId)
+      loadProjects(wsId)
+      showToast('Task deleted from database')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete task')
+    } finally {
+      setDeletingTaskId(null)
+    }
   }
 
   // Drag and drop task reordering & status drop target
@@ -1768,11 +1786,16 @@ export default function TasksPage() {
                           {canEditTask(task) && (
                             <button
                               type="button"
+                              disabled={deletingTaskId === task.id}
                               onClick={() => handleDelete(task.id)}
                               title="Delete Task"
-                              className="p-2 rounded-xl bg-slate-100 dark:bg-[#000000]/70 hover:bg-rose-500/15 border border-slate-200 dark:border-[#2B2B2B] hover:border-rose-500/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                              className="p-2 rounded-xl bg-slate-100 dark:bg-[#000000]/70 hover:bg-rose-500/15 border border-slate-200 dark:border-[#2B2B2B] hover:border-rose-500/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {deletingTaskId === task.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
                             </button>
                           )}
                         </div>
@@ -2305,11 +2328,16 @@ export default function TasksPage() {
                             </button>
                             {canEditTask(t) && (
                               <button
+                                disabled={deletingTaskId === t.id}
                                 onClick={() => handleDelete(t.id)}
-                                className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
+                                className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Delete task"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                {deletingTaskId === t.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
                               </button>
                             )}
                           </div>
@@ -2969,11 +2997,20 @@ export default function TasksPage() {
                       <button
                         type="button"
                         onClick={() => handleAddTask()}
-                        disabled={projects.length === 0 || !newTaskProjectId || !newTaskTitle.trim()}
-                        className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                        disabled={isSavingTask || projects.length === 0 || !newTaskProjectId || !newTaskTitle.trim()}
+                        className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2 active:scale-95"
                       >
-                        <Check className="w-4 h-4" />
-                        <span>Save Task to DB</span>
+                        {isSavingTask ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Saving Task to DB...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>Save Task to DB</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -3658,10 +3695,20 @@ export default function TasksPage() {
                       <button
                         type="button"
                         onClick={() => handleSaveEdit()}
-                        className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5"
+                        disabled={isUpdatingTask || !editTitle.trim()}
+                        className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                       >
-                        <Check className="w-4 h-4" />
-                        <span>Save Changes to DB</span>
+                        {isUpdatingTask ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Saving Changes...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>Save Changes to DB</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>

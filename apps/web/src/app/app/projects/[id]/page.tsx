@@ -69,6 +69,9 @@ export default function ProjectDetailsPage() {
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium')
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
   const [newTaskEnv, setNewTaskEnv] = useState<TaskEnvironment>('DEV')
+  const [isCreatingTask, setIsCreatingTask] = useState(false)
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   // Edit Task Modal State
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -286,10 +289,12 @@ export default function ProjectDetailsPage() {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isCreatingTask) return
     if (!newTaskTitle.trim()) return
 
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
+      setIsCreatingTask(true)
       await createTask(wsId, {
         title: newTaskTitle.trim(),
         projectId: projectId,
@@ -308,15 +313,18 @@ export default function ProjectDetailsPage() {
       showToast('New deliverable added to project!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to create deliverable')
+    } finally {
+      setIsCreatingTask(false)
     }
   }
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingTask || !editTitle.trim()) return
+    if (isUpdatingTask || !editingTask || !editTitle.trim()) return
 
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
+      setIsUpdatingTask(true)
       await updateTask(editingTask.id, {
         title: editTitle.trim(),
         tag: editTag,
@@ -331,14 +339,24 @@ export default function ProjectDetailsPage() {
       showToast('Deliverable updated!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to update deliverable')
+    } finally {
+      setIsUpdatingTask(false)
     }
   }
 
   const handleDelete = async (id: string) => {
+    if (deletingTaskId) return
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    await deleteTask(id)
-    loadProjects(wsId)
-    showToast('Task removed from project')
+    try {
+      setDeletingTaskId(id)
+      await deleteTask(id)
+      loadProjects(wsId)
+      showToast('Task removed from project')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete task')
+    } finally {
+      setDeletingTaskId(null)
+    }
   }
 
   const openEditModal = (t: Task) => {
@@ -1078,9 +1096,11 @@ export default function ProjectDetailsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md"
+                  disabled={isCreatingTask || !newTaskTitle.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
-                  Create Deliverable
+                  {isCreatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isCreatingTask ? 'Creating...' : 'Create Deliverable'}</span>
                 </button>
               </div>
             </form>
@@ -1188,9 +1208,11 @@ export default function ProjectDetailsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md"
+                  disabled={isUpdatingTask || !editTitle.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
-                  Save Changes
+                  {isUpdatingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isUpdatingTask ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
             </form>

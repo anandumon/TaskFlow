@@ -455,6 +455,7 @@ export default function SettingsPage() {
   }
 
   const handleDeleteOrg = async () => {
+    if (isDeletingOrg) return
     if (!currentOrg) return
     if (deleteOrgConfirmText.trim().toLowerCase() !== currentOrg.name.trim().toLowerCase()) {
       showToast('Organization name does not match confirmation text')
@@ -494,6 +495,7 @@ export default function SettingsPage() {
   }
 
   const handleDeleteWorkspace = async () => {
+    if (isDeletingWs) return
     if (!currentWorkspace || !currentOrg) return
     if (workspaces.length <= 1) {
       showToast('Cannot delete the only workspace in this organization')
@@ -501,9 +503,9 @@ export default function SettingsPage() {
     }
     try {
       setIsDeletingWs(true)
+      setIsDeleteWsModalOpen(false) // Close modal immediately to prevent repeated clicks
       await deleteWorkspace(currentOrg.id, currentWorkspace.id)
       showToast('Workspace deleted successfully')
-      setIsDeleteWsModalOpen(false)
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete workspace')
     } finally {
@@ -518,6 +520,7 @@ export default function SettingsPage() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isCreatingProj) return
     const targetWsId = selectedWsId || currentWorkspace?.id
     if (!targetWsId) {
       showToast('Please select a workspace first')
@@ -550,7 +553,7 @@ export default function SettingsPage() {
 
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingProject) return
+    if (isUpdatingProj || !editingProject) return
     if (!editProjName.trim()) {
       showToast('Project name is required')
       return
@@ -573,12 +576,13 @@ export default function SettingsPage() {
   }
 
   const handleDeleteProject = async () => {
-    if (!deletingProject) return
+    if (isDeletingProj || !deletingProject) return
+    const targetProj = deletingProject
     try {
       setIsDeletingProj(true)
-      await deleteProject(deletingProject.id)
-      showToast(`Project '${deletingProject.name}' deleted!`)
-      setDeletingProject(null)
+      setDeletingProject(null) // Close modal immediately
+      await deleteProject(targetProj.id)
+      showToast(`Project '${targetProj.name}' deleted!`)
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete project')
     } finally {
