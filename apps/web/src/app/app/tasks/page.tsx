@@ -65,6 +65,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { Portal } from '@/components/ui/portal'
 import { UserGuideModal } from '@/components/user-guide-modal'
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
+import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
 
 interface AssignableUser {
   id: string
@@ -416,10 +417,11 @@ export default function TasksPage() {
   // Add Task Modal State (Multi-step Wizard: 1 = Core Details, 2 = Description & Attachments, 3 = Subtasks & Progress)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [createTaskStep, setCreateTaskStep] = useState<1 | 2 | 3>(1)
-  const [newTaskType, setNewTaskType] = useState<'feature' | 'bug'>('feature')
+  const [newTaskType, setNewTaskType] = useState<'feature' | 'bug' | 'custom'>('feature')
+  const [customTagInput, setCustomTagInput] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskProjectId, setNewTaskProjectId] = useState('')
-  const [newTaskTag, setNewTaskTag] = useState('Frontend')
+  const [newTaskTag, setNewTaskTag] = useState('Feature')
   const [newTaskAssignee, setNewTaskAssignee] = useState(currentUserName)
   const [newTaskAssignedBy, setNewTaskAssignedBy] = useState(currentUserName)
   const [newTaskDue, setNewTaskDue] = useState(todayStr)
@@ -733,12 +735,14 @@ export default function TasksPage() {
 
   const getTagColor = (tag: string) => {
     switch (tag) {
+      case 'Feature': return 'bg-[#00638E]/25 text-[#BFD8E3] border border-[#00638E]/45'
+      case 'Bug Fix': return 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+      case 'Custom': return 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
       case 'Design': return 'bg-[#004A6B]/25 text-[#BFD8E3] border border-[#00638E]/35'
       case 'DevOps': return 'bg-[#2B2B2B] text-[#BFD8E3] border border-[#383838]'
       case 'Backend': return 'bg-[#004A6B]/35 text-[#8CB9CC] border border-[#004A6B]/50'
       case 'Architecture': return 'bg-[#00638E]/20 text-white border border-[#00638E]/35'
       case 'Frontend': return 'bg-[#00638E]/25 text-[#BFD8E3] border border-[#00638E]/45'
-      case 'Bug Fix': return 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
       default: return 'bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/35'
     }
   }
@@ -818,26 +822,30 @@ export default function TasksPage() {
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
       setIsSavingTask(true)
-      const isDone = newTaskStatus === 'done'
       let initialProgress = 0
       if (newTaskSubtasks.length > 0) {
         const done = newTaskSubtasks.filter((s: any) => s.completed).length
         initialProgress = Math.round((done / newTaskSubtasks.length) * 100)
-      } else if (isDone) {
-        initialProgress = 100
       }
+
+      const finalTag =
+        newTaskType === 'feature'
+          ? 'Feature'
+          : newTaskType === 'bug'
+          ? 'Bug Fix'
+          : (customTagInput.trim() || 'Custom')
 
       await createTask(wsId, {
         projectId: newTaskProjectId,
         title: newTaskTitle.trim(),
         description: newTaskDescription.trim(),
-        tag: newTaskTag,
-        tagColor: getTagColor(newTaskTag),
+        tag: finalTag,
+        tagColor: getTagColor(finalTag),
         assigneeName: newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName),
         reviewerName: newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName),
         dueDate: newTaskDue || todayStr,
-        status: newTaskStatus,
-        environment: isDone ? 'MAIN' : 'DEV',
+        status: 'todo', // Always defaults to todo
+        environment: 'DEV',
         priority: newTaskPriority,
         progress: initialProgress,
         filesChanged: JSON.stringify(newTaskAttachments),
@@ -852,6 +860,7 @@ export default function TasksPage() {
       setNewSubtaskTitle('')
       setNewSubtaskDesc('')
       setNewSubtaskAttachments([])
+      setCustomTagInput('')
       setCreateTaskStep(1)
       setNewTaskDue(todayStr)
       setIsModalOpen(false)
@@ -2390,9 +2399,9 @@ export default function TasksPage() {
         {isModalOpen && (
           <Portal>
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-              <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-5 animate-scale-in backdrop-blur-xl max-h-[92vh] overflow-y-auto custom-scrollbar">
+              <div className="bg-card border border-border rounded-3xl p-5 w-full max-w-xl shadow-2xl space-y-3.5 animate-scale-in backdrop-blur-xl max-h-[92vh] overflow-y-auto custom-scrollbar">
                 {/* Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-border">
+                <div className="flex items-center justify-between pb-2.5 border-b border-border">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-xl bg-primary/15 text-primary">
                       <Plus className="w-4 h-4" />
@@ -2414,17 +2423,17 @@ export default function TasksPage() {
                 </div>
 
                 {/* Step Navigation Bar */}
-                <div className="grid grid-cols-3 gap-2 p-1.5 bg-muted/50 rounded-2xl border border-border/50">
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-muted/50 rounded-xl border border-border/50">
                   <button
                     type="button"
                     onClick={() => setCreateTaskStep(1)}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       createTaskStep === 1
                         ? 'bg-background text-primary shadow-sm border border-border/60'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">1</span>
+                    <span className="w-4 h-4 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">1</span>
                     <span className="truncate">Core Details</span>
                   </button>
 
@@ -2437,13 +2446,13 @@ export default function TasksPage() {
                       }
                       setCreateTaskStep(2)
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       createTaskStep === 2
                         ? 'bg-background text-primary shadow-sm border border-border/60'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">2</span>
+                    <span className="w-4 h-4 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">2</span>
                     <span className="truncate">Docs & Files</span>
                   </button>
 
@@ -2456,38 +2465,38 @@ export default function TasksPage() {
                       }
                       setCreateTaskStep(3)
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       createTaskStep === 3
                         ? 'bg-background text-primary shadow-sm border border-border/60'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">3</span>
+                    <span className="w-4 h-4 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-bold">3</span>
                     <span className="truncate">Subtasks</span>
                   </button>
                 </div>
 
                 {/* STEP 1: CORE DETAILS */}
                 {createTaskStep === 1 && (
-                  <div className="space-y-4 animate-fade-in">
-                    {/* Deliverable Type (Feature vs Bug) */}
-                    <div className="space-y-1.5">
+                  <div className="space-y-3 animate-fade-in">
+                    {/* Task Type (Feature, Bug Fix, Custom) */}
+                    <div className="space-y-1">
                       <label className="text-xs font-semibold text-foreground">Task Type</label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => {
                             setNewTaskType('feature')
-                            if (newTaskTag === 'Bug Fix') setNewTaskTag('Frontend')
+                            setNewTaskTag('Feature')
                           }}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                             newTaskType === 'feature'
-                              ? 'bg-blue-600/15 border-blue-500 text-blue-500 shadow-xs'
+                              ? 'bg-blue-600/15 border-blue-500 text-blue-500 shadow-xs ring-1 ring-blue-500/20'
                               : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>Feature Task</span>
+                          <span>Feature</span>
                         </button>
                         <button
                           type="button"
@@ -2495,20 +2504,51 @@ export default function TasksPage() {
                             setNewTaskType('bug')
                             setNewTaskTag('Bug Fix')
                           }}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                             newTaskType === 'bug'
-                              ? 'bg-rose-600/15 border-rose-500 text-rose-500 shadow-xs'
+                              ? 'bg-rose-600/15 border-rose-500 text-rose-500 shadow-xs ring-1 ring-rose-500/20'
                               : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           <Bug className="w-3.5 h-3.5" />
-                          <span>Bug & Fix</span>
+                          <span>Bug Fix</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewTaskType('custom')
+                            setNewTaskTag(customTagInput.trim() || 'Custom')
+                          }}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            newTaskType === 'custom'
+                              ? 'bg-purple-600/15 border-purple-500 text-purple-400 shadow-xs ring-1 ring-purple-500/20'
+                              : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>Custom</span>
                         </button>
                       </div>
+
+                      {newTaskType === 'custom' && (
+                        <div className="pt-1 animate-fade-in">
+                          <input
+                            type="text"
+                            placeholder="Enter custom task type (e.g. Design, DevOps, Maintenance)..."
+                            value={customTagInput}
+                            onChange={(e) => {
+                              setCustomTagInput(e.target.value)
+                              setNewTaskTag(e.target.value.trim() || 'Custom')
+                            }}
+                            className="w-full px-3 py-2 rounded-xl bg-background border border-purple-500/40 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            autoFocus
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Task Title */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <label className="text-xs font-semibold text-foreground">
                         Task Title <span className="text-destructive">*</span>
                       </label>
@@ -2525,7 +2565,7 @@ export default function TasksPage() {
 
                     {/* Mandatory Project Selection */}
                     {projects.length === 0 ? (
-                      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 space-y-2">
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 space-y-1.5">
                         <div className="flex items-center gap-2 font-bold">
                           <FolderKanban className="w-4 h-4" /> Project Required Before Creating Tasks
                         </div>
@@ -2540,7 +2580,7 @@ export default function TasksPage() {
                         </Link>
                       </div>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-semibold text-foreground">
                             Project <span className="text-destructive font-bold">*</span>
@@ -2566,7 +2606,7 @@ export default function TasksPage() {
                     )}
 
                     {/* Assigned To and Assigned By */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <UserSelect
                         label="Assigned To"
                         icon={User}
@@ -2585,24 +2625,9 @@ export default function TasksPage() {
                       />
                     </div>
 
-                    {/* Status & Priority */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">Status</label>
-                        <select
-                          value={newTaskStatus}
-                          onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                        >
-                          {workspaceStatuses.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
+                    {/* Priority & Due Date (Stylish Calendar Date Picker) */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground">Priority</label>
                         <select
                           value={newTaskPriority}
@@ -2614,45 +2639,25 @@ export default function TasksPage() {
                           <option value="high">High</option>
                         </select>
                       </div>
-                    </div>
 
-                    {/* Tag & Due Date */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">Tag / Domain</label>
-                        <select
-                          value={newTaskTag}
-                          onChange={(e) => setNewTaskTag(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                        >
-                          <option value="Frontend">Frontend</option>
-                          <option value="Backend">Backend</option>
-                          <option value="Design">Design</option>
-                          <option value="DevOps">DevOps</option>
-                          <option value="Architecture">Architecture</option>
-                          <option value="Bug Fix">Bug Fix</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-primary" /> Due Date
                         </label>
-                        <input
-                          type="date"
+                        <StylishDatePicker
                           value={newTaskDue}
-                          onChange={(e) => setNewTaskDue(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                          onChange={setNewTaskDue}
+                          minDate={todayStr}
                         />
                       </div>
                     </div>
 
                     {/* Footer buttons for Step 1 */}
-                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
                       <button
                         type="button"
                         onClick={() => setIsModalOpen(false)}
-                        className="px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                        className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -3256,12 +3261,10 @@ export default function TasksPage() {
                           <label className="text-xs font-semibold text-foreground flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-primary" /> Due Date
                           </label>
-                          <input
-                            type="date"
-                            disabled={isReadOnly}
+                          <StylishDatePicker
                             value={editDue}
-                            onChange={(e) => setEditDue(e.target.value)}
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                            onChange={setEditDue}
+                            minDate={todayStr}
                           />
                         </div>
                       </div>
