@@ -36,6 +36,8 @@ import {
   Workflow,
   Sliders,
   UserCheck,
+  UserPlus,
+  Users,
   CircleDot,
   Check,
   Search,
@@ -153,21 +155,50 @@ function UserSelect({
             setIsCustomMode(!isCustomMode)
             setIsOpen(false)
           }}
-          className="text-[10px] text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+          className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+            isCustomMode
+              ? 'bg-primary/15 text-primary border-primary/30 shadow-xs'
+              : 'bg-muted/60 text-muted-foreground hover:text-foreground border-border/60 hover:bg-muted'
+          }`}
+          title={isCustomMode ? 'Choose from workspace members' : 'Enter a manual name for non-registered user'}
         >
-          {isCustomMode ? 'Choose from list' : 'Custom name'}
+          {isCustomMode ? (
+            <>
+              <Users className="w-3 h-3 text-primary" />
+              <span>Choose member</span>
+            </>
+          ) : (
+            <>
+              <UserPlus className="w-3 h-3 text-primary" />
+              <span>Custom name</span>
+            </>
+          )}
         </button>
       </div>
 
       {isCustomMode ? (
-        <input
-          type="text"
-          placeholder="e.g. John Doe or email@example.com"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          autoFocus
-        />
+        <div className="space-y-1 animate-fade-in">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder={`Enter name manually for ${label.toLowerCase()} (e.g. John Doe, External Client)...`}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-background border border-primary/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary pr-24 shadow-xs"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setIsCustomMode(false)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-primary hover:underline px-2 py-0.5 rounded bg-primary/10 cursor-pointer"
+            >
+              Pick member
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground pl-1">
+            Manual name for non-registered person. This will appear as {label.toLowerCase()} on the task.
+          </p>
+        </div>
       ) : (
         <div className="relative">
           <button
@@ -176,7 +207,7 @@ function UserSelect({
               setIsOpen(!isOpen)
               setSearchTerm('')
             }}
-            className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground flex items-center justify-between gap-2 hover:border-primary/50 transition-colors cursor-pointer text-left"
+            className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground flex items-center justify-between gap-2 hover:border-primary/50 transition-colors cursor-pointer text-left shadow-xs"
           >
             {selectedUser ? (
               <div className="flex items-center gap-2 min-w-0">
@@ -200,6 +231,9 @@ function UserSelect({
                   {getInitials(value)}
                 </div>
                 <span className="text-xs font-medium text-foreground truncate">{value}</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-500 font-semibold border border-amber-500/30 shrink-0">
+                  Custom
+                </span>
               </div>
             ) : (
               <span className="text-xs text-muted-foreground">{placeholder}</span>
@@ -212,11 +246,11 @@ function UserSelect({
           </button>
 
           {isOpen && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-[120] bg-card border border-border rounded-2xl shadow-2xl p-1.5 space-y-1 animate-scale-in max-h-56 overflow-y-auto custom-scrollbar backdrop-blur-xl">
+            <div className="absolute left-0 right-0 top-full mt-1 z-[120] bg-card border border-border rounded-2xl shadow-2xl p-1.5 space-y-1 animate-scale-in max-h-64 overflow-y-auto custom-scrollbar backdrop-blur-xl">
               <div className="p-1 border-b border-border/60 mb-1">
                 <input
                   type="text"
-                  placeholder="Search workspace members..."
+                  placeholder="Search members or type custom name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
@@ -225,21 +259,29 @@ function UserSelect({
                 />
               </div>
 
+              {/* Quick option: Assign the typed custom name if user entered any text */}
+              {searchTerm.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(searchTerm.trim())
+                    setIsOpen(false)
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2 text-left bg-primary/10 hover:bg-primary/15 text-primary transition-colors cursor-pointer text-xs font-semibold border border-primary/25 shadow-xs mb-1"
+                >
+                  <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="truncate">
+                      Assign custom name: <span className="font-bold underline text-foreground">"{searchTerm.trim()}"</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-normal">Person without a TaskFlow account</div>
+                  </div>
+                </button>
+              )}
+
               {filteredUsers.length === 0 ? (
-                <div className="py-3 px-2 text-center text-[11px] text-muted-foreground">
-                  No matching members found.
-                  {searchTerm.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChange(searchTerm.trim())
-                        setIsOpen(false)
-                      }}
-                      className="block mx-auto mt-1.5 text-primary text-xs font-semibold hover:underline cursor-pointer"
-                    >
-                      Use "{searchTerm.trim()}"
-                    </button>
-                  )}
+                <div className="py-2 px-2 text-center text-[11px] text-muted-foreground">
+                  No matching workspace members.
                 </div>
               ) : (
                 filteredUsers.map((u) => {
@@ -284,6 +326,24 @@ function UserSelect({
                   )
                 })
               )}
+
+              {/* Bottom option: Switch to manual name input */}
+              <div className="pt-1.5 mt-1 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomMode(true)
+                    setIsOpen(false)
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-xl flex items-center gap-2 text-left hover:bg-primary/10 text-primary transition-colors cursor-pointer text-xs font-semibold"
+                >
+                  <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="truncate">Enter name manually (non-registered person)</div>
+                    <div className="text-[10px] text-muted-foreground font-normal">Type custom name for someone not in TaskFlow</div>
+                  </div>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -291,6 +351,7 @@ function UserSelect({
     </div>
   )
 }
+
 
 export default function TasksPage() {
   const { currentWorkspace, members: wsMembers, fetchMembers: fetchWsMembers } = useWorkspaceStore()

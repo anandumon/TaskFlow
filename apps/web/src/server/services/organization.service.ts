@@ -8,6 +8,9 @@ export interface OrganizationDto {
   logoUrl?: string
   plan: string
   ownerId: string
+  userRole?: string
+  isAdminOrOwner?: boolean
+  isOwner?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -61,12 +64,15 @@ function mapOrg(row: any): OrganizationDto {
     logoUrl: row.logo_url,
     plan: row.plan || 'PRO',
     ownerId: String(row.owner_id || ''),
+    userRole: row.user_role || (row.is_owner ? 'OWNER' : undefined),
+    isAdminOrOwner: Boolean(row.is_admin_or_owner ?? row.is_owner),
+    isOwner: Boolean(row.is_owner),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
   }
 }
 
-export async function listOrganizations(userId?: string): Promise<OrganizationDto[]> {
+export async function listOrganizations(userId?: string, adminOnly: boolean = false): Promise<OrganizationDto[]> {
   try {
     if (!userId) return []
 
@@ -74,12 +80,24 @@ export async function listOrganizations(userId?: string): Promise<OrganizationDt
     if (!validOwnerId) return []
 
     const rows = await query(
-      `SELECT DISTINCT o.* 
+      `SELECT DISTINCT o.*,
+         (o.owner_id = $1) AS is_owner,
+         CASE 
+           WHEN o.owner_id = $1 THEN 'OWNER'
+           WHEN r.name = 'Owner' THEN 'OWNER'
+           WHEN r.name = 'Admin' THEN 'ADMIN'
+           WHEN om.role = 'OWNER' THEN 'OWNER'
+           WHEN om.role = 'ADMIN' THEN 'ADMIN'
+           ELSE COALESCE(r.name, om.role, 'MEMBER')
+         END AS user_role,
+         (o.owner_id = $1 OR r.name IN ('Owner', 'Admin') OR om.role IN ('OWNER', 'ADMIN') OR om.role_id IN ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')) AS is_admin_or_owner
        FROM organizations o
-       LEFT JOIN organization_members om ON om.organization_id = o.id
+       LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $1
+       LEFT JOIN roles r ON r.id = om.role_id
        WHERE (o.deleted = false OR o.deleted IS NULL)
          AND (om.user_id = $1 OR o.owner_id = $1)
          AND ($1 = 'a0000000-0000-0000-0000-000000000001' OR o.id != 'b0000000-0000-0000-0000-000000000001')
+         ${adminOnly ? `AND (o.owner_id = $1 OR r.name IN ('Owner', 'Admin') OR om.role IN ('OWNER', 'ADMIN') OR om.role_id IN ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002'))` : ''}
        ORDER BY o.created_at ASC`,
       [validOwnerId]
     )
@@ -89,6 +107,7 @@ export async function listOrganizations(userId?: string): Promise<OrganizationDt
     return []
   }
 }
+
 
 export async function createOrganization(
   userId: string,
@@ -203,22 +222,29 @@ export async function deleteOrganization(orgId: string, requestingUserId?: strin
   }
 
   const isOwner = !validOwnerId || org.owner_id === validOwnerId || requestingUserId === 'a0000000-0000-0000-0000-000000000001'
-
-  // If user is a member (not owner), completely remove the organization for this user:
+  let isAdmin = false
   if (!isOwner && validOwnerId) {
-    await query(
-      `DELETE FROM workspace_members WHERE user_id = $1 AND workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $2)`,
-      [validOwnerId, orgId]
-    )
-    await query(
-      `DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
+    const adminMember = await queryOne(
+      `SELECT om.id FROM organization_members om
+       LEFT JOIN roles r ON r.id = om.role_id
+       WHERE om.organization_id = $1 AND om.user_id = $2
+         AND (r.name IN ('Owner', 'Admin') OR om.role IN ('OWNER', 'ADMIN') OR om.role_id IN ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002'))
+       LIMIT 1`,
       [orgId, validOwnerId]
     )
-    return true
+    if (adminMember?.id) {
+      isAdmin = true
+    }
   }
 
-  // Safe cascading cleanup for owner deletion:
+  // Only the creator/owner or an administrator can delete this organization
+  if (!isOwner && !isAdmin && validOwnerId) {
+    throw new Error('Only the creator or an administrator has permission to delete this organization.')
+  }
+
+  // Safe cascading cleanup for owner/admin deletion:
   // 1. Delete calendar policies for workspaces in this org
+
 
   try {
     await query(

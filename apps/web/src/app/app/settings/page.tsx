@@ -42,12 +42,16 @@ export default function SettingsPage() {
   const { workspaces, currentWorkspace, setCurrentWorkspace, updateWorkspace, deleteWorkspace, fetchWorkspaces, teams } = useWorkspaceStore()
   const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading: isProjectsLoading } = useProjectStore()
 
-  const isOrgAdminOrOwner =
-    !currentOrg ||
-    currentOrg?.ownerId === user?.id ||
-    (currentOrg as any)?.role === 'OWNER' ||
-    (currentOrg as any)?.role === 'ADMIN' ||
-    (currentOrg as any)?.isOwner === true
+  const isOrgAdminOrOwner = Boolean(
+    currentOrg &&
+    (currentOrg.ownerId === user?.id ||
+      (currentOrg as any)?.isOwner === true ||
+      currentOrg.isAdminOrOwner === true ||
+      currentOrg.userRole === 'OWNER' ||
+      currentOrg.userRole === 'ADMIN' ||
+      (currentOrg as any)?.role === 'OWNER' ||
+      (currentOrg as any)?.role === 'ADMIN')
+  )
 
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'projects' | 'teams' | 'security' | 'calendar'>('profile')
 
@@ -105,29 +109,41 @@ export default function SettingsPage() {
     setMounted(true)
   }, [])
 
-  // Filter organizations strictly for the logged-in user, never leaking TaskFlow HQ demo to non-admins
+  // Filter organizations strictly for the logged-in user:
+  // Show ONLY organizations where the user is the creator/owner (o.ownerId === user.id)
+  // OR where the user has admin privileges (o.isAdminOrOwner === true, o.userRole === 'OWNER' / 'ADMIN')
   const visibleOrganizations = useMemo(() => {
     const unique = new Map<string, typeof organizations[0]>()
     for (const org of organizations) {
       if (org.id === 'b0000000-0000-0000-0000-000000000001' && user?.email !== 'admin@taskflow.dev') {
         continue
       }
-      if (!unique.has(org.id)) {
-        unique.set(org.id, org)
+      const isCreator = (org.ownerId && org.ownerId === user?.id) || (org as any).isOwner === true
+      const isAdmin =
+        org.isAdminOrOwner === true ||
+        org.userRole === 'OWNER' ||
+        org.userRole === 'ADMIN' ||
+        (org as any).role === 'OWNER' ||
+        (org as any).role === 'ADMIN'
+
+      if (isCreator || isAdmin) {
+        if (!unique.has(org.id)) {
+          unique.set(org.id, org)
+        }
       }
     }
     return Array.from(unique.values())
-  }, [organizations, user?.email])
+  }, [organizations, user?.id, user?.email])
 
-  // If user has cached TaskFlow HQ from legacy session, auto-switch to their actual organization
+  // If user has cached an organization where they are not creator/admin, auto-switch to their first valid organization
   useEffect(() => {
-    if (currentOrg?.id === 'b0000000-0000-0000-0000-000000000001' && user?.email !== 'admin@taskflow.dev') {
-      const valid = visibleOrganizations[0] || null
-      if (valid) {
-        setCurrentOrg(valid)
+    if (visibleOrganizations.length > 0) {
+      const isCurrentValid = visibleOrganizations.some((o) => o.id === currentOrg?.id)
+      if (!isCurrentValid) {
+        setCurrentOrg(visibleOrganizations[0])
       }
     }
-  }, [currentOrg?.id, visibleOrganizations, user?.email, setCurrentOrg])
+  }, [visibleOrganizations, currentOrg?.id, setCurrentOrg])
 
   useEffect(() => {
     if (user?.avatarUrl) {
@@ -457,7 +473,8 @@ export default function SettingsPage() {
       const remaining = freshOrgs.filter(
         (o) =>
           o.id !== orgToDeleteId &&
-          (o.id !== 'b0000000-0000-0000-0000-000000000001' || user?.email === 'admin@taskflow.dev')
+          (o.id !== 'b0000000-0000-0000-0000-000000000001' || user?.email === 'admin@taskflow.dev') &&
+          ((o.ownerId && o.ownerId === user?.id) || (o as any).isOwner === true || o.isAdminOrOwner === true || o.userRole === 'OWNER' || o.userRole === 'ADMIN')
       )
       if (remaining.length > 0) {
         setCurrentOrg(remaining[0])
@@ -982,7 +999,12 @@ export default function SettingsPage() {
                       )}
                       <div className="truncate">
                         <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
-                        <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-primary/10 text-primary border border-primary/20">
+                            {org.ownerId === user?.id || (org as any).isOwner ? 'Creator' : 'Admin'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     {isCurrent ? (
@@ -1000,32 +1022,34 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Danger Zone: Delete Organization */}
-          <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
-            <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Danger Zone</span>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-foreground">Delete Organization</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Permanently delete '{currentOrg?.name || 'this organization'}', including all its workspaces, projects, teams, tasks, and data.
-                </p>
+          {/* Danger Zone: Delete Organization (Only visible if creator or admin) */}
+          {isOrgAdminOrOwner && (
+            <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
+              <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Danger Zone</span>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteOrgConfirmText('')
-                  setIsDeleteOrgModalOpen(true)
-                }}
-                className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shrink-0 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95 flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Organization</span>
-              </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Delete Organization</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Permanently delete '{currentOrg?.name || 'this organization'}', including all its workspaces, projects, teams, tasks, and data.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteOrgConfirmText('')
+                    setIsDeleteOrgModalOpen(true)
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shrink-0 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Organization</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </form>
       )}
 

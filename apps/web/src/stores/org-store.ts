@@ -9,6 +9,9 @@ export interface Organization {
   logoUrl?: string
   plan: string
   ownerId: string
+  userRole?: string
+  isAdminOrOwner?: boolean
+  isOwner?: boolean
   createdAt: string
 }
 
