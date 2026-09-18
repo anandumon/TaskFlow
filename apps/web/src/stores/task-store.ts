@@ -89,8 +89,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   error: null,
 
   loadTasks: async (workspaceId: string) => {
-    if (get().tasks.length === 0) {
-      set({ isLoading: true, error: null })
+    if (!workspaceId) {
+      set({ tasks: [], isLoading: false })
+      return
+    }
+    const currentTasks = get().tasks
+    const isDifferentWorkspace =
+      currentTasks.length > 0 && currentTasks.some((t) => t.workspaceId && t.workspaceId !== workspaceId)
+    if (currentTasks.length === 0 || isDifferentWorkspace) {
+      set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
     }
     try {
       const res = await apiClient.get<Task[]>(`/api/v1/workspaces/${workspaceId}/tasks`)

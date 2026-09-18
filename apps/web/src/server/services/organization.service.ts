@@ -243,56 +243,131 @@ export async function deleteOrganization(orgId: string, requestingUserId?: strin
   }
 
   // Safe cascading cleanup for owner/admin deletion:
-  // 1. Delete calendar policies for workspaces in this org
+  // 1. Delete calendar event mappings linked to tasks or projects in this org's workspaces
+  try {
+    await query(
+      `DELETE FROM calendar_event_mapping 
+       WHERE task_id IN (
+         SELECT id FROM tasks WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+       ) 
+       OR project_id IN (
+         SELECT id FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+       )`,
+      [orgId]
+    )
+  } catch (e) {
+    console.warn('[org.service] non-fatal calendar_event_mapping delete error:', e)
+  }
 
+  // 2. Delete project memberships for projects in this org
+  try {
+    await query(
+      `DELETE FROM project_memberships 
+       WHERE project_id IN (SELECT id FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1))`,
+      [orgId]
+    )
+  } catch (e) {
+    console.warn('[org.service] non-fatal project_memberships delete error:', e)
+  }
 
+  // 3. Delete project invitations
+  try {
+    await query(
+      `DELETE FROM project_invitations 
+       WHERE project_id IN (SELECT id FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1))`,
+      [orgId]
+    )
+  } catch (e) {
+    console.warn('[org.service] non-fatal project_invitations delete error:', e)
+  }
+
+  // 4. Delete team members for teams in this org's workspaces
+  try {
+    await query(
+      `DELETE FROM team_members 
+       WHERE team_id IN (SELECT id FROM teams WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1))`,
+      [orgId]
+    )
+  } catch (e) {
+    console.warn('[org.service] non-fatal team_members delete error:', e)
+  }
+
+  // 5. Delete invitations for this org, its workspaces, or its projects
+  try {
+    await query(
+      `DELETE FROM invitations 
+       WHERE organization_id = $1 
+          OR workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+          OR project_id IN (SELECT id FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1))`,
+      [orgId]
+    )
+  } catch (e) {
+    console.warn('[org.service] non-fatal invitations delete error:', e)
+  }
+
+  try {
+    await query(`DELETE FROM organization_invitations WHERE organization_id = $1`, [orgId])
+  } catch (e) {
+    console.warn('[org.service] non-fatal organization_invitations delete error:', e)
+  }
+
+  // 6. Delete calendar sync policies
   try {
     await query(
       `DELETE FROM calendar_sync_policy WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
       [orgId]
     )
   } catch {}
+  try {
+    await query(
+      `DELETE FROM calendar_sync_policies WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+      [orgId]
+    )
+  } catch {}
 
-  // 2. Delete tasks in workspaces belonging to this org
+  // 7. Delete all tasks belonging to this org's workspaces or projects
   await query(
-    `DELETE FROM tasks WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    `DELETE FROM tasks 
+     WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)
+        OR project_id IN (SELECT id FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1))`,
     [orgId]
   )
-  // 3. Delete projects in workspaces belonging to this org
+
+  // 8. Delete all projects in workspaces belonging to this org
   await query(
     `DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 4. Delete workspace members in workspaces belonging to this org
-  await query(
-    `DELETE FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
-    [orgId]
-  )
-  // 5. Delete teams in workspaces belonging to this org
+
+  // 9. Delete teams in workspaces belonging to this org
   await query(
     `DELETE FROM teams WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
     [orgId]
   )
-  // 6. Delete invitations for workspaces or this org
-  try {
-    await query(`DELETE FROM invitations WHERE organization_id = $1`, [orgId])
-  } catch {}
-  try {
-    await query(`DELETE FROM organization_invitations WHERE organization_id = $1`, [orgId])
-  } catch {}
-  // 7. Delete audit logs
+
+  // 10. Delete workspace members in workspaces belonging to this org
+  await query(
+    `DELETE FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $1)`,
+    [orgId]
+  )
+
+  // 11. Delete audit logs for this org
   try {
     await query(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId])
   } catch {}
-  // 8. Delete workspaces
+
+  // 12. Delete workspaces belonging to this org
   await query(`DELETE FROM workspaces WHERE organization_id = $1`, [orgId])
-  // 9. Delete organization members
+
+  // 13. Delete organization members
   await query(`DELETE FROM organization_members WHERE organization_id = $1`, [orgId])
-  // 10. Delete roles
+
+  // 14. Delete custom roles for this org
   try {
     await query(`DELETE FROM roles WHERE organization_id = $1`, [orgId])
   } catch {}
-  // 11. Delete organization
+
+  // 15. Finally, delete the organization itself
   await query(`DELETE FROM organizations WHERE id = $1`, [orgId])
   return true
 }

@@ -20,6 +20,8 @@ import {
   Check,
   ExternalLink,
   Clock,
+  AlertTriangle,
+  Zap,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
@@ -60,36 +62,17 @@ export default function TeamsPage() {
   const [selectedFilterProjectId, setSelectedFilterProjectId] = useState<string>('ALL')
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isLoadingMembers, setIsLoadingMembers] = useState(false)
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const [membersList, setMembersList] = useState<MemberItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = sessionStorage.getItem('taskflow_cached_teams_members')
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed
-        }
-      } catch {}
-    }
-    const currentUser = useAuthStore.getState().user
-    if (currentUser) {
-      return [
-        {
-          id: currentUser.id || 'owner',
-          name: currentUser.displayName || `${currentUser.firstName || 'Owner'} ${currentUser.lastName || ''}`.trim() || 'User',
-          email: currentUser.email || '',
-          avatarUrl: currentUser.avatarUrl,
-          role: 'Owner',
-          status: 'Active',
-          isOwner: true,
-        },
-      ]
-    }
-    return []
-  })
+  // User deletion / confirmation state
+  const [memberToDelete, setMemberToDelete] = useState<MemberItem | null>(null)
+  const [isDeletingMember, setIsDeletingMember] = useState(false)
+
+  // Initialize membersList empty until initial load completes
+  const [membersList, setMembersList] = useState<MemberItem[]>([])
   const [pendingForMe, setPendingForMe] = useState<any[]>([])
 
   // Ensure organization and workspace are loaded if user enters page directly
@@ -194,6 +177,16 @@ export default function TeamsPage() {
 
         const isCurrentUser = Boolean(user && (m.userId === user.id || (m.email && emailLower === user.email?.toLowerCase())))
 
+        let resolvedProjectId = matchedInv?.projectId || m.projectId
+        let resolvedProjectName = isOwner ? 'All Projects' : (matchedInv?.projectName || m.projectName)
+        if (resolvedProjectId && projects.length > 0) {
+          const prj = projects.find((p) => p.id === resolvedProjectId)
+          if (prj) resolvedProjectName = prj.name
+        }
+        if (!resolvedProjectName) {
+          resolvedProjectName = isOwner ? 'All Projects' : (projects[0]?.name || 'General')
+        }
+
         combined.push({
           id: m.id || m.userId || `mem-${Math.random()}`,
           name: displayName,
@@ -202,8 +195,8 @@ export default function TeamsPage() {
           role: roleDisplay,
           status: 'Active',
           isOwner,
-          projectId: matchedInv?.projectId,
-          projectName: matchedInv?.projectName,
+          projectId: resolvedProjectId,
+          projectName: resolvedProjectName,
         })
       })
 
@@ -220,6 +213,7 @@ export default function TeamsPage() {
             role: 'Owner',
             status: 'Active',
             isOwner: true,
+            projectName: 'All Projects',
           })
         }
       }
@@ -235,6 +229,15 @@ export default function TeamsPage() {
           else if (inv.role?.toUpperCase() === 'MANAGER') roleDisplay = 'Manager'
           else if (inv.role?.toUpperCase() === 'GUEST') roleDisplay = 'Guest'
 
+          let resolvedProjName = inv.projectName || inv.project_name
+          if (inv.projectId && projects.length > 0) {
+            const prj = projects.find((p) => p.id === inv.projectId)
+            if (prj) resolvedProjName = prj.name
+          }
+          if (!resolvedProjName) {
+            resolvedProjName = projects[0]?.name || 'General'
+          }
+
           combined.push({
             id: inv.id || `inv-${inv.token}`,
             name: emailLower.split('@')[0],
@@ -245,7 +248,7 @@ export default function TeamsPage() {
             isInvitation: true,
             invitationToken: inv.token,
             projectId: inv.projectId,
-            projectName: inv.projectName,
+            projectName: resolvedProjName,
           })
         }
       })
@@ -260,8 +263,9 @@ export default function TeamsPage() {
       // ignore
     } finally {
       setIsLoadingMembers(false)
+      setIsInitialLoading(false)
     }
-  }, [currentOrg?.id, currentOrg?.ownerId, user])
+  }, [currentOrg?.id, currentOrg?.ownerId, user, projects])
 
   useEffect(() => {
     loadData()
@@ -419,21 +423,34 @@ export default function TeamsPage() {
     setMembersList((prev) => prev.map((m) => (m.id === id ? { ...m, role: newRole } : m)))
   }
 
-  const handleRemoveMember = async (member: MemberItem) => {
-    if (member.isInvitation && member.invitationToken) {
-      try {
-        await apiClient.post(`/api/v1/invitations/${member.invitationToken}/decline`)
-      } catch {
-        // ignore
+  const handleRemoveMember = (member: MemberItem) => {
+    setMemberToDelete(member)
+  }
+
+  const handleConfirmDeleteMember = async () => {
+    if (!memberToDelete || isDeletingMember) return
+    setIsDeletingMember(true)
+    try {
+      if (memberToDelete.isInvitation && memberToDelete.invitationToken) {
+        await apiClient.post(`/api/v1/invitations/${memberToDelete.invitationToken}/decline`)
+      } else if (currentOrg?.id && memberToDelete.id) {
+        await apiClient.delete(`/api/v1/organizations/${currentOrg.id}/members/${memberToDelete.id}`)
       }
-    } else if (currentOrg?.id && member.id) {
-      try {
-        await apiClient.delete(`/api/v1/organizations/${currentOrg.id}/members/${member.id}`)
-      } catch {
-        // ignore
-      }
+      setMembersList((prev) => prev.filter((m) => m.id !== memberToDelete.id))
+      setToastMessage(
+        memberToDelete.isInvitation
+          ? `Invitation for ${memberToDelete.email} revoked.`
+          : `Removed ${memberToDelete.name} from organization.`
+      )
+      setTimeout(() => setToastMessage(null), 3500)
+      setMemberToDelete(null)
+      await loadData()
+    } catch (err: any) {
+      setToastMessage(err?.response?.data?.message || err?.message || 'Failed to remove member')
+      setTimeout(() => setToastMessage(null), 3500)
+    } finally {
+      setIsDeletingMember(false)
     }
-    setMembersList((prev) => prev.filter((m) => m.id !== member.id))
   }
 
   // Drag and drop reordering for members
@@ -474,9 +491,9 @@ export default function TeamsPage() {
     return m.projectId === selectedFilterProjectId
   })
 
-  // Pending invitations calculation
+  // Accurate pending invitations calculation
   const incomingInvites = pendingForMe
-  const outgoingInvites = membersList.filter((m) => m.isInvitation)
+  const outgoingInvites = membersList.filter((m) => m.isInvitation || m.status === 'Pending Invitation')
   const totalPendingInvites = incomingInvites.length + outgoingInvites.length
 
   const handleCopyInviteToken = (token?: string) => {
@@ -486,6 +503,49 @@ export default function TeamsPage() {
     setTimeout(() => setCopiedToken(null), 2500)
     setToastMessage('Invitation code copied to clipboard!')
     setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  // Creative TaskFlow branded loader shown while initial directory data is loading
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 animate-fade-in select-none">
+        <div className="relative flex flex-col items-center max-w-md w-full text-center space-y-6">
+          {/* Animated creative logo with ambient glow & rings */}
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-28 h-28 rounded-3xl bg-primary/20 animate-ping opacity-30" />
+            <div className="absolute w-24 h-24 rounded-3xl bg-gradient-to-tr from-primary/30 to-purple-500/30 blur-xl animate-pulse" />
+            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary via-indigo-500 to-purple-600 p-0.5 shadow-2xl shadow-primary/30 flex items-center justify-center">
+              <div className="w-full h-full bg-card rounded-[14px] flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-white shadow-md shadow-primary/40 animate-pulse">
+                  <Zap className="w-6 h-6 animate-bounce" />
+                </div>
+              </div>
+            </div>
+            {/* Spinning orbital indicator ring */}
+            <div className="absolute -inset-2 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 animate-spin text-primary" />
+              <span>TaskFlow Directory</span>
+            </div>
+            <h2 className="text-xl font-bold text-foreground tracking-tight">
+              Loading Teams &amp; Organization Members
+            </h2>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+              Synchronizing members, active permissions, and workspace project assignments for{' '}
+              <strong className="text-foreground">{currentOrg?.name || 'your organization'}</strong>...
+            </p>
+          </div>
+
+          {/* Shimmer loading bar */}
+          <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="w-full h-full bg-gradient-to-r from-primary via-purple-500 to-primary rounded-full animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -544,12 +604,12 @@ export default function TeamsPage() {
                 onChange={(e) => setSelectedFilterProjectId(e.target.value)}
                 className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer pr-1"
               >
-                <option value="ALL">All Projects ({membersList.length})</option>
+                <option value="ALL">All Projects ({projects.length})</option>
                 {projects.map((p) => {
                   const count = membersList.filter((m) => m.isOwner || m.projectId === p.id).length
                   return (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({count})
+                      {p.name} ({count} {count === 1 ? 'member' : 'members'})
                     </option>
                   )
                 })}
@@ -651,12 +711,12 @@ export default function TeamsPage() {
               onChange={(e) => setSelectedFilterProjectId(e.target.value)}
               className="px-3 py-1.5 rounded-xl bg-background border border-border text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer shadow-sm"
             >
-              <option value="ALL">All Projects ({membersList.length})</option>
+              <option value="ALL">All Projects ({projects.length})</option>
               {projects.map((p) => {
                 const count = membersList.filter((m) => m.isOwner || m.projectId === p.id).length
                 return (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({count})
+                    {p.name} ({count} {count === 1 ? 'member' : 'members'})
                   </option>
                 )
               })}
@@ -1078,6 +1138,68 @@ export default function TeamsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {/* Interactive Confirmation Modal: Remove Member / Revoke Invitation */}
+      {memberToDelete && (
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+              <div className="flex items-center gap-3 text-rose-500">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    {memberToDelete.isInvitation ? 'Revoke Invitation' : 'Remove Team Member'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {memberToDelete.isInvitation
+                      ? 'Cancel and revoke pending invitation'
+                      : 'Irreversible member removal from organization'}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-foreground/90 leading-relaxed">
+                Are you sure you want to {memberToDelete.isInvitation ? 'revoke the invitation for' : 'remove'}{' '}
+                <strong className="text-foreground">{memberToDelete.name || memberToDelete.email}</strong>{' '}
+                (<span className="font-mono text-muted-foreground">{memberToDelete.email}</span>)?
+                {!memberToDelete.isInvitation &&
+                  ' They will immediately lose access to all workspaces, projects, and tasks in this organization.'}
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  disabled={isDeletingMember}
+                  onClick={() => setMemberToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingMember}
+                  onClick={handleConfirmDeleteMember}
+                  className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeletingMember ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{memberToDelete.isInvitation ? 'Revoking...' : 'Removing...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{memberToDelete.isInvitation ? 'Revoke Invitation' : 'Remove Member'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </Portal>

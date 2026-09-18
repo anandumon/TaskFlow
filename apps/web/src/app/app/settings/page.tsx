@@ -34,6 +34,7 @@ import { useSearchParams } from 'next/navigation'
 import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
 import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
 import { useProjectStore, Project } from '@/stores/project-store'
+import { useTaskStore } from '@/stores/task-store'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
@@ -464,9 +465,13 @@ export default function SettingsPage() {
     try {
       setIsDeletingOrg(true)
       const orgToDeleteId = currentOrg.id
-      setIsDeleteOrgModalOpen(false) // Close modal immediately!
-      setDeleteOrgConfirmText('')
+      // Keep modal open while request is in-flight so user sees feedback and button is disabled
       await deleteOrganization(orgToDeleteId)
+
+      // Immediately purge any cached tasks or projects from memory
+      useTaskStore.setState({ tasks: [] })
+      useProjectStore.setState({ projects: [] })
+
       showToast('Organization deleted successfully')
 
       // Ensure store and active organization are updated to the next available organization
@@ -482,11 +487,17 @@ export default function SettingsPage() {
         const wss = await fetchWorkspaces(remaining[0].id)
         if (wss && wss.length > 0) {
           setCurrentWorkspace(wss[0])
+        } else {
+          setCurrentWorkspace(null)
         }
       } else {
         setCurrentOrg(null)
         setCurrentWorkspace(null)
       }
+
+      // Close modal card only after organization has been deleted
+      setIsDeleteOrgModalOpen(false)
+      setDeleteOrgConfirmText('')
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete organization')
     } finally {
@@ -503,9 +514,24 @@ export default function SettingsPage() {
     }
     try {
       setIsDeletingWs(true)
-      setIsDeleteWsModalOpen(false) // Close modal immediately to prevent repeated clicks
-      await deleteWorkspace(currentOrg.id, currentWorkspace.id)
+      const wsToDeleteId = currentWorkspace.id
+      // Keep modal open while deletion is in progress
+      await deleteWorkspace(currentOrg.id, wsToDeleteId)
+
+      // Purge in-memory tasks & projects
+      useTaskStore.setState({ tasks: [] })
+      useProjectStore.setState({ projects: [] })
+
       showToast('Workspace deleted successfully')
+      const remainingWs = workspaces.filter((w) => w.id !== wsToDeleteId)
+      if (remainingWs.length > 0) {
+        setCurrentWorkspace(remainingWs[0])
+      } else {
+        setCurrentWorkspace(null)
+      }
+
+      // Close modal card only after workspace has been deleted
+      setIsDeleteWsModalOpen(false)
     } catch (err: any) {
       showToast(err?.message || 'Failed to delete workspace')
     } finally {
@@ -1791,8 +1817,9 @@ export default function SettingsPage() {
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
               <button
                 type="button"
+                disabled={isDeletingWs}
                 onClick={() => setIsDeleteWsModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -1800,10 +1827,10 @@ export default function SettingsPage() {
                 type="button"
                 disabled={isDeletingWs}
                 onClick={handleDeleteWorkspace}
-                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDeletingWs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Delete Workspace</span>
+                <span>{isDeletingWs ? 'Deleting Workspace...' : 'Delete Workspace'}</span>
               </button>
             </div>
           </div>
@@ -1835,10 +1862,11 @@ export default function SettingsPage() {
               </label>
               <input
                 type="text"
+                disabled={isDeletingOrg}
                 placeholder={currentOrg?.name}
                 value={deleteOrgConfirmText}
                 onChange={(e) => setDeleteOrgConfirmText(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 autoFocus
               />
             </div>
@@ -1846,11 +1874,12 @@ export default function SettingsPage() {
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
               <button
                 type="button"
+                disabled={isDeletingOrg}
                 onClick={() => {
                   setIsDeleteOrgModalOpen(false)
                   setDeleteOrgConfirmText('')
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -1864,7 +1893,7 @@ export default function SettingsPage() {
                 className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isDeletingOrg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Delete Organization</span>
+                <span>{isDeletingOrg ? 'Deleting Organization...' : 'Delete Organization'}</span>
               </button>
             </div>
           </div>

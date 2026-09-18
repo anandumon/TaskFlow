@@ -170,24 +170,87 @@ export async function createTeam(
 }
 
 export async function deleteWorkspace(workspaceId: string): Promise<boolean> {
-  // Cascading cleanup for workspace:
-  // 1. Delete calendar policies for this workspace
+  // Cascading cleanup for workspace in strict child-first dependency order:
+  // 1. Delete calendar event mappings linked to tasks or projects in this workspace
+  try {
+    await query(
+      `DELETE FROM calendar_event_mapping 
+       WHERE task_id IN (SELECT id FROM tasks WHERE workspace_id = $1)
+          OR project_id IN (SELECT id FROM projects WHERE workspace_id = $1)`,
+      [workspaceId]
+    )
+  } catch (e) {
+    console.warn('[workspace.service] non-fatal calendar_event_mapping delete:', e)
+  }
+
+  // 2. Delete project memberships for projects in this workspace
+  try {
+    await query(
+      `DELETE FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = $1)`,
+      [workspaceId]
+    )
+  } catch (e) {
+    console.warn('[workspace.service] non-fatal project_memberships delete:', e)
+  }
+
+  // 3. Delete project invitations
+  try {
+    await query(
+      `DELETE FROM project_invitations WHERE project_id IN (SELECT id FROM projects WHERE workspace_id = $1)`,
+      [workspaceId]
+    )
+  } catch (e) {
+    console.warn('[workspace.service] non-fatal project_invitations delete:', e)
+  }
+
+  // 4. Delete team members for teams in this workspace
+  try {
+    await query(
+      `DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE workspace_id = $1)`,
+      [workspaceId]
+    )
+  } catch (e) {
+    console.warn('[workspace.service] non-fatal team_members delete:', e)
+  }
+
+  // 5. Delete invitations for this workspace or its projects
+  try {
+    await query(
+      `DELETE FROM invitations 
+       WHERE workspace_id = $1 
+          OR project_id IN (SELECT id FROM projects WHERE workspace_id = $1)`,
+      [workspaceId]
+    )
+  } catch (e) {
+    console.warn('[workspace.service] non-fatal invitations delete:', e)
+  }
+
+  // 6. Delete calendar sync policies for this workspace
   try {
     await query(`DELETE FROM calendar_sync_policy WHERE workspace_id = $1`, [workspaceId])
   } catch {}
-  // 2. Delete invitations for this workspace
   try {
-    await query(`DELETE FROM invitations WHERE workspace_id = $1`, [workspaceId])
+    await query(`DELETE FROM calendar_sync_policies WHERE workspace_id = $1`, [workspaceId])
   } catch {}
-  // 3. Delete tasks belonging to this workspace
-  await query(`DELETE FROM tasks WHERE workspace_id = $1`, [workspaceId])
-  // 4. Delete projects belonging to this workspace
+
+  // 7. Delete all tasks belonging to this workspace or its projects
+  await query(
+    `DELETE FROM tasks 
+     WHERE workspace_id = $1 
+        OR project_id IN (SELECT id FROM projects WHERE workspace_id = $1)`,
+    [workspaceId]
+  )
+
+  // 8. Delete projects belonging to this workspace
   await query(`DELETE FROM projects WHERE workspace_id = $1`, [workspaceId])
-  // 5. Delete workspace members
-  await query(`DELETE FROM workspace_members WHERE workspace_id = $1`, [workspaceId])
-  // 6. Delete teams
+
+  // 9. Delete teams in this workspace
   await query(`DELETE FROM teams WHERE workspace_id = $1`, [workspaceId])
-  // 7. Delete workspace
+
+  // 10. Delete workspace members
+  await query(`DELETE FROM workspace_members WHERE workspace_id = $1`, [workspaceId])
+
+  // 11. Delete the workspace itself
   await query(`DELETE FROM workspaces WHERE id = $1`, [workspaceId])
   return true
 }
