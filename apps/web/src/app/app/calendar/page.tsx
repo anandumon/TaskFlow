@@ -404,6 +404,7 @@ export default function CalendarPage() {
             <span>Dispatch Due Date Alerts</span>
           </button>
 
+          {/* Commented out for now as requested
           <button
             onClick={() => {
               setNewTaskDay(selectedDay.toString())
@@ -413,6 +414,7 @@ export default function CalendarPage() {
           >
             <Plus className="w-4 h-4" /> Add Calendar Task
           </button>
+          */}
         </div>
       </div>
 

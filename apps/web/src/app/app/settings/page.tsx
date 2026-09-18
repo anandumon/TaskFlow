@@ -54,7 +54,7 @@ export default function SettingsPage() {
       (currentOrg as any)?.role === 'ADMIN')
   )
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'projects' | 'teams' | 'security' | 'calendar'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'calendar'>('profile')
 
   useEffect(() => {
     const tab = searchParams.get('tab')
@@ -62,16 +62,12 @@ export default function SettingsPage() {
       setActiveTab('calendar')
     } else if (tab === 'appearance' || tab === 'theme') {
       setActiveTab('appearance')
-    } else if (tab === 'security' && isOrgAdminOrOwner) {
-      setActiveTab('security')
-    } else if (tab === 'projects') {
-      setActiveTab('projects')
     } else if (tab === 'organization' || tab === 'org') {
       setActiveTab('organization')
     } else if (tab === 'workspace') {
       setActiveTab('workspace')
     }
-  }, [searchParams, isOrgAdminOrOwner])
+  }, [searchParams])
 
   useEffect(() => {
     fetchOrganizations()
@@ -82,19 +78,6 @@ export default function SettingsPage() {
       fetchWorkspaces(currentOrg.id)
     }
   }, [currentOrg?.id])
-
-  useEffect(() => {
-    if (currentWorkspace?.id) {
-      setSelectedWsId(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-    }
-  }, [currentWorkspace?.id])
-
-  useEffect(() => {
-    if (!isOrgAdminOrOwner && activeTab === 'security') {
-      setActiveTab('profile')
-    }
-  }, [isOrgAdminOrOwner, activeTab])
 
   // Profile state
   const [firstName, setFirstName] = useState(user?.firstName || 'Admin')
@@ -638,10 +621,7 @@ export default function SettingsPage() {
     { id: 'appearance', label: 'Appearance & Theme', icon: Palette },
     { id: 'organization', label: 'Organization', icon: Building2 },
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
-    { id: 'projects', label: 'Projects', icon: FolderKanban },
-    { id: 'teams', label: 'Teams & Units', icon: Users },
     { id: 'calendar', label: 'Calendar & Sync', icon: Calendar },
-    ...(isOrgAdminOrOwner ? [{ id: 'security', label: 'Security & Keys', icon: ShieldCheck }] : []),
   ]
 
   return (
@@ -766,29 +746,16 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Job Title
-              </label>
-              <input
-                type="text"
-                value={jobTitle}
-                onChange={e => setJobTitle(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Timezone
-              </label>
-              <input
-                type="text"
-                value={timezone}
-                onChange={e => setTimezone(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-              />
-            </div>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Job Title
+            </label>
+            <input
+              type="text"
+              value={jobTitle}
+              onChange={e => setJobTitle(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
+            />
           </div>
 
           <div className="space-y-2">
@@ -1245,318 +1212,6 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {/* Projects Tab */}
-      {activeTab === 'projects' && (
-        <div className="space-y-6 max-w-4xl animate-fade-in">
-          {/* Header with workspace filter & New Project button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-3xl shadow-sm">
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
-                <FolderKanban className="w-5 h-5 text-primary" />
-                <span>Projects Directory</span>
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Manage, customize, and maintain projects for your active workspace.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              {workspaces.length > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-muted-foreground">Workspace:</span>
-                  <select
-                    value={selectedWsId || currentWorkspace?.id || ''}
-                    onChange={(e) => handleWsSelect(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl border border-border bg-background text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-                  >
-                    {workspaces.map((ws) => (
-                      <option key={ws.id} value={ws.id}>
-                        {ws.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <button
-                onClick={() => setIsCreateProjModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Project</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Project Cards */}
-          {isProjectsLoading ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-xs font-semibold">Loading projects...</span>
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="p-12 rounded-3xl border border-dashed border-border text-center space-y-4 bg-card/40">
-              <div className="w-12 h-12 rounded-2xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto">
-                <FolderKanban className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-foreground">No projects found in this workspace</h4>
-                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-                  Get started by creating your first project to organize tasks, sprints, and environments.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsCreateProjModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all inline-flex items-center gap-1.5 shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create Project</span>
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {projects.map((proj) => (
-                <div
-                  key={proj.id}
-                  className="p-5 rounded-3xl bg-card/70 backdrop-blur-xl border border-border/80 hover:border-primary/40 transition-all shadow-sm flex flex-col justify-between group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold shadow-xs shrink-0"
-                          style={{ backgroundColor: proj.color || '#3B82F6' }}
-                        >
-                          <FolderKanban className="w-5 h-5" />
-                        </div>
-                        <div className="truncate">
-                          <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                            {proj.name}
-                          </h4>
-                          <p className="text-[11px] font-mono text-muted-foreground truncate">/{proj.slug}</p>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
-                          proj.status === 'COMPLETED'
-                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
-                            : proj.status === 'REVIEW'
-                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                            : proj.status === 'IN_PROGRESS'
-                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                        }`}
-                      >
-                        {proj.status?.replace('_', ' ') || 'ACTIVE'}
-                      </span>
-                    </div>
-
-                    {proj.description ? (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{proj.description}</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground/60 italic">No description provided</p>
-                    )}
-
-                    {/* Progress & stats */}
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                        <span>
-                          Tasks: {proj.completedTasks ?? 0}/{proj.totalTasks ?? 0}
-                        </span>
-                        <span>{proj.progress ?? 0}%</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-muted/60 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-300"
-                          style={{
-                            width: `${proj.progress ?? 0}%`,
-                            backgroundColor: proj.color || '#3B82F6',
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions: Edit & Delete & Open */}
-                  <div className="pt-4 mt-4 border-t border-border/60 flex items-center justify-between">
-                    <a
-                      href={`/app/projects/${proj.id}`}
-                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
-                    >
-                      <span>Open Board</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingProject(proj)
-                          setEditProjName(proj.name)
-                          setEditProjDesc(proj.description || '')
-                          setEditProjStatus(proj.status || 'ACTIVE')
-                          setEditProjColor(proj.color || '#3B82F6')
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl border border-border text-foreground hover:bg-muted/80 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                      >
-                        <Pencil className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingProject(proj)}
-                        className="px-2.5 py-1.5 rounded-xl border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Teams Tab */}
-      {activeTab === 'teams' && (
-        <div className="space-y-6 max-w-3xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-foreground">Functional Teams & Guilds</h3>
-              <p className="text-xs text-muted-foreground">Organize your coworkers into functional units.</p>
-            </div>
-            <button
-              onClick={() => setIsTeamModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 shadow-sm shadow-primary/20 active:scale-95 transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Team
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {customTeams.map((team) => (
-              <div
-                key={team.id}
-                className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm flex items-center justify-between hover:border-primary/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
-                    style={{ backgroundColor: team.color }}
-                  >
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-foreground">{team.name}</h4>
-                    <p className="text-[11px] text-muted-foreground">{team.memberCount} members</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Interactive Modal: Add Team */}
-          {isTeamModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-              <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
-                <div className="flex items-center justify-between pb-3 border-b border-border">
-                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" /> Create New Team
-                  </h3>
-                  <button
-                    onClick={() => setIsTeamModalOpen(false)}
-                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateTeam} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Team Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mobile Engineering"
-                      value={newTeamName}
-                      onChange={e => setNewTeamName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                      autoFocus
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Color</label>
-                    <div className="flex items-center gap-3">
-                      {['#6366F1', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#3B82F6'].map((c) => (
-                        <button
-                          type="button"
-                          key={c}
-                          onClick={() => setNewTeamColor(c)}
-                          className={`w-7 h-7 rounded-xl transition-transform ${newTeamColor === c ? 'scale-125 ring-2 ring-foreground' : 'hover:scale-110'
-                            }`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={() => setIsTeamModalOpen(false)}
-                      className="px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-                    >
-                      Create Team
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Security Tab */}
-      {activeTab === 'security' && (
-        <div className="space-y-6 max-w-2xl bg-card border border-border/80 p-6 rounded-2xl shadow-sm">
-          <div>
-            <h3 className="text-base font-bold text-foreground">Security & API Tokens</h3>
-            <p className="text-xs text-muted-foreground">Manage your JWT authentication sessions and security keys.</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-muted/50 border border-border space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                <KeyRound className="w-4 h-4 text-primary" /> API Access Key
-              </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-semibold">Active</span>
-            </div>
-            <div className="font-mono text-[11px] bg-background p-2 rounded-lg border border-border text-muted-foreground truncate">
-              tf_live_9a4b37cd16b1347519a2e7cb68377d328
-            </div>
-          </div>
-
-          <div className="pt-4 flex justify-end border-t border-border">
-            <button
-              onClick={() => showToast('API Token regenerated!')}
-              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all active:scale-95"
-            >
-              Rotate Key
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Calendar Tab */}
       {activeTab === 'calendar' && (
         <div className="max-w-4xl space-y-6">
@@ -1564,237 +1219,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Modal: Create Project */}
-      {mounted && isCreateProjModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <FolderKanban className="w-5 h-5 text-primary" /> Create New Project
-              </h3>
-              <button
-                onClick={() => setIsCreateProjModalOpen(false)}
-                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateProject} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Project Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Website Redesign, Mobile App v2"
-                  value={newProjName}
-                  onChange={(e) => setNewProjName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-                  autoFocus
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Description</label>
-                <textarea
-                  placeholder="Summarize project goals, timeline, or scope..."
-                  value={newProjDesc}
-                  onChange={(e) => setNewProjDesc(e.target.value)}
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none shadow-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">Status</label>
-                  <select
-                    value={newProjStatus}
-                    onChange={(e) => setNewProjStatus(e.target.value as any)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="REVIEW">In Review</option>
-                    <option value="COMPLETED">Completed</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">Theme Color</label>
-                  <div className="flex items-center gap-2 pt-1">
-                    {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
-                      <button
-                        type="button"
-                        key={c}
-                        onClick={() => setNewProjColor(c)}
-                        className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
-                          newProjColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateProjModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingProj}
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {isCreatingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                  <span>Create Project</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal: Edit Project */}
-      {mounted && editingProject && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Pencil className="w-4 h-4 text-primary" /> Edit Project Details
-              </h3>
-              <button
-                onClick={() => setEditingProject(null)}
-                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateProject} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Project Name *</label>
-                <input
-                  type="text"
-                  value={editProjName}
-                  onChange={(e) => setEditProjName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Description</label>
-                <textarea
-                  value={editProjDesc}
-                  onChange={(e) => setEditProjDesc(e.target.value)}
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none shadow-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">Status</label>
-                  <select
-                    value={editProjStatus}
-                    onChange={(e) => setEditProjStatus(e.target.value as any)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="REVIEW">In Review</option>
-                    <option value="COMPLETED">Completed</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">Theme Color</label>
-                  <div className="flex items-center gap-2 pt-1">
-                    {['#3B82F6', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'].map((c) => (
-                      <button
-                        type="button"
-                        key={c}
-                        onClick={() => setEditProjColor(c)}
-                        className={`w-7 h-7 rounded-xl transition-transform cursor-pointer ${
-                          editProjColor === c ? 'scale-125 ring-2 ring-foreground shadow-md' : 'hover:scale-110'
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setEditingProject(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUpdatingProj}
-                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {isUpdatingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span>Save Changes</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal: Delete Project Confirmation */}
-      {mounted && deletingProject && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center gap-3 text-rose-500">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-foreground">Delete Project</h3>
-                <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-foreground/90 leading-relaxed">
-              Are you sure you want to delete <span className="font-bold text-foreground">"{deletingProject.name}"</span>? All tasks under this project will be archived/removed.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
-              <button
-                type="button"
-                onClick={() => setDeletingProject(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingProj}
-                onClick={handleDeleteProject}
-                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-              >
-                {isDeletingProj ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Delete Project</span>
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Modal: Delete Workspace Confirmation */}
       {mounted && isDeleteWsModalOpen && typeof document !== 'undefined' && createPortal(

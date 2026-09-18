@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react'
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore()
-  const { fetchOrganizations, currentOrg } = useOrgStore()
+  const { fetchOrganizations, currentOrg, organizations } = useOrgStore()
   const { fetchWorkspaces, currentWorkspace } = useWorkspaceStore()
   const [commandOpen, setCommandOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -74,8 +74,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [authChecked, isLoading, isAuthenticated, router])
 
-
-
   useEffect(() => {
     if (currentOrg) {
       fetchWorkspaces(currentOrg.id)
@@ -106,6 +104,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // If new user with no organizations or onboarding is needed, render ONLY the onboarding wizard directly!
+  // Prevents any flashing of the main dashboard, sidebar, or header.
+  if (showOnboarding || (!currentOrg && organizations.length === 0)) {
+    return (
+      <div className="fixed inset-0 z-[100] h-screen w-screen bg-[#07080b] flex items-center justify-center p-4 sm:p-6 overflow-hidden animate-fade-in">
+        <OnboardingWizardModal
+          onComplete={() => {
+            setShowOnboarding(false)
+            if (user?.id) {
+              localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
+            }
+            localStorage.setItem('taskflow_onboarding_completed', 'true')
+            fetchOrganizations().then((freshOrgs) => {
+              if (freshOrgs && freshOrgs.length > 0) {
+                fetchWorkspaces(freshOrgs[0].id)
+              }
+            })
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       <Sidebar
@@ -122,24 +143,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} />
-
-      {/* ClickUp-style Onboarding Wizard Modal for New Users */}
-      {showOnboarding && (
-        <OnboardingWizardModal
-          onComplete={() => {
-            setShowOnboarding(false)
-            if (user?.id) {
-              localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
-            }
-            localStorage.setItem('taskflow_onboarding_completed', 'true')
-            fetchOrganizations().then((freshOrgs) => {
-              if (freshOrgs && freshOrgs.length > 0) {
-                fetchWorkspaces(freshOrgs[0].id)
-              }
-            })
-          }}
-        />
-      )}
     </div>
   )
 }
