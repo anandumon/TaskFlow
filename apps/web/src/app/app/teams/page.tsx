@@ -29,6 +29,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore } from '@/stores/project-store'
 import { apiClient } from '@/lib/api-client'
 import { Portal } from '@/components/ui/portal'
+import { TeamsSkeleton, MemberTableRowSkeleton } from '@/components/loading'
 
 interface MemberItem {
   id: string
@@ -121,7 +122,11 @@ export default function TeamsPage() {
         targetOrgId = orgs[0].id
       }
     }
-    if (!targetOrgId) return
+    if (!targetOrgId) {
+      setIsInitialLoading(false)
+      setIsLoadingMembers(false)
+      return
+    }
 
     setIsLoadingMembers(true)
     try {
@@ -505,47 +510,9 @@ export default function TeamsPage() {
     setTimeout(() => setToastMessage(null), 3000)
   }
 
-  // Creative TaskFlow branded loader shown while initial directory data is loading
-  if (isInitialLoading) {
-    return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 animate-fade-in select-none">
-        <div className="relative flex flex-col items-center max-w-md w-full text-center space-y-6">
-          {/* Animated creative logo with ambient glow & rings */}
-          <div className="relative flex items-center justify-center">
-            <div className="absolute w-28 h-28 rounded-3xl bg-primary/20 animate-ping opacity-30" />
-            <div className="absolute w-24 h-24 rounded-3xl bg-gradient-to-tr from-primary/30 to-purple-500/30 blur-xl animate-pulse" />
-            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary via-indigo-500 to-purple-600 p-0.5 shadow-2xl shadow-primary/30 flex items-center justify-center">
-              <div className="w-full h-full bg-card rounded-[14px] flex items-center justify-center">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-white shadow-md shadow-primary/40 animate-pulse">
-                  <Zap className="w-6 h-6 animate-bounce" />
-                </div>
-              </div>
-            </div>
-            {/* Spinning orbital indicator ring */}
-            <div className="absolute -inset-2 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          </div>
-
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest shadow-xs">
-              <Sparkles className="w-3.5 h-3.5 animate-spin text-primary" />
-              <span>TaskFlow Directory</span>
-            </div>
-            <h2 className="text-xl font-bold text-foreground tracking-tight">
-              Loading Teams &amp; Organization Members
-            </h2>
-            <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
-              Synchronizing members, active permissions, and workspace project assignments for{' '}
-              <strong className="text-foreground">{currentOrg?.name || 'your organization'}</strong>...
-            </p>
-          </div>
-
-          {/* Shimmer loading bar */}
-          <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="w-full h-full bg-gradient-to-r from-primary via-purple-500 to-primary rounded-full animate-pulse" />
-          </div>
-        </div>
-      </div>
-    )
+  // Show skeleton during initial directory data load
+  if (isInitialLoading || (isLoadingMembers && membersList.length === 0)) {
+    return <TeamsSkeleton />
   }
 
   return (
@@ -622,7 +589,7 @@ export default function TeamsPage() {
             className="p-2 rounded-xl border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-all cursor-pointer"
             title="Refresh members"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoadingMembers ? 'animate-spin text-primary' : ''}`} />
+            <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
@@ -694,7 +661,6 @@ export default function TeamsPage() {
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Members &amp; Invitations ({filteredMembers.length})
             </h2>
-            {isLoadingMembers && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
             <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               Drag rows to reorder
             </span>
@@ -735,7 +701,11 @@ export default function TeamsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {filteredMembers.length === 0 ? (
+            {isLoadingMembers && filteredMembers.length === 0 ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <MemberTableRowSkeleton key={i} />
+              ))
+            ) : filteredMembers.length === 0 ? (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-muted-foreground text-xs">
                   No members found for this filter.

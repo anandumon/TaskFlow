@@ -16,6 +16,7 @@ import { TaskSubtasksCard } from '@/features/tasks/components/TaskSubtasksCard'
 import { TaskFilesChangedCard } from '@/features/tasks/components/TaskFilesChangedCard'
 import { TaskPropertiesCard } from '@/features/tasks/components/TaskPropertiesCard'
 import { TaskDiscussionCard } from '@/features/tasks/components/TaskDiscussionCard'
+import { TaskDetailsSkeleton } from '@/components/loading'
 
 export default function TaskDetailsPage() {
   const params = useParams()
@@ -28,6 +29,7 @@ export default function TaskDetailsPage() {
   const {
     tasks,
     loadTasks,
+    isLoading: isTasksLoading,
     updateTask,
     updateStatus,
     updateEnvironment,
@@ -54,6 +56,10 @@ export default function TaskDetailsPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  if ((isTasksLoading && !task) || (!task && tasks.length === 0)) {
+    return <TaskDetailsSkeleton />
   }
 
   if (!task) {

@@ -49,6 +49,7 @@ import { UserSelect, AssignableUser, getInitials, getAvatarColor } from '@/compo
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
+import { ProjectDetailsSkeleton } from '@/components/loading'
 
 export default function ProjectDetailsPage() {
   const params = useParams()
@@ -57,7 +58,7 @@ export default function ProjectDetailsPage() {
 
   const { currentWorkspace } = useWorkspaceStore()
   const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, deleteTask } = useTaskStore()
-  const { projects, loadProjects } = useProjectStore()
+  const { projects, loadProjects, isLoading: isProjectsLoading } = useProjectStore()
 
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
   const [differentiationMode, setDifferentiationMode] = useState<'all' | 'split'>('all')
@@ -775,6 +776,10 @@ export default function ProjectDetailsPage() {
         </table>
       </div>
     )
+  }
+
+  if ((isProjectsLoading && !project) || (!project && projects.length === 0)) {
+    return <ProjectDetailsSkeleton />
   }
 
   return (

@@ -28,10 +28,11 @@ import { useProjectStore } from '@/stores/project-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { CalendarMarqueeTicker } from '@/features/calendar/components/CalendarMarqueeTicker'
 import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
+import { CalendarSkeleton } from '@/components/loading'
 
 export default function CalendarPage() {
   const { currentWorkspace } = useWorkspaceStore()
-  const { tasks, loadTasks, createTask, updateEnvironment, updateStatus, updateTask } = useTaskStore()
+  const { tasks, loadTasks, createTask, updateEnvironment, updateStatus, updateTask, isLoading: tasksLoading } = useTaskStore()
   const { projects, loadProjects } = useProjectStore()
   const { connections, unifiedEvents, fetchConnections, fetchUnifiedEvents } = useCalendarStore()
 
@@ -43,6 +44,7 @@ export default function CalendarPage() {
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
   const [dispatchingAlertId, setDispatchingAlertId] = useState<string | null>(null)
   const [isDispatchingUpcoming, setIsDispatchingUpcoming] = useState(false)
+  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false)
 
   // Drag and drop rescheduling onto calendar days
   const [draggedCalTaskId, setDraggedCalTaskId] = useState<string | null>(null)
@@ -314,7 +316,6 @@ export default function CalendarPage() {
   const googleConnection = connections.find(
     (c) => (c.provider as string)?.toLowerCase() === 'google' && (c.status === 'ACTIVE' || (c as any).connected !== false)
   )
-  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false)
 
   const handleSyncGoogleNow = async () => {
     if (!googleConnection?.id) return
@@ -330,6 +331,11 @@ export default function CalendarPage() {
     } finally {
       setIsSyncingGoogle(false)
     }
+  }
+
+  // Show skeleton during initial empty load (after all hooks have executed)
+  if (tasksLoading && tasks.length === 0) {
+    return <CalendarSkeleton />
   }
 
   return (

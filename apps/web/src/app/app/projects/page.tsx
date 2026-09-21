@@ -27,6 +27,7 @@ import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { ProjectCard } from '@/features/projects/components/ProjectCard'
+import { ProjectSkeleton } from '@/components/loading'
 
 export default function ProjectsPage() {
   const { currentOrg } = useOrgStore()
@@ -76,6 +77,8 @@ export default function ProjectsPage() {
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>(['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN'])
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
+  const [isDeletingProject, setIsDeletingProject] = useState(false)
 
   // Ensure currentWorkspace is synchronized if workspaces list exists
   useEffect(() => {
@@ -140,9 +143,6 @@ export default function ProjectsPage() {
     }
   }
 
-  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
-  const [isDeletingProject, setIsDeletingProject] = useState(false)
-
   const confirmDeleteProject = async () => {
     if (!projectToDelete || isDeletingProject) return
     try {
@@ -182,6 +182,11 @@ export default function ProjectsPage() {
     if (indexB === -1) return -1
     return indexA - indexB
   })
+
+  // Show skeleton on initial empty load (after all hooks have executed)
+  if (isLoading && projects.length === 0) {
+    return <ProjectSkeleton />
+  }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto animate-fade-in pb-12">

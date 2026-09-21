@@ -9,7 +9,7 @@ import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { CommandPalette } from '@/components/command-palette'
 import { OnboardingWizardModal } from '@/features/onboarding/components/OnboardingWizardModal'
-import { Loader2 } from 'lucide-react'
+import { AppShellSkeleton } from '@/components/loading'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -92,16 +92,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   if (!authChecked || isLoading || !initialLoaded) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-xl shadow-primary/20 animate-pulse">
-          <Loader2 className="w-5 h-5 animate-spin" />
-        </div>
-        <div className="text-xs text-muted-foreground font-medium tracking-wide">
-          Loading TaskFlow workspace...
-        </div>
-      </div>
-    )
+    return <AppShellSkeleton />
   }
 
   // If new user with no organizations or onboarding is needed, render ONLY the onboarding wizard directly!

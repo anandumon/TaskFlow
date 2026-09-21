@@ -63,6 +63,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore, CustomStatus } from '@/stores/status-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { Portal } from '@/components/ui/portal'
+import { TaskListSkeleton } from '@/components/loading'
 import { UserGuideModal } from '@/components/user-guide-modal'
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
@@ -357,7 +358,7 @@ function UserSelect({
 export default function TasksPage() {
   const { currentWorkspace, members: wsMembers, fetchMembers: fetchWsMembers } = useWorkspaceStore()
   const { currentOrg, members: orgMembers, fetchMembers: fetchOrgMembers } = useOrgStore()
-  const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, moveTask, deleteTask, toggleSubtask } = useTaskStore()
+  const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, moveTask, deleteTask, toggleSubtask, isLoading: tasksLoading } = useTaskStore()
   const { projects, loadProjects } = useProjectStore()
   const { user } = useAuthStore()
 
@@ -1160,6 +1161,11 @@ export default function TasksPage() {
     if (indexB === -1) return -1
     return indexA - indexB
   })
+
+  // Show skeleton during initial load only (after all hooks have executed)
+  if (tasksLoading && tasks.length === 0) {
+    return <TaskListSkeleton />
+  }
 
   return (
     <>

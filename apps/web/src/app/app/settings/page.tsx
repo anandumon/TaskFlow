@@ -35,11 +35,12 @@ import { CalendarIntegrationPanel } from '@/features/calendar/components/Calenda
 import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
+import { SettingsSkeleton } from '@/components/loading'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const { user, updateUserAvatar } = useAuthStore()
-  const { organizations, currentOrg, setCurrentOrg, updateOrg, deleteOrganization, fetchOrganizations, createOrganization } = useOrgStore()
+  const { organizations, currentOrg, setCurrentOrg, updateOrg, deleteOrganization, fetchOrganizations, createOrganization, isLoading: isOrgLoading } = useOrgStore()
   const { workspaces, currentWorkspace, setCurrentWorkspace, updateWorkspace, deleteWorkspace, fetchWorkspaces, teams } = useWorkspaceStore()
   const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading: isProjectsLoading } = useProjectStore()
 
@@ -623,6 +624,11 @@ export default function SettingsPage() {
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
     { id: 'calendar', label: 'Calendar & Sync', icon: Calendar },
   ]
+
+  // Show skeleton only on initial load (no org data cached yet)
+  if (isOrgLoading && organizations.length === 0) {
+    return <SettingsSkeleton />
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">

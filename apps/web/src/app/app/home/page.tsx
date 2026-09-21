@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
+import { DashboardSkeleton } from '@/components/loading'
 import {
   CheckCircle2,
   CheckSquare,
@@ -28,8 +29,8 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
-  const { tasks, loadTasks, updateStatus } = useTaskStore()
-  const { projects, loadProjects } = useProjectStore()
+  const { tasks, loadTasks, updateStatus, isLoading: tasksLoading } = useTaskStore()
+  const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore()
 
   useEffect(() => {
     if (currentWorkspace?.id) {
@@ -37,6 +38,11 @@ export default function DashboardPage() {
       loadProjects(currentWorkspace.id)
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects])
+
+  // Show skeleton on initial load (stores empty + actively fetching)
+  if ((tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
+    return <DashboardSkeleton />
+  }
 
   const totalTasks = tasks.length
   const todoTasks = tasks.filter(t => t.status === 'todo').length

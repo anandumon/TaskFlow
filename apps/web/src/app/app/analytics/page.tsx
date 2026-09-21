@@ -15,11 +15,12 @@ import {
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
+import { AnalyticsSkeleton } from '@/components/loading'
 
 export default function AnalyticsPage() {
   const { currentWorkspace } = useWorkspaceStore()
-  const { tasks, loadTasks } = useTaskStore()
-  const { projects, loadProjects } = useProjectStore()
+  const { tasks, loadTasks, isLoading: tasksLoading } = useTaskStore()
+  const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore()
 
   // Drag and drop ordering for KPI cards
   const [metricOrder, setMetricOrder] = useState<number[]>([0, 1, 2, 3])
@@ -93,6 +94,11 @@ export default function AnalyticsPage() {
       loadProjects(currentWorkspace.id)
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects])
+
+  // Show skeleton on initial empty load
+  if ((tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
+    return <AnalyticsSkeleton />
+  }
 
   const totalTasks = tasks.length
   const completedTasks = tasks.filter(t => t.status === 'done').length
