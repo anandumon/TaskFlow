@@ -215,6 +215,27 @@ export default function TaskDetailsPage() {
     showToast('File change logged!')
   }
 
+  const handleUpdateFileChange = async (index: number, updatedFile: FileChange) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
+    const updated = [...filesChanged]
+    updated[index] = updatedFile
+    await updateTask(task.id, { filesChanged: JSON.stringify(updated) })
+    showToast('File change updated!')
+  }
+
+  const handleDeleteFileChange = async (index: number) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
+    const updated = filesChanged.filter((_, i) => i !== index)
+    await updateTask(task.id, { filesChanged: JSON.stringify(updated) })
+    showToast('File change removed!')
+  }
+
   const handleAddNote = async (noteText: string) => {
     await addNote(task.id, noteText)
     showToast('Note added to discussion!')
@@ -406,6 +427,9 @@ export default function TaskDetailsPage() {
           <TaskFilesChangedCard
             filesChanged={filesChanged}
             onAddFileChange={handleAddFileChange}
+            onUpdateFileChange={handleUpdateFileChange}
+            onDeleteFileChange={handleDeleteFileChange}
+            canEdit={canEdit}
           />
 
           {/* 5th: Notes & Discussion */}
