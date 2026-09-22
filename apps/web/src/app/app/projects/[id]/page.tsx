@@ -659,6 +659,12 @@ export default function ProjectDetailsPage() {
                     const envBadge = getEnvBadge(t.environment || 'DEV')
                     const isDraggingThis = draggedTaskId === t.id
                     const isHoveredTarget = dragOverTaskId === t.id && draggedTaskId !== t.id
+                    const assignee = t.assigneeName || 'You'
+                    const avatarColor = getAvatarColor(assignee)
+                    const initials = getInitials(assignee)
+                    const dueStatus = getDueStatus(t.dueDate)
+                    const currentStatusVal = getSelectValue(t.status)
+                    const currentCol = columns.find((c) => c.id === currentStatusVal)
 
                     return (
                       <div
@@ -668,49 +674,103 @@ export default function ProjectDetailsPage() {
                         onDragEnd={handleTaskDragEnd}
                         onDragOver={(e) => handleCardDragOver(e, t.id)}
                         onDrop={(e) => handleCardDrop(e, t.id, col.id)}
-                        className={`p-4 rounded-2xl border shadow-xs hover:shadow-lg transition-all space-y-3 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none ${
+                        className={`p-3.5 sm:p-4 rounded-2xl border bg-card hover:bg-card/95 shadow-xs hover:shadow-md transition-all space-y-3 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none ${
                           isDraggingThis
                             ? 'opacity-40 scale-[0.98] border-dashed border-primary ring-2 ring-primary/40 shadow-none'
-                            : ''
+                            : 'border-border/80 hover:border-primary/40'
                         } ${
-                          isHoveredTarget ? 'border-primary ring-1 ring-primary/40' : ''
+                          isHoveredTarget ? 'border-primary ring-2 ring-primary/30' : ''
                         }`}
-                        style={{
-                          backgroundColor: `${projColor}14`,
-                          borderColor: `${projColor}55`,
-                          boxShadow: `0 4px 20px -2px ${projColor}15`,
-                        }}
                         title="Drag card to move to any status column"
                       >
-                        {/* Top Accent Strip */}
+                        {/* Subtle Left Accent Strip */}
                         <div
-                          className="absolute top-0 left-0 right-0 h-1"
+                          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl transition-all group-hover:w-1.5"
                           style={{ backgroundColor: projColor }}
                         />
 
-                        {/* Tag + Bug Indicator + Drag Grip */}
-                        <div className="flex items-center justify-between gap-1 pt-0.5">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                        {/* Top Row: Drag Handle + Single Clean Type Badge + Environment + Quick Actions */}
+                        <div className="flex items-center justify-between gap-2 pl-0.5">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                             <div
-                              className="text-muted-foreground/50 group-hover:text-muted-foreground p-0.5 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
-                              title="Drag to move status"
+                              className="text-muted-foreground/40 group-hover:text-muted-foreground/80 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                              title="Drag card to move status"
                             >
                               <GripVertical className="w-3.5 h-3.5" />
                             </div>
-                            <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full truncate ${getTagColor(t.tag)}`}>
-                              {t.tag}
-                            </span>
+
+                            {/* Clean, Non-duplicate Type Badge */}
+                            {isBug ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">
+                                <Bug className="w-2.5 h-2.5" /> Bug / Fix
+                              </span>
+                            ) : t.tag && t.tag.toLowerCase() !== 'feature' ? (
+                              <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md truncate max-w-[120px] ${getTagColor(t.tag)}`}>
+                                {t.tag}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 shrink-0">
+                                <Sparkles className="w-2.5 h-2.5" /> Feature
+                              </span>
+                            )}
+
+                            {/* Environment Badge */}
+                            {t.environment && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ${envBadge.style}`}>
+                                {t.environment}
+                              </span>
+                            )}
                           </div>
 
-                          {isBug ? (
-                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-500 border border-rose-500/40 shrink-0">
-                              <Bug className="w-2.5 h-2.5" /> Bug / Fix
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-500 border border-blue-500/40 shrink-0">
-                              <Sparkles className="w-2.5 h-2.5" /> Feature
-                            </span>
-                          )}
+                          {/* Quick Action Buttons */}
+                          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                            {/* Send Due Alert */}
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSendDueAlert(t)
+                              }}
+                              disabled={dispatchingAlertId === t.id}
+                              title={`Send due date alert email for "${t.title}" now`}
+                              className="p-1 text-muted-foreground hover:text-amber-500 rounded-md hover:bg-muted/80 transition-colors cursor-pointer"
+                            >
+                              {dispatchingAlertId === t.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                              ) : (
+                                <Bell className="w-3 h-3" />
+                              )}
+                            </button>
+
+                            {/* Edit */}
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditModal(t)
+                              }}
+                              className="p-1 text-muted-foreground hover:text-primary transition-colors rounded-md hover:bg-muted/80 cursor-pointer"
+                              title="Edit task"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(t.id)
+                              }}
+                              className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded-md hover:bg-muted/80 cursor-pointer"
+                              title="Delete task"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Title Link */}
@@ -718,8 +778,7 @@ export default function ProjectDetailsPage() {
                           href={`/app/tasks/${t.id}`}
                           draggable={false}
                           onMouseDown={(e) => e.stopPropagation()}
-                          className="block text-xs font-bold leading-relaxed group-hover:underline transition-colors"
-                          style={{ color: projColor }}
+                          className="block text-xs sm:text-sm font-semibold text-foreground hover:text-primary transition-colors leading-snug line-clamp-2 pl-0.5"
                         >
                           {t.title}
                         </Link>
@@ -730,16 +789,16 @@ export default function ProjectDetailsPage() {
                             const parsed = JSON.parse(t.branchName)
                             if (Array.isArray(parsed) && parsed.length > 0) {
                               return (
-                                <div className="flex items-center gap-1 text-[9px] font-mono text-primary bg-background/80 px-2 py-1 rounded-lg border border-border/80 truncate">
-                                  <GitBranch className="w-3 h-3 shrink-0" />
+                                <div className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground bg-muted/60 px-2 py-1 rounded-md border border-border/60 truncate">
+                                  <GitBranch className="w-3 h-3 shrink-0 text-primary" />
                                   <span className="truncate">{parsed[0].branchName}</span>
                                 </div>
                               )
                             }
                           } catch {}
                           return (
-                            <div className="flex items-center gap-1 text-[9px] font-mono text-primary bg-background/80 px-2 py-1 rounded-lg border border-border/80 truncate">
-                              <GitBranch className="w-3 h-3 shrink-0" />
+                            <div className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground bg-muted/60 px-2 py-1 rounded-md border border-border/60 truncate">
+                              <GitBranch className="w-3 h-3 shrink-0 text-primary" />
                               <span className="truncate">{t.branchName}</span>
                             </div>
                           )
@@ -753,7 +812,7 @@ export default function ProjectDetailsPage() {
                             const doneCount = stList.filter((s: any) => s.completed).length
                             return (
                               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
-                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-muted/80 border border-border/40">
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/60 border border-border/50">
                                   <CheckSquare className="w-3 h-3 text-primary" /> {doneCount}/{stList.length} subtasks
                                 </span>
                               </div>
@@ -761,57 +820,51 @@ export default function ProjectDetailsPage() {
                           } catch { return null }
                         })()}
 
-                        {/* Bottom Controls */}
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-2.5 border-t border-border/50">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1">
-                              <User className="w-3 h-3 text-muted-foreground" />
-                              <span className="font-semibold text-foreground">{t.assigneeName || 'You'}</span>
+                        {/* Bottom Row: Assignee + Due Date on left, Status Pill on right */}
+                        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-border/60 pl-0.5">
+                          {/* Assignee and Due Date group */}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* User Avatar + Name */}
+                            <div className="flex items-center gap-1.5 min-w-0" title={`Assigned to ${assignee}`}>
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border shrink-0 ${avatarColor}`}>
+                                {initials}
+                              </div>
+                              <span className="text-[11px] font-semibold text-foreground truncate max-w-[70px] sm:max-w-[95px]">
+                                {assignee}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-primary" />
-                              <span>{t.dueDate || 'Today'}</span>
-                            </div>
+
+                            {/* Due Date Badge */}
+                            {t.dueDate && (
+                              <div
+                                className={`flex items-center gap-1 text-[10px] shrink-0 ${
+                                  dueStatus.isOverdue
+                                    ? 'text-rose-500 font-bold'
+                                    : dueStatus.isToday
+                                    ? 'text-amber-500 font-bold'
+                                    : 'text-muted-foreground font-medium'
+                                }`}
+                                title={`Due: ${t.dueDate}`}
+                              >
+                                <Calendar className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{dueStatus.text || t.dueDate}</span>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1">
-                            {/* Bell Button: Send Due Alert Email */}
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleSendDueAlert(t)
-                              }}
-                              disabled={dispatchingAlertId === t.id}
-                              title={`Send due date alert email for "${t.title}" now`}
-                              className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors relative cursor-pointer"
-                            >
-                              {dispatchingAlertId === t.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                              ) : (
-                                <Bell className="w-3 h-3" />
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => openEditModal(t)}
-                              className="p-1 text-muted-foreground hover:text-primary transition-colors rounded cursor-pointer"
-                              title="Edit task"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-
+                          {/* Status Pill Select */}
+                          <div className="relative shrink-0">
                             <select
-                              value={getSelectValue(t.status)}
+                              value={currentStatusVal}
                               onMouseDown={(e) => e.stopPropagation()}
                               onChange={(e) => {
                                 e.stopPropagation()
                                 handleStatusChange(t.id, e.target.value as TaskStatus)
                               }}
-                              className="text-[10px] bg-muted/90 px-1.5 py-0.5 rounded text-muted-foreground font-semibold focus:outline-none cursor-pointer hover:bg-muted border border-border/40 max-w-[120px] truncate"
+                              className="text-[10px] font-bold pl-2.5 pr-6 py-1 rounded-lg bg-muted/80 hover:bg-muted border border-border/80 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-colors shadow-2xs appearance-none truncate max-w-[125px]"
+                              style={{
+                                borderColor: currentCol?.color ? `${currentCol.color}60` : undefined,
+                              }}
                             >
                               {columns.map((statusCol) => (
                                 <option key={statusCol.id} value={statusCol.id} className="bg-background text-foreground">
@@ -824,16 +877,7 @@ export default function ProjectDetailsPage() {
                                 </option>
                               )}
                             </select>
-
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => handleDelete(t.id)}
-                              className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded cursor-pointer"
-                              title="Delete task"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                            <ChevronDown className="w-3 h-3 text-muted-foreground absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
                       </div>
