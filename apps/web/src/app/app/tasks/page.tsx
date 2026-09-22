@@ -363,7 +363,7 @@ export default function TasksPage() {
   const { user } = useAuthStore()
 
   const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
-  const currentUserName = user?.displayName || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '') || user?.email?.split('@')[0] || 'You'
+  const currentUserName = user?.firstName || user?.displayName?.split(' ')[0] || user?.displayName || user?.email?.split('@')[0] || 'You'
 
   // View modes: 'grid' (minimal spacious liquid glass), 'list', 'tree' (graph / tree view)
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('grid')

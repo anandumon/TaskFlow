@@ -248,13 +248,14 @@ export default function TaskDetailsPage() {
   }
 
   const currentUserName =
+    user?.firstName ||
+    user?.displayName?.split(' ')[0] ||
     user?.displayName ||
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.email ||
+    user?.email?.split('@')[0] ||
     'You'
 
   const availableUsers: AssignableUser[] = (orgMembers || []).map((m: any) => {
-    const name = [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member'
+    const name = m.firstName || (m.name ? m.name.split(' ')[0] : '') || m.email?.split('@')[0] || 'Member'
     return {
       id: m.userId || m.id,
       name,

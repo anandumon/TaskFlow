@@ -13,9 +13,14 @@ export function TaskDiscussionCard({ notes, onAddNote }: TaskDiscussionCardProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!noteText.trim()) return
-    await onAddNote(noteText.trim())
+    const textToAdd = noteText.trim()
+    if (!textToAdd) return
     setNoteText('')
+    try {
+      await onAddNote(textToAdd)
+    } catch (err) {
+      setNoteText(textToAdd)
+    }
   }
 
   return (

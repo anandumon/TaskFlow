@@ -56,6 +56,15 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
       const found = projects.find((p) => p.id === projId)
       return found?.name || 'Project Details'
     }
+    if (pathname.startsWith('/app/tasks/')) {
+      const taskId = pathname.replace('/app/tasks/', '').split('/')[0]
+      const foundTask = tasks.find((t) => t.id === taskId)
+      if (foundTask?.projectId) {
+        const foundProj = projects.find((p) => p.id === foundTask.projectId)
+        if (foundProj) return foundProj.name
+      }
+      return foundTask?.title || 'Deliverable Details'
+    }
     if (pathname === '/app/teams') return 'Teams & Members'
     if (pathname === '/app/tasks') return 'My Tasks & Board'
     if (pathname === '/app/calendar') return 'Sprint Calendar'
@@ -64,7 +73,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
     if (pathname === '/app/settings') return 'Settings'
     if (projects.length > 0) return projects[0].name
     return null
-  }, [pathname, projects])
+  }, [pathname, projects, tasks])
 
   // Real-time task due date alerts: Overdue, 0 days left (today), 1, 2, 3 days left
   const taskDueAlerts = useMemo(() => {

@@ -15,14 +15,22 @@ export function TaskFilesChangedCard({ filesChanged, onAddFileChange }: TaskFile
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!fileName.trim()) return
-    await onAddFileChange({
-      name: fileName.trim(),
-      status,
-      additions: Math.floor(Math.random() * 40) + 1,
-      deletions: Math.floor(Math.random() * 15),
-    })
+    const nameToAdd = fileName.trim()
+    if (!nameToAdd) return
+    const statusToAdd = status
     setFileName('')
+    setStatus('modified')
+    try {
+      await onAddFileChange({
+        name: nameToAdd,
+        status: statusToAdd,
+        additions: Math.floor(Math.random() * 40) + 1,
+        deletions: Math.floor(Math.random() * 15),
+      })
+    } catch (err) {
+      setFileName(nameToAdd)
+      setStatus(statusToAdd)
+    }
   }
 
   return (

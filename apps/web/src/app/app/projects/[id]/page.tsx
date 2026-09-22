@@ -52,7 +52,7 @@ import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 import { ProjectDetailsSkeleton } from '@/components/loading'
 
-export const DELIVERABLE_CATEGORIES = [
+const DELIVERABLE_CATEGORIES = [
   'Feature',
   'Bug Fix',
   'Backend',
@@ -65,7 +65,7 @@ export const DELIVERABLE_CATEGORIES = [
   'Maintenance',
 ]
 
-export const getCategoryDropdownValue = (tag?: string) => {
+const getCategoryDropdownValue = (tag?: string) => {
   if (!tag || !tag.trim()) return 'Feature'
   const lower = tag.trim().toLowerCase()
   if (lower === 'bug' || lower === 'bugfix' || lower === 'bug fix' || lower === 'defect' || lower === 'hotfix') {
@@ -96,7 +96,7 @@ export default function ProjectDetailsPage() {
   const { members: orgMembers } = useOrgStore()
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const currentUserName = user?.displayName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email?.split('@')[0] || 'You'
+  const currentUserName = user?.firstName || user?.displayName?.split(' ')[0] || user?.displayName || user?.email?.split('@')[0] || 'You'
 
   // Add Task Modal State (Redesigned like Create Task in DB)
   const [isModalOpen, setIsModalOpen] = useState(false)

@@ -9,6 +9,20 @@ interface TaskPropertiesCardProps {
   project?: Project
 }
 
+export function getFirstName(raw?: string): string {
+  const trimmed = (raw || '').trim()
+  if (!trimmed) return ''
+  if (trimmed.toLowerCase() === 'you') return 'You'
+  if (trimmed.toLowerCase() === 'lead reviewer') return 'Lead Reviewer'
+  if (trimmed.includes('@')) {
+    const local = trimmed.split('@')[0]
+    const part = local.split(/[._-]/)[0]
+    return part.charAt(0).toUpperCase() + part.slice(1)
+  }
+  const parts = trimmed.split(/\s+/)
+  return parts[0]
+}
+
 export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
   return (
     <div className="space-y-6">
@@ -39,15 +53,19 @@ export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
             <div className="flex flex-wrap gap-1.5">
               {(task.assignees || task.assigneeName || 'You')
                 .split(',')
-                .map((a, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 py-1 rounded-xl bg-primary/10 text-primary font-bold text-[11px] flex items-center gap-1"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    {a.trim()}
-                  </span>
-                ))}
+                .map((a, i) => {
+                  const firstName = getFirstName(a)
+                  if (!firstName) return null
+                  return (
+                    <span
+                      key={i}
+                      className="px-2.5 py-1 rounded-xl bg-primary/10 text-primary font-bold text-[11px] flex items-center gap-1"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      {firstName}
+                    </span>
+                  )
+                })}
             </div>
           </div>
 
@@ -57,7 +75,7 @@ export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
               <ShieldCheck className="w-3.5 h-3.5 text-purple-500" /> Reviewer
             </span>
             <span className="font-bold text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-md bg-purple-500/10">
-              {task.reviewerName || 'Lead Reviewer'}
+              {getFirstName(task.reviewerName || 'Lead Reviewer')}
             </span>
           </div>
 
@@ -103,7 +121,7 @@ export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
             </div>
             <div className="text-[11px] text-muted-foreground">
               Status: <strong>{task.status.toUpperCase()}</strong> &bull; Reviewer:{' '}
-              {task.reviewerName || 'Lead'}
+              {getFirstName(task.reviewerName || 'Lead')}
             </div>
           </div>
 
