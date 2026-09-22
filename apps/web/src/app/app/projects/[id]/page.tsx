@@ -52,6 +52,32 @@ import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 import { ProjectDetailsSkeleton } from '@/components/loading'
 
+export const DELIVERABLE_CATEGORIES = [
+  'Feature',
+  'Bug Fix',
+  'Backend',
+  'Frontend',
+  'DevOps',
+  'Design',
+  'Architecture',
+  'Documentation',
+  'Testing / QA',
+  'Maintenance',
+]
+
+export const getCategoryDropdownValue = (tag?: string) => {
+  if (!tag || !tag.trim()) return 'Feature'
+  const lower = tag.trim().toLowerCase()
+  if (lower === 'bug' || lower === 'bugfix' || lower === 'bug fix' || lower === 'defect' || lower === 'hotfix') {
+    return 'Bug Fix'
+  }
+  if (lower === 'feature' || lower === 'feat') {
+    return 'Feature'
+  }
+  const matched = DELIVERABLE_CATEGORIES.find((c) => c.toLowerCase() === lower)
+  return matched || 'custom'
+}
+
 export default function ProjectDetailsPage() {
   const params = useParams()
   const router = useRouter()
@@ -74,7 +100,7 @@ export default function ProjectDetailsPage() {
 
   // Add Task Modal State (Redesigned like Create Task in DB)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newTaskType, setNewTaskType] = useState<'feature' | 'bug' | 'custom'>('feature')
+  const [newTaskCategory, setNewTaskCategory] = useState('Feature')
   const [customTagInput, setCustomTagInput] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskTag, setNewTaskTag] = useState('Feature')
@@ -95,6 +121,8 @@ export default function ProjectDetailsPage() {
   // Edit Task Modal State
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editCategory, setEditCategory] = useState('Feature')
+  const [editCustomTag, setEditCustomTag] = useState('')
   const [editTag, setEditTag] = useState('')
   const [editAssignee, setEditAssignee] = useState('')
   const [editDue, setEditDue] = useState('')
@@ -480,11 +508,9 @@ export default function ProjectDetailsPage() {
     try {
       setIsCreatingTask(true)
       const finalTag =
-        newTaskType === 'feature'
-          ? 'Feature'
-          : newTaskType === 'bug'
-          ? 'Bug Fix'
-          : (customTagInput.trim() || 'Custom')
+        newTaskCategory === 'custom'
+          ? (customTagInput.trim() || 'Custom')
+          : (newTaskCategory || 'Feature')
 
       await createTask(wsId, {
         title: newTaskTitle.trim(),
@@ -500,6 +526,7 @@ export default function ProjectDetailsPage() {
         filesChanged: '[]',
       })
       setNewTaskTitle('')
+      setNewTaskCategory('Feature')
       setCustomTagInput('')
       setNewTaskDue(todayStr)
       setNewTaskStatus(columns[0]?.id || 'todo')
@@ -520,9 +547,14 @@ export default function ProjectDetailsPage() {
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
       setIsUpdatingTask(true)
+      const finalTag =
+        editCategory === 'custom'
+          ? (editCustomTag.trim() || 'Custom')
+          : (editCategory || editTag || 'Feature')
+
       await updateTask(editingTask.id, {
         title: editTitle.trim(),
-        tag: editTag,
+        tag: finalTag,
         assigneeName: editAssignee,
         dueDate: editDue,
         priority: editPriority,
@@ -568,7 +600,15 @@ export default function ProjectDetailsPage() {
   const openEditModal = (t: Task) => {
     setEditingTask(t)
     setEditTitle(t.title)
-    setEditTag(t.tag)
+    const catValue = getCategoryDropdownValue(t.tag)
+    setEditCategory(catValue)
+    if (catValue === 'custom') {
+      setEditCustomTag(t.tag || '')
+      setEditTag(t.tag || 'Custom')
+    } else {
+      setEditCustomTag('')
+      setEditTag(catValue)
+    }
     setEditAssignee(t.assigneeName || 'You')
     setEditDue(t.dueDate || new Date().toISOString().split('T')[0])
     setEditPriority(t.priority)
@@ -595,10 +635,33 @@ export default function ProjectDetailsPage() {
 
   const getTagColor = (tag: string) => {
     const t = (tag || '').toLowerCase()
-    if (t.includes('bug') || t.includes('fix') || t.includes('vulnerab')) return 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
-    if (t.includes('backend')) return 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
-    if (t.includes('frontend') || t.includes('ui')) return 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
-    if (t.includes('devops') || t.includes('infra')) return 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+    if (t.includes('bug') || t.includes('fix') || t.includes('vulnerab') || t.includes('defect') || t.includes('issue')) {
+      return 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
+    }
+    if (t.includes('backend') || t.includes('api') || t.includes('server')) {
+      return 'bg-purple-500/15 text-purple-500 border border-purple-500/30'
+    }
+    if (t.includes('frontend') || t.includes('ui') || t.includes('client')) {
+      return 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
+    }
+    if (t.includes('devops') || t.includes('infra') || t.includes('ci/cd')) {
+      return 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+    }
+    if (t.includes('doc')) {
+      return 'bg-teal-500/15 text-teal-500 border border-teal-500/30'
+    }
+    if (t.includes('test') || t.includes('qa')) {
+      return 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
+    }
+    if (t.includes('refactor') || t.includes('arch')) {
+      return 'bg-cyan-500/15 text-cyan-500 border border-cyan-500/30'
+    }
+    if (t.includes('design')) {
+      return 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
+    }
+    if (t.includes('maint')) {
+      return 'bg-orange-500/15 text-orange-500 border border-orange-500/30'
+    }
     return 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
   }
 
@@ -1297,68 +1360,43 @@ export default function ProjectDetailsPage() {
               </div>
 
               <form onSubmit={handleCreateTask} className="space-y-3">
-                {/* Deliverable Type (Feature, Bug Fix, Custom) */}
+                {/* Deliverable Category / Tag */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Task Type</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewTaskType('feature')
-                        setNewTaskTag('Feature')
-                      }}
-                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        newTaskType === 'feature'
-                          ? 'bg-blue-600/15 border-blue-500 text-blue-500 shadow-xs ring-1 ring-blue-500/20'
-                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Feature</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewTaskType('bug')
-                        setNewTaskTag('Bug Fix')
-                      }}
-                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        newTaskType === 'bug'
-                          ? 'bg-rose-600/15 border-rose-500 text-rose-500 shadow-xs ring-1 ring-rose-500/20'
-                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Bug className="w-3.5 h-3.5" />
-                      <span>Bug Fix</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewTaskType('custom')
+                  <label className="text-xs font-semibold text-foreground">Category / Tag</label>
+                  <select
+                    value={newTaskCategory}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewTaskCategory(val)
+                      if (val !== 'custom') {
+                        setNewTaskTag(val)
+                      } else {
                         setNewTaskTag(customTagInput.trim() || 'Custom')
-                      }}
-                      className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        newTaskType === 'custom'
-                          ? 'bg-purple-600/15 border-purple-500 text-purple-400 shadow-xs ring-1 ring-purple-500/20'
-                          : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      <span>Custom</span>
-                    </button>
-                  </div>
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    {DELIVERABLE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat} className="bg-background text-foreground">
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="custom" className="bg-background text-foreground">
+                      Custom...
+                    </option>
+                  </select>
 
-                  {newTaskType === 'custom' && (
-                    <div className="pt-1 animate-fade-in">
+                  {newTaskCategory === 'custom' && (
+                    <div className="pt-1.5 animate-fade-in">
                       <input
                         type="text"
-                        placeholder="Enter custom type (e.g. Design, DevOps, Maintenance)..."
+                        placeholder="Enter custom category (e.g. Design, Architecture, DevOps)..."
                         value={customTagInput}
                         onChange={(e) => {
                           setCustomTagInput(e.target.value)
                           setNewTaskTag(e.target.value.trim() || 'Custom')
                         }}
-                        className="w-full px-3 py-2 rounded-xl bg-background border border-purple-500/40 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3.5 py-2 rounded-xl bg-background border border-primary/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                         autoFocus
                       />
                     </div>
@@ -1372,7 +1410,7 @@ export default function ProjectDetailsPage() {
                   </label>
                   <input
                     type="text"
-                    placeholder={newTaskType === 'bug' ? 'e.g. Fix memory leak in auth-service...' : 'e.g. Implement payment gateway webhook...'}
+                    placeholder={newTaskCategory === 'Bug Fix' ? 'e.g. Fix memory leak in auth-service...' : 'e.g. Implement payment gateway webhook...'}
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1500,22 +1538,61 @@ export default function ProjectDetailsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
-                    <input
-                      type="text"
-                      value={editTag}
-                      onChange={(e) => setEditTag(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
+                    <select
+                      value={editCategory}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setEditCategory(val)
+                        if (val === 'custom') {
+                          setEditTag(editCustomTag.trim() || 'Custom')
+                        } else {
+                          setEditTag(val)
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      {DELIVERABLE_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat} className="bg-background text-foreground">
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="custom" className="bg-background text-foreground">
+                        Custom...
+                      </option>
+                    </select>
+
+                    {editCategory === 'custom' && (
+                      <div className="pt-1.5 animate-fade-in">
+                        <input
+                          type="text"
+                          placeholder="Enter custom category / tag..."
+                          value={editCustomTag}
+                          onChange={(e) => {
+                            setEditCustomTag(e.target.value)
+                            setEditTag(e.target.value.trim() || 'Custom')
+                          }}
+                          className="w-full px-3 py-2 rounded-xl bg-background border border-primary/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                          autoFocus
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase">Assignee</label>
                     <input
                       type="text"
+                      list="edit-assignee-options"
                       value={editAssignee}
                       onChange={(e) => setEditAssignee(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="Assignee name..."
                     />
+                    <datalist id="edit-assignee-options">
+                      {availableAssignees.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
 
