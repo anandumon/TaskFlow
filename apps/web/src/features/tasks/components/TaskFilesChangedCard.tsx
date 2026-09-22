@@ -26,8 +26,6 @@ export function TaskFilesChangedCard({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editStatus, setEditStatus] = useState<'added' | 'modified' | 'deleted'>('modified')
-  const [editAdditions, setEditAdditions] = useState(0)
-  const [editDeletions, setEditDeletions] = useState(0)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,8 +39,8 @@ export function TaskFilesChangedCard({
       await onAddFileChange({
         name: nameToAdd,
         status: statusToAdd,
-        additions: Math.floor(Math.random() * 40) + 1,
-        deletions: Math.floor(Math.random() * 15),
+        additions: 0,
+        deletions: 0,
       })
     } catch (err) {
       setFileName(nameToAdd)
@@ -54,8 +52,6 @@ export function TaskFilesChangedCard({
     setEditingIndex(index)
     setEditName(f.name)
     setEditStatus(f.status)
-    setEditAdditions(f.additions || 0)
-    setEditDeletions(f.deletions || 0)
   }
 
   const handleCancelEdit = () => {
@@ -70,8 +66,8 @@ export function TaskFilesChangedCard({
       await onUpdateFileChange(editingIndex, {
         name: editName.trim(),
         status: editStatus,
-        additions: editAdditions,
-        deletions: editDeletions,
+        additions: filesChanged[editingIndex]?.additions || 0,
+        deletions: filesChanged[editingIndex]?.deletions || 0,
       })
       setEditingIndex(null)
     } finally {
@@ -88,7 +84,7 @@ export function TaskFilesChangedCard({
     <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-          <FileCode className="w-4 h-4 text-primary" /> Files Changed & Code Diffs ({filesChanged.length})
+          <FileCode className="w-4 h-4 text-primary" /> Files Changed ({filesChanged.length})
         </h3>
       </div>
 
@@ -120,54 +116,24 @@ export function TaskFilesChangedCard({
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Status Selector */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                          Status
-                        </label>
-                        <select
-                          value={editStatus}
-                          onChange={(e) => setEditStatus(e.target.value as any)}
-                          className="px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                        >
-                          <option value="modified">Modified</option>
-                          <option value="added">Newly Added</option>
-                          <option value="deleted">Deleted</option>
-                        </select>
-                      </div>
-
-                      {/* Additions */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                          Additions (+)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={editAdditions}
-                          onChange={(e) => setEditAdditions(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          className="w-20 px-2.5 py-1.5 rounded-xl bg-background border border-border text-xs text-emerald-500 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-primary"
-                        />
-                      </div>
-
-                      {/* Deletions */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                          Deletions (-)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={editDeletions}
-                          onChange={(e) => setEditDeletions(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          className="w-20 px-2.5 py-1.5 rounded-xl bg-background border border-border text-xs text-destructive font-mono font-bold focus:outline-none focus:ring-2 focus:ring-primary"
-                        />
-                      </div>
+                    {/* Status Selector */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                        Status
+                      </label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value as any)}
+                        className="px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                      >
+                        <option value="modified">Modified</option>
+                        <option value="added">Newly Added</option>
+                        <option value="deleted">Deleted</option>
+                      </select>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2 pt-2 sm:pt-0 ml-auto">
+                    <div className="flex items-center gap-2 ml-auto">
                       <button
                         type="button"
                         onClick={handleCancelEdit}
@@ -212,35 +178,28 @@ export function TaskFilesChangedCard({
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pl-6 sm:pl-0">
-                  <div className="flex items-center gap-2 font-mono text-[11px]">
-                    <span className="text-emerald-500 font-bold">+{f.additions}</span>
-                    <span className="text-destructive font-bold">-{f.deletions}</span>
-                  </div>
-
-                  {canEdit && (
-                    <div className="flex items-center gap-1">
+                {canEdit && (
+                  <div className="flex items-center justify-end gap-1 shrink-0 pl-6 sm:pl-0">
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(i, f)}
+                      className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                      title="Edit file content and status"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {onDeleteFileChange && (
                       <button
                         type="button"
-                        onClick={() => handleStartEdit(i, f)}
-                        className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                        title="Edit file content and status"
+                        onClick={() => handleDelete(i)}
+                        className="p-1.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                        title="Delete file change"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      {onDeleteFileChange && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(i)}
-                          className="p-1.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                          title="Delete file change"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })
