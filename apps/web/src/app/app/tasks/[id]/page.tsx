@@ -7,16 +7,25 @@ import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban, Lock } from
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { useTaskStore, TaskStatus, TaskEnvironment, Subtask, FileChange } from '@/stores/task-store'
+import {
+  useTaskStore,
+  TaskStatus,
+  TaskEnvironment,
+  Subtask,
+  FileChange,
+  TaskAttachment,
+} from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore } from '@/stores/status-store'
 
+import { TaskDescriptionCard } from '@/features/tasks/components/TaskDescriptionCard'
 import { TaskGitBranchCard } from '@/features/tasks/components/TaskGitBranchCard'
 import { TaskSubtasksCard } from '@/features/tasks/components/TaskSubtasksCard'
 import { TaskFilesChangedCard } from '@/features/tasks/components/TaskFilesChangedCard'
 import { TaskPropertiesCard } from '@/features/tasks/components/TaskPropertiesCard'
 import { TaskDiscussionCard } from '@/features/tasks/components/TaskDiscussionCard'
 import { TaskDetailsSkeleton } from '@/components/loading'
+import { AssignableUser, getInitials, getAvatarColor } from '@/components/ui/user-select'
 
 export default function TaskDetailsPage() {
   const params = useParams()
@@ -93,6 +102,13 @@ export default function TaskDetailsPage() {
     filesChanged = []
   }
 
+  let attachments: TaskAttachment[] = []
+  try {
+    attachments = JSON.parse(task.attachments || '[]')
+  } catch {
+    attachments = []
+  }
+
   const canEdit = Boolean(
     task &&
     user &&
@@ -122,7 +138,25 @@ export default function TaskDetailsPage() {
       return
     }
     await updateTask(task.id, { branchName: branchToSave.trim() })
-    showToast('Branch name saved to database!')
+    showToast('Branch configuration saved!')
+  }
+
+  const handleSaveDescription = async (newDesc: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
+    await updateTask(task.id, { description: newDesc })
+    showToast('Task description updated!')
+  }
+
+  const handleSaveAttachments = async (updated: TaskAttachment[]) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
+    await updateTask(task.id, { attachments: JSON.stringify(updated) })
+    showToast('Task attachments updated!')
   }
 
   const handleToggleSubtask = async (subtaskId: string) => {
@@ -133,12 +167,12 @@ export default function TaskDetailsPage() {
     await toggleSubtask(task.id, subtaskId)
   }
 
-  const handleAddSubtask = async (title: string, branchName?: string) => {
+  const handleAddSubtask = async (subtaskData: Partial<Subtask> | string, legacyBranchName?: string) => {
     if (!canEdit) {
       showToast('You can only edit tasks assigned to you.')
       return
     }
-    await addSubtask(task.id, title, branchName)
+    await addSubtask(task.id, subtaskData, legacyBranchName)
     showToast('Subtask added!')
   }
 
@@ -213,6 +247,35 @@ export default function TaskDetailsPage() {
     loadProjects(wsId)
   }
 
+  const currentUserName =
+    user?.displayName ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.email ||
+    'You'
+
+  const availableUsers: AssignableUser[] = (orgMembers || []).map((m: any) => {
+    const name = [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member'
+    return {
+      id: m.userId || m.id,
+      name,
+      email: m.email,
+      initials: getInitials(name),
+      color: getAvatarColor(name),
+      role: m.role,
+    }
+  })
+
+  if (user && !availableUsers.some((u) => u.id === user.id)) {
+    availableUsers.unshift({
+      id: user.id,
+      name: currentUserName,
+      email: user.email,
+      initials: getInitials(currentUserName),
+      color: getAvatarColor(currentUserName),
+      role: 'You',
+    })
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">
       {toastMessage && (
@@ -222,7 +285,7 @@ export default function TaskDetailsPage() {
         </div>
       )}
 
-      {/* Top Breadcrumb & Controls */}
+      {/* 1st: Top Breadcrumb & Task Title Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/70">
         <div className="flex items-center gap-3">
           <Link
@@ -318,14 +381,39 @@ export default function TaskDetailsPage() {
 
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Columns */}
+        {/* Left 2 Columns: Ordered as requested by user */}
         <div className="lg:col-span-2 space-y-6">
+          {/* 2nd: Task Descriptions & Universal Document Upload / Download */}
+          <TaskDescriptionCard
+            description={task.description}
+            attachments={attachments}
+            canEdit={canEdit}
+            onSaveDescription={handleSaveDescription}
+            onSaveAttachments={handleSaveAttachments}
+            currentUserName={currentUserName}
+          />
+
+          {/* 3rd: Multi-Service & Git Branch Configuration with 10-item pagination */}
           <TaskGitBranchCard
             branchName={task.branchName}
             taskTitle={task.title}
             onSaveBranch={handleSaveMainBranch}
+            canEdit={canEdit}
           />
 
+          {/* 4th: Files Changed & Code Diffs */}
+          <TaskFilesChangedCard
+            filesChanged={filesChanged}
+            onAddFileChange={handleAddFileChange}
+          />
+
+          {/* 5th: Notes & Discussion */}
+          <TaskDiscussionCard
+            notes={task.notes}
+            onAddNote={handleAddNote}
+          />
+
+          {/* 6th: Subtasks (Creation form asks for Title, Description, Category, Assignee, Assigned By, Due Date) */}
           <TaskSubtasksCard
             subtasks={subtasks}
             onToggleSubtask={handleToggleSubtask}
@@ -333,20 +421,12 @@ export default function TaskDetailsPage() {
             onSaveSubtaskBranch={handleSaveSubtaskBranch}
             onDeleteSubtask={handleDeleteSubtask}
             onUpdateSubtaskDetails={handleUpdateSubtaskDetails}
-          />
-
-          <TaskFilesChangedCard
-            filesChanged={filesChanged}
-            onAddFileChange={handleAddFileChange}
-          />
-
-          <TaskDiscussionCard
-            notes={task.notes}
-            onAddNote={handleAddNote}
+            availableUsers={availableUsers}
+            currentUserName={currentUserName}
           />
         </div>
 
-        {/* Right 1 Column */}
+        {/* Right 1 Column: Metadata & Activity History */}
         <div className="space-y-6">
           <TaskPropertiesCard
             task={task}

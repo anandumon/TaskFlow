@@ -24,9 +24,10 @@ interface TaskGitBranchCardProps {
   branchName?: string
   taskTitle: string
   onSaveBranch: (branchData: string) => Promise<void>
+  canEdit?: boolean
 }
 
-export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskGitBranchCardProps) {
+export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch, canEdit = true }: TaskGitBranchCardProps) {
   const [entries, setEntries] = useState<ServiceBranchEntry[]>([])
   const [newServiceName, setNewServiceName] = useState('')
   const [newBranchName, setNewBranchName] = useState('')
@@ -81,12 +82,18 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  // Pagination State (Show up to 10 services per page as requested)
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize))
+  const paginatedEntries = entries.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newBranchName.trim()) return
 
     const newEntry: ServiceBranchEntry = {
-      id: `branch-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `b_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       serviceName: newServiceName.trim(),
       branchName: newBranchName.trim(),
     }
@@ -95,6 +102,9 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
     setEntries(updated)
     setNewServiceName('')
     setNewBranchName('')
+    setIsAdding(false)
+    const newTotalPages = Math.ceil(updated.length / pageSize)
+    setCurrentPage(newTotalPages)
     await onSaveBranch(JSON.stringify(updated))
   }
 
@@ -129,6 +139,10 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
     const updated = entries.filter((e) => e.id !== entryToDelete.id)
     setEntries(updated)
     setEntryToDelete(null)
+    const newTotalPages = Math.max(1, Math.ceil(updated.length / pageSize))
+    if (currentPage > newTotalPages) {
+      setCurrentPage(newTotalPages)
+    }
     await onSaveBranch(JSON.stringify(updated))
   }
 
@@ -138,6 +152,11 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
         <div className="flex items-center gap-2 text-xs font-bold text-primary">
           <GitBranch className="w-4 h-4" /> Multi-Service & Git Branch Configuration ({entries.length})
         </div>
+        {entries.length > pageSize && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/25">
+            Page {currentPage} of {totalPages}
+          </span>
+        )}
       </div>
 
       {/* List of Configured Service / Branch Pairs */}
@@ -147,7 +166,7 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
             No service branches configured yet. Add one below!
           </div>
         ) : (
-          entries.map((entry) => (
+          paginatedEntries.map((entry) => (
             <div
               key={entry.id}
               className="p-3.5 rounded-2xl bg-background/90 border border-border/80 hover:border-primary/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
@@ -170,7 +189,7 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
                 <button
                   type="button"
                   onClick={() => handleCopy(entry.id, entry.branchName)}
-                  className="px-2.5 py-1 rounded-xl bg-muted hover:bg-accent border border-border text-[10px] font-bold text-foreground transition-all flex items-center gap-1"
+                  className="px-2.5 py-1 rounded-xl bg-muted hover:bg-accent border border-border text-[10px] font-bold text-foreground transition-all flex items-center gap-1 cursor-pointer"
                   title="Copy git checkout command"
                 >
                   {copiedId === entry.id ? (
@@ -181,31 +200,68 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
                   <span>{copiedId === entry.id ? 'Copied' : 'Copy'}</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => openEditModal(entry)}
-                  className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-primary transition-colors"
-                  title="Edit service or branch"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
+                {canEdit && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(entry)}
+                      className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                      title="Edit service or branch"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setEntryToDelete(entry)}
-                  className="p-1.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                  title="Delete service branch"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setEntryToDelete(entry)}
+                      className="p-1.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                      title="Delete service branch"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))
         )}
       </div>
 
+      {/* Pagination Controls (Show up to 10 services per page) */}
+      {entries.length > pageSize && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-border/50 text-xs">
+          <span className="text-[11px] text-muted-foreground font-medium">
+            Showing <strong className="text-foreground">{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, entries.length)}</strong> of <strong className="text-foreground">{entries.length}</strong> services
+          </span>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-xl bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold text-xs cursor-pointer shadow-2xs"
+            >
+              Previous
+            </button>
+
+            <span className="text-xs font-bold text-primary px-2">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-xl bg-card border border-border text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold text-xs cursor-pointer shadow-2xs"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Add New Service & Branch Trigger / Form */}
-      {!isAdding ? (
+      {canEdit && (!isAdding ? (
         <div className="pt-2">
           <button
             type="button"
@@ -284,7 +340,7 @@ export function TaskGitBranchCard({ branchName, taskTitle, onSaveBranch }: TaskG
             </button>
           </div>
         </form>
-      )}
+      ))}
 
       {/* --- EDIT MODAL (Step 1) --- */}
       {editingEntry && !showEditReviewModal && (

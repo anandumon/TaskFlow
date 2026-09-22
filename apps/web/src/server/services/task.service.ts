@@ -22,10 +22,25 @@ export interface TaskDto {
   filesChanged?: string
   notes?: string
   historyLogs?: string
+  attachments?: string
   position?: number
   progress?: number
   createdAt: string
   updatedAt: string
+}
+
+let hasEnsuredTasksSchema = false
+export async function ensureTasksSchema() {
+  if (hasEnsuredTasksSchema) return
+  try {
+    // 1. Convert branch_name to TEXT so unlimited multi-services can be stored without 255-char cutoff
+    await query(`ALTER TABLE tasks ALTER COLUMN branch_name TYPE TEXT;`)
+  } catch (e) {}
+  try {
+    // 2. Add attachments column if not exists
+    await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attachments TEXT;`)
+  } catch (e) {}
+  hasEnsuredTasksSchema = true
 }
 
 function ensureJsonArrayString(val: any): string {
@@ -64,6 +79,7 @@ function mapTask(row: any): TaskDto {
     reviewerName: row.reviewer_name || row.reviewerName || 'Lead Reviewer',
     branchName: row.branch_name || row.branchName || '',
     filesChanged: ensureJsonArrayString(row.files_changed),
+    attachments: ensureJsonArrayString(row.attachments),
     notes: row.notes || '',
     historyLogs: ensureJsonArrayString(row.history_logs),
     position: Number(row.position ?? 0),
@@ -75,6 +91,7 @@ function mapTask(row: any): TaskDto {
 
 export async function getTasksByWorkspace(workspaceId: string): Promise<TaskDto[]> {
   try {
+    await ensureTasksSchema()
     const rows = await query(
       `SELECT * FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL) ORDER BY created_at DESC`,
       [workspaceId]
@@ -88,6 +105,7 @@ export async function getTasksByWorkspace(workspaceId: string): Promise<TaskDto[
 
 export async function getTasksByProject(projectId: string): Promise<TaskDto[]> {
   try {
+    await ensureTasksSchema()
     const rows = await query(
       `SELECT * FROM tasks WHERE project_id = $1 AND (deleted = false OR deleted IS NULL) ORDER BY created_at DESC`,
       [projectId]
@@ -100,6 +118,7 @@ export async function getTasksByProject(projectId: string): Promise<TaskDto[]> {
 }
 
 export async function getTaskById(id: string): Promise<TaskDto | null> {
+  await ensureTasksSchema()
   const row = await queryOne(`SELECT * FROM tasks WHERE id = $1 AND (deleted = false OR deleted IS NULL)`, [id])
   if (!row) return null
   return mapTask(row)
@@ -110,6 +129,7 @@ export async function createTask(
   input: Partial<TaskDto>,
   creatorId?: string
 ): Promise<TaskDto> {
+  await ensureTasksSchema()
   const id = crypto.randomUUID()
   const now = new Date()
 
@@ -139,13 +159,13 @@ export async function createTask(
       input.assigneeId || null,
       input.assigneeName || 'You',
       input.dueDate || 'Tomorrow',
-      typeof input.subtasks === 'string' ? input.subtasks : JSON.stringify(input.subtasks || []),
-      input.assignees || 'You',
+      input.subtasks ? ensureJsonArrayString(input.subtasks) : '[]',
+      input.assignees || input.assigneeName || 'You',
       input.reviewerName || 'Lead Reviewer',
       input.branchName || '',
-      typeof input.filesChanged === 'string' ? input.filesChanged : JSON.stringify(input.filesChanged || []),
+      input.filesChanged ? ensureJsonArrayString(input.filesChanged) : '[]',
       input.notes || '',
-      typeof input.historyLogs === 'string' ? input.historyLogs : JSON.stringify(input.historyLogs || []),
+      input.historyLogs ? ensureJsonArrayString(input.historyLogs) : '[]',
       input.position ?? 0,
       input.progress ?? 0,
       creatorId || null,
@@ -157,6 +177,7 @@ export async function createTask(
 }
 
 export async function updateTask(id: string, updates: Partial<TaskDto>): Promise<TaskDto> {
+  await ensureTasksSchema()
   const existing = await queryOne(`SELECT * FROM tasks WHERE id = $1`, [id])
   if (!existing) throw new Error('Task not found')
 
@@ -179,6 +200,9 @@ export async function updateTask(id: string, updates: Partial<TaskDto>): Promise
   const filesChanged = updates.filesChanged !== undefined
     ? (typeof updates.filesChanged === 'string' ? updates.filesChanged : JSON.stringify(updates.filesChanged))
     : existing.files_changed
+  const attachments = updates.attachments !== undefined
+    ? (typeof updates.attachments === 'string' ? updates.attachments : JSON.stringify(updates.attachments))
+    : existing.attachments
   const notes = updates.notes !== undefined ? updates.notes : existing.notes
   const historyLogs = updates.historyLogs !== undefined
     ? (typeof updates.historyLogs === 'string' ? updates.historyLogs : JSON.stringify(updates.historyLogs))
@@ -187,22 +211,46 @@ export async function updateTask(id: string, updates: Partial<TaskDto>): Promise
   const progress = updates.progress !== undefined ? updates.progress : existing.progress
   const projectId = updates.projectId !== undefined ? updates.projectId : existing.project_id
 
-  const row = await queryOne(
-    `UPDATE tasks SET
-      title = $1, description = $2, status = $3, environment = $4, priority = $5,
-      tag = $6, tag_color = $7, assignee_id = $8, assignee_name = $9, due_date = $10,
-      subtasks = $11, assignees = $12, reviewer_name = $13, branch_name = $14,
-      files_changed = $15, notes = $16, history_logs = $17, position = $18,
-      progress = $19, project_id = $20, updated_at = $21
-     WHERE id = $22 RETURNING *`,
-    [
-      title, description, status, environment, priority,
-      tag, tagColor, assigneeId, assigneeName, dueDate,
-      subtasks, assignees, reviewerName, branchName,
-      filesChanged, notes, historyLogs, position,
-      progress, projectId, new Date(), id,
-    ]
-  )
+  let row: any = null
+  try {
+    row = await queryOne(
+      `UPDATE tasks SET
+        title = $1, description = $2, status = $3, environment = $4, priority = $5,
+        tag = $6, tag_color = $7, assignee_id = $8, assignee_name = $9, due_date = $10,
+        subtasks = $11, assignees = $12, reviewer_name = $13, branch_name = $14,
+        files_changed = $15, notes = $16, history_logs = $17, position = $18,
+        progress = $19, project_id = $20, attachments = $21, updated_at = $22
+       WHERE id = $23 RETURNING *`,
+      [
+        title, description, status, environment, priority,
+        tag, tagColor, assigneeId, assigneeName, dueDate,
+        subtasks, assignees, reviewerName, branchName,
+        filesChanged, notes, historyLogs, position,
+        progress, projectId, attachments, new Date(), id,
+      ]
+    )
+  } catch (err: any) {
+    if (err?.message?.includes('column "attachments"') || err?.message?.includes('attachments')) {
+      row = await queryOne(
+        `UPDATE tasks SET
+          title = $1, description = $2, status = $3, environment = $4, priority = $5,
+          tag = $6, tag_color = $7, assignee_id = $8, assignee_name = $9, due_date = $10,
+          subtasks = $11, assignees = $12, reviewer_name = $13, branch_name = $14,
+          files_changed = $15, notes = $16, history_logs = $17, position = $18,
+          progress = $19, project_id = $20, updated_at = $21
+         WHERE id = $22 RETURNING *`,
+        [
+          title, description, status, environment, priority,
+          tag, tagColor, assigneeId, assigneeName, dueDate,
+          subtasks, assignees, reviewerName, branchName,
+          filesChanged, notes, historyLogs, position,
+          progress, projectId, new Date(), id,
+        ]
+      )
+    } else {
+      throw err
+    }
+  }
 
   return mapTask(row)
 }

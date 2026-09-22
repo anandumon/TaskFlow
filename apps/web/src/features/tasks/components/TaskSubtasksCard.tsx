@@ -21,17 +21,66 @@ import {
   CheckCircle2,
   FileText,
   Layers,
+  User,
+  UserCheck,
+  Calendar,
+  Tag,
+  Sparkles,
+  Bug,
 } from 'lucide-react'
 import { Subtask, FileChange, HistoryLog } from '@/stores/task-store'
 import { ServiceBranchEntry } from './TaskGitBranchCard'
+import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
+import { AssignableUser } from '@/components/ui/user-select'
+
+export const SUBTASK_CATEGORIES = [
+  'Feature',
+  'Bug Fix',
+  'Backend',
+  'Frontend',
+  'DevOps',
+  'Design',
+  'Architecture',
+  'Documentation',
+  'Testing / QA',
+  'Maintenance',
+]
+
+export const getCategoryBadgeClass = (category?: string) => {
+  const cat = (category || '').toLowerCase()
+  if (cat.includes('bug') || cat.includes('fix') || cat.includes('issue')) {
+    return 'bg-rose-500/15 text-rose-600 border-rose-500/30'
+  }
+  if (cat.includes('backend') || cat.includes('api') || cat.includes('server')) {
+    return 'bg-purple-500/15 text-purple-600 border-purple-500/30'
+  }
+  if (cat.includes('frontend') || cat.includes('ui')) {
+    return 'bg-blue-500/15 text-blue-600 border-blue-500/30'
+  }
+  if (cat.includes('devops') || cat.includes('infra')) {
+    return 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+  }
+  if (cat.includes('doc')) {
+    return 'bg-teal-500/15 text-teal-600 border-teal-500/30'
+  }
+  if (cat.includes('test') || cat.includes('qa')) {
+    return 'bg-indigo-500/15 text-indigo-600 border-indigo-500/30'
+  }
+  if (cat.includes('design')) {
+    return 'bg-pink-500/15 text-pink-600 border-pink-500/30'
+  }
+  return 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+}
 
 interface TaskSubtasksCardProps {
   subtasks: Subtask[]
   onToggleSubtask: (subtaskId: string) => Promise<void>
-  onAddSubtask: (title: string, branchName?: string) => Promise<void>
+  onAddSubtask: (subtaskData: Partial<Subtask> | string, legacyBranchName?: string) => Promise<void>
   onSaveSubtaskBranch: (subtaskId: string, branch: string) => Promise<void>
   onDeleteSubtask: (subtaskId: string) => Promise<void>
   onUpdateSubtaskDetails?: (subtaskId: string, updatedSubtask: Partial<Subtask>) => Promise<void>
+  availableUsers?: AssignableUser[]
+  currentUserName?: string
 }
 
 export function TaskSubtasksCard({
@@ -41,13 +90,18 @@ export function TaskSubtasksCard({
   onSaveSubtaskBranch,
   onDeleteSubtask,
   onUpdateSubtaskDetails,
+  availableUsers = [],
+  currentUserName = 'You',
 }: TaskSubtasksCardProps) {
-  // Add Subtask Modal/Form State
+  // Add Subtask Form State (Title, Description, Category, Assigned To, Assigned By, Due Date)
   const [isAddingSubtask, setIsAddingSubtask] = useState(false)
   const [newTitle, setNewTitle] = useState('')
-  const [newServiceName, setNewServiceName] = useState('')
-  const [newBranchName, setNewBranchName] = useState('')
   const [newDescription, setNewDescription] = useState('')
+  const [newCategory, setNewCategory] = useState('Feature')
+  const [newCustomCategory, setNewCustomCategory] = useState('')
+  const [newAssignee, setNewAssignee] = useState(currentUserName)
+  const [newAssignedBy, setNewAssignedBy] = useState(currentUserName)
+  const [newDueDate, setNewDueDate] = useState('')
 
   // Subtask Deep-Dive Inspection Modal State
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
@@ -104,21 +158,27 @@ export function TaskSubtasksCard({
     e.preventDefault()
     if (!newTitle.trim()) return
 
-    let branchPayload = ''
-    if (newBranchName.trim()) {
-      const entry: ServiceBranchEntry = {
-        id: `st-branch-${Date.now()}`,
-        serviceName: newServiceName.trim(),
-        branchName: newBranchName.trim(),
-      }
-      branchPayload = JSON.stringify([entry])
-    }
+    const finalCategory =
+      newCategory === 'custom'
+        ? (newCustomCategory.trim() || 'Custom')
+        : (newCategory || 'Feature')
 
-    await onAddSubtask(newTitle.trim(), branchPayload)
+    await onAddSubtask({
+      title: newTitle.trim(),
+      description: newDescription.trim(),
+      category: finalCategory,
+      assigneeName: newAssignee,
+      assignedByName: newAssignedBy,
+      dueDate: newDueDate,
+    })
+
     setNewTitle('')
-    setNewServiceName('')
-    setNewBranchName('')
     setNewDescription('')
+    setNewCategory('Feature')
+    setNewCustomCategory('')
+    setNewAssignee(currentUserName)
+    setNewAssignedBy(currentUserName)
+    setNewDueDate('')
     setIsAddingSubtask(false)
   }
 
@@ -293,7 +353,9 @@ export function TaskSubtasksCard({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-muted-foreground uppercase">Subtask Title</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase">
+              Subtask Title <span className="text-destructive">*</span>
+            </label>
             <input
               type="text"
               placeholder="e.g. Implement JWT verification in auth-service..."
@@ -301,51 +363,123 @@ export function TaskSubtasksCard({
               onChange={(e) => setNewTitle(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               required
+              autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase">
+              Description (Optional)
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Describe the subtask requirements, acceptance criteria, or context..."
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary leading-relaxed"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Category / Type */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-                <Server className="w-3 h-3 text-primary" /> Microservice Name (Optional)
+                <Tag className="w-3 h-3 text-primary" /> Category
               </label>
-              <input
-                type="text"
-                placeholder="e.g. payment-service"
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border font-mono text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                {SUBTASK_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+                <option value="custom">Custom...</option>
+              </select>
+
+              {newCategory === 'custom' && (
+                <div className="pt-1 animate-fade-in">
+                  <input
+                    type="text"
+                    placeholder="Enter custom category..."
+                    value={newCustomCategory}
+                    onChange={(e) => setNewCustomCategory(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-background border border-primary/50 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
 
+            {/* Assigned To */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-                <GitBranch className="w-3 h-3 text-primary" /> Git Feature Branch Name (Optional)
+                <User className="w-3 h-3 text-primary" /> Assigned To
               </label>
               <input
                 type="text"
-                placeholder="e.g. feature/payment-service/jwt-auth"
-                value={newBranchName}
-                onChange={(e) => setNewBranchName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border font-mono text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                list="subtask-assignees-list"
+                value={newAssignee}
+                onChange={(e) => setNewAssignee(e.target.value)}
+                placeholder="Assignee name..."
+                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <datalist id="subtask-assignees-list">
+                {availableUsers.map((u) => (
+                  <option key={u.id} value={u.name} />
+                ))}
+              </datalist>
+            </div>
+
+            {/* Assigned By */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                <UserCheck className="w-3 h-3 text-primary" /> Assigned By
+              </label>
+              <input
+                type="text"
+                list="subtask-assigner-list"
+                value={newAssignedBy}
+                onChange={(e) => setNewAssignedBy(e.target.value)}
+                placeholder="Assigner name..."
+                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <datalist id="subtask-assigner-list">
+                {availableUsers.map((u) => (
+                  <option key={u.id} value={u.name} />
+                ))}
+              </datalist>
+            </div>
+
+            {/* Due Date */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-primary" /> Due Date
+              </label>
+              <StylishDatePicker
+                value={newDueDate}
+                onChange={setNewDueDate}
+                dropDirection="up"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
             <button
               type="button"
               onClick={() => setIsAddingSubtask(false)}
-              className="px-3.5 py-1.5 rounded-xl bg-muted text-xs font-semibold text-foreground hover:bg-accent"
+              className="px-3.5 py-1.5 rounded-xl bg-muted text-xs font-semibold text-foreground hover:bg-accent cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!newTitle.trim()}
-              className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
+              className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              Save Subtask
+              Create Subtask
             </button>
           </div>
         </form>
@@ -424,6 +558,32 @@ export function TaskSubtasksCard({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Subtask Description snippet */}
+                  {st.description && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed pl-6">
+                      {st.description}
+                    </p>
+                  )}
+
+                  {/* Badges: Category + Assignee + Due Date */}
+                  <div className="flex flex-wrap items-center gap-1.5 pl-6 pt-0.5">
+                    {st.category && (
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded border inline-flex items-center gap-1 ${getCategoryBadgeClass(st.category)}`}>
+                        {st.category}
+                      </span>
+                    )}
+                    {st.assigneeName && (
+                      <span className="text-[10px] font-semibold text-foreground/80 bg-background px-2 py-0.5 rounded-md border border-border/60 inline-flex items-center gap-1">
+                        <User className="w-2.5 h-2.5 text-primary" /> {st.assigneeName}
+                      </span>
+                    )}
+                    {st.dueDate && (
+                      <span className="text-[10px] font-semibold text-muted-foreground inline-flex items-center gap-1">
+                        <Calendar className="w-2.5 h-2.5 text-primary" /> {st.dueDate}
+                      </span>
+                    )}
                   </div>
 
                   {/* Microservice & Branch Badges */}

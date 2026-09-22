@@ -11,13 +11,26 @@ export interface Subtask {
   title: string
   completed: boolean
   description?: string
+  category?: string
+  assigneeName?: string
+  assignedByName?: string
+  dueDate?: string
   branchName?: string
   serviceName?: string
   filesChanged?: string
   notes?: string
   historyLogs?: string
   createdAt?: string
-  dueDate?: string
+}
+
+export interface TaskAttachment {
+  id: string
+  name: string
+  size: number
+  type: string
+  dataUrl: string
+  uploadedAt: string
+  uploadedBy?: string
 }
 
 export interface FileChange {
@@ -55,6 +68,7 @@ export interface Task {
   filesChanged?: string
   notes?: string
   historyLogs?: string
+  attachments?: string
   progress?: number
   order?: number
   createdBy?: string
@@ -74,7 +88,7 @@ interface TaskState {
   moveTask: (workspaceId: string, taskId: string, targetStatus: TaskStatus, targetIndex: number, newEnv?: TaskEnvironment) => Promise<void>
   reorderTasks: (workspaceId: string, newTasks: Task[]) => void
   toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>
-  addSubtask: (taskId: string, subtaskTitle: string, branchName?: string) => Promise<void>
+  addSubtask: (taskId: string, subtaskData: Partial<Subtask> | string, legacyBranchName?: string) => Promise<void>
   updateSubtaskBranch: (taskId: string, subtaskId: string, branchName: string) => Promise<void>
   addNote: (taskId: string, noteText: string) => Promise<void>
   deleteTask: (id: string) => Promise<void>
@@ -375,9 +389,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     })
   },
 
-  addSubtask: async (taskId: string, subtaskTitle: string, branchName?: string) => {
+  addSubtask: async (taskId: string, subtaskInput: Partial<Subtask> | string, legacyBranchName?: string) => {
     const task = get().tasks.find((t) => t.id === taskId)
-    if (!task || !subtaskTitle.trim()) return
+    if (!task) return
 
     let subtasksList: Subtask[] = []
     try {
@@ -386,12 +400,30 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       subtasksList = []
     }
 
-    const newSubtask: Subtask = {
-      id: 'st-' + Date.now(),
-      title: subtaskTitle.trim(),
-      completed: false,
-      branchName: branchName?.trim() || '',
-    }
+    const newSubtask: Subtask =
+      typeof subtaskInput === 'string'
+        ? {
+            id: 'st-' + Date.now(),
+            title: subtaskInput.trim(),
+            completed: false,
+            branchName: legacyBranchName?.trim() || '',
+            createdAt: new Date().toISOString(),
+          }
+        : {
+            id: 'st-' + Date.now(),
+            title: (subtaskInput.title || '').trim(),
+            description: subtaskInput.description?.trim() || '',
+            category: subtaskInput.category?.trim() || 'Feature',
+            assigneeName: subtaskInput.assigneeName?.trim() || '',
+            assignedByName: subtaskInput.assignedByName?.trim() || '',
+            dueDate: subtaskInput.dueDate || '',
+            completed: false,
+            branchName: subtaskInput.branchName?.trim() || '',
+            serviceName: subtaskInput.serviceName?.trim() || '',
+            createdAt: new Date().toISOString(),
+          }
+
+    if (!newSubtask.title) return
 
     subtasksList.push(newSubtask)
     await get().updateTask(taskId, {
