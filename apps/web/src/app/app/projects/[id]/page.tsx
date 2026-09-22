@@ -35,6 +35,7 @@ import {
   ChevronUp,
   ChevronDown,
   UserCheck,
+  GripVertical,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -81,7 +82,11 @@ export default function ProjectDetailsPage() {
   const [newTaskAssignedBy, setNewTaskAssignedBy] = useState(currentUserName)
   const [newTaskDue, setNewTaskDue] = useState(todayStr)
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium')
+  const [newTaskStatus, setNewTaskStatus] = useState<string>('todo')
   const [newTaskEnv, setNewTaskEnv] = useState<TaskEnvironment>('DEV')
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null)
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isUpdatingTask, setIsUpdatingTask] = useState(false)
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
@@ -260,6 +265,58 @@ export default function ProjectDetailsPage() {
     return Array.from(new Set([currentUserName, ...availableUsers.map(u => u.name)]))
   }, [availableUsers, currentUserName])
 
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses } = useStatusStore()
+  const workspaceStatuses = useMemo(
+    () => getStatuses(currentWorkspace?.id || 'default'),
+    [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses]
+  )
+
+  const columns = useMemo(
+    () =>
+      workspaceStatuses.map((st) => ({
+        id: st.id,
+        title: st.name,
+        color: st.color,
+        category: st.category,
+      })),
+    [workspaceStatuses]
+  )
+
+  const getSelectValue = useCallback(
+    (currentStatus?: string) => {
+      if (!currentStatus) return columns[0]?.id || 'todo'
+      if (columns.some((c) => c.id === currentStatus)) return currentStatus
+      const matchCase = columns.find((c) => c.id.toLowerCase() === currentStatus.toLowerCase())
+      if (matchCase) return matchCase.id
+      if ((currentStatus === 'done' || currentStatus === 'complete') && columns.some((c) => c.id === 'complete')) return 'complete'
+      if ((currentStatus === 'done' || currentStatus === 'complete') && columns.some((c) => c.id === 'done')) return 'done'
+      return currentStatus
+    },
+    [columns]
+  )
+
+  const isTaskInColumn = useCallback(
+    (task: Task, col: { id: string }, isFirstCol: boolean) => {
+      if (task.status === col.id) return true
+      if (task.status?.toLowerCase() === col.id.toLowerCase()) return true
+      if ((col.id === 'done' || col.id === 'complete') && (task.status === 'done' || task.status === 'complete')) return true
+      if (
+        isFirstCol &&
+        !columns.some(
+          (c) =>
+            c.id === task.status ||
+            c.id.toLowerCase() === (task.status || '').toLowerCase() ||
+            ((c.id === 'done' || c.id === 'complete') && (task.status === 'done' || task.status === 'complete'))
+        )
+      ) {
+        return true
+      }
+      return false
+    },
+    [columns]
+  )
+
   // Filtered according to category tab & selected user
   const getFilteredTasks = useCallback((taskList: Task[]) => {
     let list = [...taskList]
@@ -289,8 +346,15 @@ export default function ProjectDetailsPage() {
         return (priorityWeights[b.priority] || 0) - (priorityWeights[a.priority] || 0)
       }
       if (sortBy === 'status') {
-        const statusWeights: Record<string, number> = { todo: 1, in_progress: 2, in_review: 3, done: 4 }
-        return (statusWeights[a.status] || 0) - (statusWeights[b.status] || 0)
+        const indexA = workspaceStatuses.findIndex(
+          (s) => s.id === a.status || s.id.toLowerCase() === (a.status || '').toLowerCase()
+        )
+        const indexB = workspaceStatuses.findIndex(
+          (s) => s.id === b.status || s.id.toLowerCase() === (b.status || '').toLowerCase()
+        )
+        const posA = indexA === -1 ? 999 : indexA
+        const posB = indexB === -1 ? 999 : indexB
+        return posA - posB
       }
       if (sortBy === 'title') {
         return (a.title || '').localeCompare(b.title || '')
@@ -299,26 +363,18 @@ export default function ProjectDetailsPage() {
     })
 
     return list
-  }, [activeCategoryTab, selectedUserFilter, sortBy, isBugTask])
+  }, [activeCategoryTab, selectedUserFilter, sortBy, isBugTask, workspaceStatuses])
 
   const displayTasks = useMemo(() => getFilteredTasks(projectTasks), [getFilteredTasks, projectTasks])
 
-  const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const { getStatuses } = useStatusStore()
-  const workspaceStatuses = getStatuses(currentWorkspace?.id || 'default')
-
-  const columns = workspaceStatuses.map((st) => ({
-    id: st.id,
-    title: st.name,
-    color: st.color,
-    category: st.category,
-  }))
-
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    await updateStatus(taskId, newStatus)
+    const targetStatusObj = workspaceStatuses.find((s) => s.id === newStatus)
+    const isClosed = newStatus === 'done' || newStatus === 'complete' || targetStatusObj?.category === 'CLOSED'
+    await updateStatus(taskId, newStatus, isClosed ? 'MAIN' : undefined)
     loadProjects(wsId)
-    showToast(`Status updated to ${newStatus.replace('_', ' ').toUpperCase()}`)
+    const statusLabel = targetStatusObj?.name || newStatus.replace(/_/g, ' ').toUpperCase()
+    showToast(`Status updated to ${statusLabel}`)
   }
 
   const handleEnvChange = async (taskId: string, newEnv: TaskEnvironment) => {
@@ -331,6 +387,88 @@ export default function ProjectDetailsPage() {
       showToast(`Environment updated to ${newEnv}`)
     }
     loadProjects(wsId)
+  }
+
+  // Drag and Drop handlers for task cards across status columns
+  const handleTaskDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedTaskId(id)
+    e.dataTransfer.setData('text/plain', id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null)
+    setDragOverColId(null)
+    setDragOverTaskId(null)
+  }
+
+  const handleColumnDragOver = (e: React.DragEvent, colId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverColId !== colId) {
+      setDragOverColId(colId)
+    }
+  }
+
+  const handleColumnDragLeave = (e: React.DragEvent, colId: string) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    if (dragOverColId === colId) {
+      setDragOverColId(null)
+    }
+  }
+
+  const handleColumnDrop = async (e: React.DragEvent, targetStatusId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const taskId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    setDragOverColId(null)
+    setDraggedTaskId(null)
+    setDragOverTaskId(null)
+
+    if (!taskId) return
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+
+    const isAlreadyInStatus =
+      task.status === targetStatusId ||
+      task.status?.toLowerCase() === targetStatusId.toLowerCase() ||
+      ((targetStatusId === 'done' || targetStatusId === 'complete') && (task.status === 'done' || task.status === 'complete'))
+
+    if (!isAlreadyInStatus) {
+      await handleStatusChange(taskId, targetStatusId as TaskStatus)
+    }
+  }
+
+  const handleCardDragOver = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverTaskId !== targetTaskId && draggedTaskId !== targetTaskId) {
+      setDragOverTaskId(targetTaskId)
+    }
+  }
+
+  const handleCardDrop = async (e: React.DragEvent, targetTaskId: string, targetColId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const sourceId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    setDragOverColId(null)
+    setDraggedTaskId(null)
+    setDragOverTaskId(null)
+
+    if (!sourceId) return
+    const task = tasks.find((t) => t.id === sourceId)
+    if (!task) return
+
+    if (sourceId === targetTaskId) return
+
+    const isAlreadyInStatus =
+      task.status === targetColId ||
+      task.status?.toLowerCase() === targetColId.toLowerCase() ||
+      ((targetColId === 'done' || targetColId === 'complete') && (task.status === 'done' || task.status === 'complete'))
+
+    if (!isAlreadyInStatus) {
+      await handleStatusChange(sourceId, targetColId as TaskStatus)
+    }
   }
 
   const handleCreateTask = async (e: React.FormEvent) => {
@@ -356,7 +494,7 @@ export default function ProjectDetailsPage() {
         reviewerName: newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName),
         dueDate: newTaskDue || todayStr,
         priority: newTaskPriority,
-        status: 'todo', // Always defaults to todo
+        status: (newTaskStatus || columns[0]?.id || 'todo') as TaskStatus,
         environment: newTaskEnv || 'DEV',
         subtasks: '[]',
         filesChanged: '[]',
@@ -364,6 +502,7 @@ export default function ProjectDetailsPage() {
       setNewTaskTitle('')
       setCustomTagInput('')
       setNewTaskDue(todayStr)
+      setNewTaskStatus(columns[0]?.id || 'todo')
       setIsModalOpen(false)
       loadProjects(wsId)
       showToast('New deliverable added to project!')
@@ -475,13 +614,21 @@ export default function ProjectDetailsPage() {
   const renderKanbanBoard = (taskList: Task[]) => {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {columns.map((col) => {
-          const colTasks = taskList.filter((t) => t.status === col.id)
+        {columns.map((col, colIndex) => {
+          const colTasks = taskList.filter((t) => isTaskInColumn(t, col, colIndex === 0))
+          const isDropTarget = dragOverColId === col.id && draggedTaskId !== null
 
           return (
             <div
               key={col.id}
-              className="bg-card/70 border border-border/80 rounded-3xl p-4 flex flex-col min-h-[400px] shadow-sm space-y-4"
+              onDragOver={(e) => handleColumnDragOver(e, col.id)}
+              onDragLeave={(e) => handleColumnDragLeave(e, col.id)}
+              onDrop={(e) => handleColumnDrop(e, col.id)}
+              className={`bg-card/70 border rounded-3xl p-4 flex flex-col min-h-[400px] shadow-sm space-y-4 transition-all duration-150 ${
+                isDropTarget
+                  ? 'ring-2 ring-primary/70 border-primary bg-primary/5 scale-[1.01] shadow-lg'
+                  : 'border-border/80'
+              }`}
             >
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2 font-bold text-xs">
@@ -493,25 +640,47 @@ export default function ProjectDetailsPage() {
                 </div>
               </div>
 
+              {/* Active Column Drop Highlight Banner */}
+              {isDropTarget && (
+                <div className="border-2 border-dashed border-primary/60 bg-primary/10 rounded-2xl py-2.5 px-3 text-center text-xs font-bold text-primary animate-pulse flex items-center justify-center gap-2">
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span>Drop to move to {col.title}</span>
+                </div>
+              )}
+
               <div className="space-y-3 flex-1">
                 {colTasks.length === 0 ? (
                   <div className="text-center py-10 text-xs text-muted-foreground border border-dashed border-border/60 rounded-2xl">
-                    No deliverables
+                    {isDropTarget ? 'Release to drop deliverable here' : 'No deliverables'}
                   </div>
                 ) : (
                   colTasks.map((t) => {
                     const isBug = isBugTask(t)
                     const envBadge = getEnvBadge(t.environment || 'DEV')
+                    const isDraggingThis = draggedTaskId === t.id
+                    const isHoveredTarget = dragOverTaskId === t.id && draggedTaskId !== t.id
 
                     return (
                       <div
                         key={t.id}
-                        className="p-4 rounded-2xl border shadow-xs hover:shadow-lg transition-all space-y-3 group relative overflow-hidden"
+                        draggable={true}
+                        onDragStart={(e) => handleTaskDragStart(e, t.id)}
+                        onDragEnd={handleTaskDragEnd}
+                        onDragOver={(e) => handleCardDragOver(e, t.id)}
+                        onDrop={(e) => handleCardDrop(e, t.id, col.id)}
+                        className={`p-4 rounded-2xl border shadow-xs hover:shadow-lg transition-all space-y-3 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none ${
+                          isDraggingThis
+                            ? 'opacity-40 scale-[0.98] border-dashed border-primary ring-2 ring-primary/40 shadow-none'
+                            : ''
+                        } ${
+                          isHoveredTarget ? 'border-primary ring-1 ring-primary/40' : ''
+                        }`}
                         style={{
                           backgroundColor: `${projColor}14`,
                           borderColor: `${projColor}55`,
                           boxShadow: `0 4px 20px -2px ${projColor}15`,
                         }}
+                        title="Drag card to move to any status column"
                       >
                         {/* Top Accent Strip */}
                         <div
@@ -519,18 +688,26 @@ export default function ProjectDetailsPage() {
                           style={{ backgroundColor: projColor }}
                         />
 
-                        {/* Tag + Bug Indicator */}
+                        {/* Tag + Bug Indicator + Drag Grip */}
                         <div className="flex items-center justify-between gap-1 pt-0.5">
-                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${getTagColor(t.tag)}`}>
-                            {t.tag}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div
+                              className="text-muted-foreground/50 group-hover:text-muted-foreground p-0.5 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                              title="Drag to move status"
+                            >
+                              <GripVertical className="w-3.5 h-3.5" />
+                            </div>
+                            <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full truncate ${getTagColor(t.tag)}`}>
+                              {t.tag}
+                            </span>
+                          </div>
 
                           {isBug ? (
-                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-500 border border-rose-500/40">
+                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-500 border border-rose-500/40 shrink-0">
                               <Bug className="w-2.5 h-2.5" /> Bug / Fix
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-500 border border-blue-500/40">
+                            <span className="flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-500 border border-blue-500/40 shrink-0">
                               <Sparkles className="w-2.5 h-2.5" /> Feature
                             </span>
                           )}
@@ -539,6 +716,8 @@ export default function ProjectDetailsPage() {
                         {/* Title Link */}
                         <Link
                           href={`/app/tasks/${t.id}`}
+                          draggable={false}
+                          onMouseDown={(e) => e.stopPropagation()}
                           className="block text-xs font-bold leading-relaxed group-hover:underline transition-colors"
                           style={{ color: projColor }}
                         >
@@ -599,6 +778,7 @@ export default function ProjectDetailsPage() {
                             {/* Bell Button: Send Due Alert Email */}
                             <button
                               type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleSendDueAlert(t)
@@ -615,6 +795,8 @@ export default function ProjectDetailsPage() {
                             </button>
 
                             <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => openEditModal(t)}
                               className="p-1 text-muted-foreground hover:text-primary transition-colors rounded cursor-pointer"
                               title="Edit task"
@@ -623,19 +805,31 @@ export default function ProjectDetailsPage() {
                             </button>
 
                             <select
-                              value={t.status}
-                              onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
-                              className="text-[10px] bg-muted/90 px-1.5 py-0.5 rounded text-muted-foreground font-semibold focus:outline-none cursor-pointer"
+                              value={getSelectValue(t.status)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                handleStatusChange(t.id, e.target.value as TaskStatus)
+                              }}
+                              className="text-[10px] bg-muted/90 px-1.5 py-0.5 rounded text-muted-foreground font-semibold focus:outline-none cursor-pointer hover:bg-muted border border-border/40 max-w-[120px] truncate"
                             >
-                              <option value="todo">To Do</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="in_review">In Review</option>
-                              <option value="done">Done</option>
+                              {columns.map((statusCol) => (
+                                <option key={statusCol.id} value={statusCol.id} className="bg-background text-foreground">
+                                  {statusCol.title}
+                                </option>
+                              ))}
+                              {!columns.some((c) => c.id === t.status) && (
+                                <option value={t.status} className="bg-background text-foreground">
+                                  {t.status.replace(/_/g, ' ').toUpperCase()}
+                                </option>
+                              )}
                             </select>
 
                             <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => handleDelete(t.id)}
-                              className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded"
+                              className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded cursor-pointer"
                               title="Delete task"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -706,14 +900,20 @@ export default function ProjectDetailsPage() {
                     </td>
                     <td className="p-3.5">
                       <select
-                        value={t.status}
+                        value={getSelectValue(t.status)}
                         onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
-                        className="text-[10px] font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary border-none cursor-pointer focus:outline-none"
+                        className="text-[10px] font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 cursor-pointer focus:outline-none"
                       >
-                        <option value="todo">To Do</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="in_review">In Review</option>
-                        <option value="done">Done</option>
+                        {columns.map((col) => (
+                          <option key={col.id} value={col.id} className="bg-background text-foreground">
+                            {col.title}
+                          </option>
+                        ))}
+                        {!columns.some((c) => c.id === t.status) && (
+                          <option value={t.status} className="bg-background text-foreground">
+                            {t.status.replace(/_/g, ' ').toUpperCase()}
+                          </option>
+                        )}
                       </select>
                     </td>
                     <td className="p-3.5">
@@ -1157,8 +1357,23 @@ export default function ProjectDetailsPage() {
                   />
                 </div>
 
-                {/* Priority & Due Date (Stylish Calendar Date Picker) */}
-                <div className="grid grid-cols-2 gap-2.5">
+                {/* Status, Priority & Due Date (Stylish Calendar Date Picker) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Status</label>
+                    <select
+                      value={newTaskStatus}
+                      onChange={(e) => setNewTaskStatus(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      {columns.map((col) => (
+                        <option key={col.id} value={col.id} className="bg-background text-foreground">
+                          {col.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-foreground">Priority</label>
                     <select
@@ -1278,14 +1493,20 @@ export default function ProjectDetailsPage() {
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase">Status</label>
                     <select
-                      value={editStatus}
+                      value={getSelectValue(editStatus)}
                       onChange={(e) => setEditStatus(e.target.value as any)}
                       className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     >
-                      <option value="todo">To Do</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="in_review">In Review</option>
-                      <option value="done">Done</option>
+                      {columns.map((col) => (
+                        <option key={col.id} value={col.id} className="bg-background text-foreground">
+                          {col.title}
+                        </option>
+                      ))}
+                      {!columns.some((c) => c.id === editStatus) && (
+                        <option value={editStatus} className="bg-background text-foreground">
+                          {editStatus.replace(/_/g, ' ').toUpperCase()}
+                        </option>
+                      )}
                     </select>
                   </div>
 

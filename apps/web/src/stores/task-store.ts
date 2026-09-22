@@ -188,7 +188,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   updateStatus: async (id: string, newStatus: TaskStatus, newEnv?: TaskEnvironment) => {
     let env = newEnv
-    if (newStatus === 'done') {
+    if (newStatus === 'done' || newStatus === 'complete') {
       env = 'MAIN'
     } else if (newStatus === 'in_review' && !env) {
       env = 'DEV'
@@ -254,7 +254,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     const [movedTask] = currentTasks.splice(taskIndex, 1)
     let env = newEnv || movedTask.environment
-    if (targetStatus === 'done') {
+    if (targetStatus === 'done' || targetStatus === 'complete') {
       env = 'MAIN'
     } else if (targetStatus === 'in_review' && (!env || env === 'MAIN')) {
       env = 'DEV'
