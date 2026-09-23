@@ -221,25 +221,51 @@ export async function acceptInvitation(
 
   if (!inv) throw new Error('Invitation not found or expired')
 
-  const now = new Date()
-  await query(`UPDATE invitations SET status = 'ACCEPTED', updated_at = $1 WHERE id = $2`, [now, inv.id])
+  // Resolve target user id if not provided or anonymous
+  const isUuid = (val?: string | null) => val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
+  let targetUserId = userId
+  if (!targetUserId || targetUserId === 'anonymous' || !isUuid(targetUserId)) {
+    if (inv.email) {
+      const u = await queryOne(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email])
+      if (u?.id) {
+        targetUserId = u.id
+      } else {
+        const au = await queryOne(`SELECT id FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email])
+        if (au?.id) targetUserId = au.id
+      }
+    }
+  }
 
-  if (inv.workspace_id) {
+  const now = new Date()
+  await query(
+    `UPDATE invitations SET status = 'ACCEPTED', accepted_at = $1, updated_at = $1, invited_user_id = $2 WHERE id = $3`,
+    [now, isUuid(targetUserId) ? targetUserId : null, inv.id]
+  )
+
+  // Map role to standard role ID
+  const roleName = (inv.role || 'Member').toLowerCase()
+  let roleId: string = 'a0000000-0000-0000-0000-000000000004' // Member
+  if (roleName.includes('owner')) roleId = 'a0000000-0000-0000-0000-000000000001'
+  else if (roleName.includes('admin')) roleId = 'a0000000-0000-0000-0000-000000000002'
+  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000003'
+  else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
+
+  if (inv.workspace_id && isUuid(targetUserId)) {
     try {
       const existingWm = await queryOne(
         `SELECT id FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
-        [inv.workspace_id, userId]
+        [inv.workspace_id, targetUserId]
       )
       if (existingWm) {
         await query(
-          `UPDATE workspace_members SET role = $1, updated_at = $2 WHERE id = $3`,
-          [inv.role || 'MEMBER', now, existingWm.id]
+          `UPDATE workspace_members SET role_id = $1, updated_at = $2, status = 'ACTIVE' WHERE id = $3`,
+          [roleId, now, existingWm.id]
         )
       } else {
         await query(
-          `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $5)`,
-          [crypto.randomUUID(), inv.workspace_id, userId, inv.role || 'MEMBER', now]
+          `INSERT INTO workspace_members (id, workspace_id, user_id, role_id, joined_at, created_at, updated_at, status)
+           VALUES ($1, $2, $3, $4, $5, $5, $5, 'ACTIVE')`,
+          [crypto.randomUUID(), inv.workspace_id, targetUserId, roleId, now]
         )
       }
     } catch (wmErr) {
@@ -247,22 +273,22 @@ export async function acceptInvitation(
     }
   }
 
-  if (inv.organization_id) {
+  if (inv.organization_id && isUuid(targetUserId)) {
     try {
       const existingOm = await queryOne(
         `SELECT id FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
-        [inv.organization_id, userId]
+        [inv.organization_id, targetUserId]
       )
       if (existingOm) {
         await query(
-          `UPDATE organization_members SET role = $1, updated_at = $2 WHERE id = $3`,
-          [inv.role || 'MEMBER', now, existingOm.id]
+          `UPDATE organization_members SET role = $1, role_id = $2, updated_at = $3, status = 'ACTIVE' WHERE id = $4`,
+          [inv.role || 'MEMBER', roleId, now, existingOm.id]
         )
       } else {
         await query(
-          `INSERT INTO organization_members (id, organization_id, user_id, role, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $5)`,
-          [crypto.randomUUID(), inv.organization_id, userId, inv.role || 'MEMBER', now]
+          `INSERT INTO organization_members (id, organization_id, user_id, role, role_id, joined_at, created_at, updated_at, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $6, $6, 'ACTIVE')`,
+          [crypto.randomUUID(), inv.organization_id, targetUserId, inv.role || 'MEMBER', roleId, now]
         )
       }
     } catch (omErr) {

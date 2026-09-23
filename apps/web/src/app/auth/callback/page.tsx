@@ -120,10 +120,24 @@ export default function AuthCallbackPage() {
     setStatus('success')
     const inviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
     if (inviteToken) {
-      setStatusMessage('Google authentication verified! Opening project invite...')
-      setTimeout(() => {
-        window.location.href = `/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`
-      }, 100)
+      setStatusMessage('Google authentication verified! Connecting you to project...')
+      apiClient
+        .post<any>(`/api/v1/invitations/${inviteToken}/accept`, {})
+        .then((res) => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('tf_invite_token')
+            if (authData?.user?.id) {
+              localStorage.setItem(`taskflow_onboarding_completed_${authData.user.id}`, 'true')
+            }
+            localStorage.setItem('taskflow_onboarding_completed', 'true')
+          }
+          const targetProj = res.data?.projectId
+          window.location.href = targetProj ? `/app/projects/${targetProj}` : '/app/home'
+        })
+        .catch((err) => {
+          console.warn('Auto-accept in auth/callback warning:', err)
+          window.location.href = `/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`
+        })
     } else {
       setStatusMessage('Authentication successful! Opening dashboard...')
       setTimeout(() => {

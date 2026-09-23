@@ -94,7 +94,8 @@ export function GoogleOAuthModal({
 
   const handleRedirectToSupabaseGoogleOAuth = () => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
-    const redirectUrl = `${window.location.origin}/auth/callback`
+    const inviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
+    const redirectUrl = `${window.location.origin}/auth/callback${inviteToken ? `?invite_token=${encodeURIComponent(inviteToken)}` : ''}`
     if (typeof window !== 'undefined') {
       if (username.trim()) {
         localStorage.setItem('tf_pending_username', username.trim().toLowerCase())
@@ -163,8 +164,8 @@ export function GoogleOAuthModal({
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-foreground">Sign In with Google</h3>
-              <p className="text-[11px] text-muted-foreground">Setup your email & unique username</p>
+              <h3 className="text-sm font-bold text-foreground">Sign In to TaskFlow with Google</h3>
+              <p className="text-[11px] text-muted-foreground">Setup your email & unique TaskFlow username</p>
             </div>
           </div>
           <button

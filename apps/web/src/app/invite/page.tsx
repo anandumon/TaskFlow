@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { GoogleOAuthModal } from '@/features/auth/components/GoogleOAuthModal'
 
 interface InvitationData {
   id: string
@@ -66,6 +67,89 @@ function InviteContent() {
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false)
+
+  const handleDirectGoogleLogin = async (googleEmail: string, username: string, name?: string) => {
+    setIsGoogleLoading(true)
+    setAuthError(null)
+
+    try {
+      useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
+      useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
+
+      const res = await apiClient.post<any>('/api/v1/auth/oauth', {
+        provider: 'google',
+        email: googleEmail,
+        username,
+        name: name || username,
+      })
+
+      const authData = res.data
+      if (authData?.accessToken) {
+        apiClient.setAccessToken(authData.accessToken)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', authData.accessToken)
+          if (authData.refreshToken) {
+            localStorage.setItem('refreshToken', authData.refreshToken)
+          }
+        }
+      }
+
+      if (authData?.user) {
+        useAuthStore.setState({
+          user: authData.user,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        })
+      }
+
+      setIsGoogleModalOpen(false)
+
+      // Immediately accept the invitation
+      if (token) {
+        const acceptRes = await apiClient.post<any>(`/api/v1/invitations/${token}/accept`, {})
+        const acceptData = acceptRes.data
+
+        if (authData?.user?.id) {
+          localStorage.setItem(`taskflow_onboarding_completed_${authData.user.id}`, 'true')
+        }
+        localStorage.setItem('taskflow_onboarding_completed', 'true')
+
+        if (acceptData.organizationId) {
+          setCurrentOrg({
+            id: acceptData.organizationId,
+            name: acceptData.organizationName || invitation?.orgName || 'Organization',
+            slug: '',
+            plan: 'PRO',
+            ownerId: '',
+            createdAt: new Date().toISOString(),
+          } as any)
+        }
+        if (acceptData.workspaceId) {
+          setCurrentWorkspace({
+            id: acceptData.workspaceId,
+            organizationId: acceptData.organizationId,
+            name: acceptData.workspaceName || invitation?.workspaceName || 'Workspace',
+            slug: '',
+            color: '#6366F1',
+            icon: 'folder',
+            createdAt: new Date().toISOString(),
+          } as any)
+        }
+
+        setSuccessMessage(`Welcome to ${acceptData.projectName || invitation?.projectName || 'Project'}! Redirecting...`)
+        const dest = acceptData.projectId || invitation?.projectId ? `/app/projects/${acceptData.projectId || invitation?.projectId}` : '/app/home'
+        setTimeout(() => {
+          window.location.href = dest
+        }, 500)
+      }
+    } catch (err: any) {
+      setAuthError(err?.response?.data?.message || err?.message || 'Failed to authenticate with Google.')
+    } finally {
+      setIsGoogleLoading(false)
+    }
+  }
 
   const handleGoogleAuth = (e?: React.MouseEvent) => {
     if (e) {
@@ -117,6 +201,16 @@ function InviteContent() {
       try {
         const res = await apiClient.get<InvitationData>(`/api/v1/invitations/${token}`)
         setInvitation(res.data)
+        if (typeof window !== 'undefined' && token) {
+          localStorage.setItem('tf_invite_token', token)
+        }
+        if (res.data?.status === 'ACCEPTED' && res.data.projectId) {
+          setSuccessMessage(`Invitation already accepted! Opening ${res.data.projectName}...`)
+          setTimeout(() => {
+            window.location.href = `/app/projects/${res.data.projectId}`
+          }, 600)
+          return
+        }
         if (res.data.email) {
           setAuthEmail(res.data.email)
           if (!qMode) {
@@ -186,10 +280,11 @@ function InviteContent() {
         } as any)
       }
 
-      setSuccessMessage(`Welcome to ${acceptData.projectName || invitation?.projectName}! Redirecting...`)
+      setSuccessMessage(`Welcome to ${acceptData.projectName || invitation?.projectName}! Redirecting to project...`)
+      const dest = acceptData.projectId || invitation?.projectId ? `/app/projects/${acceptData.projectId || invitation?.projectId}` : '/app/home'
       setTimeout(() => {
-        router.push(acceptData.projectId ? `/app/projects/${acceptData.projectId}` : '/app/tasks')
-      }, 1200)
+        window.location.href = dest
+      }, 500)
     } catch (err: any) {
       setError(
         err?.response?.data?.error?.message ||
@@ -201,12 +296,21 @@ function InviteContent() {
     }
   }
 
-  // Handle automatic acceptance if redirected from Google OAuth callback
+  // Handle automatic acceptance if authenticated or redirected from Google OAuth callback
   useEffect(() => {
-    if (isAuthenticated && autoAccept && token && !accepting && !successMessage) {
-      handleAccept()
+    if (isAuthenticated && token && !accepting && !successMessage) {
+      if (invitation?.status === 'ACCEPTED' && invitation.projectId) {
+        setSuccessMessage(`Welcome back! Opening ${invitation.projectName}...`)
+        setTimeout(() => {
+          window.location.href = `/app/projects/${invitation.projectId}`
+        }, 500)
+        return
+      }
+      if (autoAccept || (invitation && user?.email && invitation.email && user.email.toLowerCase() === invitation.email.toLowerCase())) {
+        handleAccept()
+      }
     }
-  }, [isAuthenticated, autoAccept, token])
+  }, [isAuthenticated, autoAccept, token, invitation, user])
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -281,9 +385,10 @@ function InviteContent() {
         }
 
         setSuccessMessage(`Account setup complete! Redirecting to ${acceptData.projectName || 'project'}...`)
+        const dest = acceptData.projectId ? `/app/projects/${acceptData.projectId}` : '/app/home'
         setTimeout(() => {
-          router.push(acceptData.projectId ? `/app/projects/${acceptData.projectId}` : '/app/tasks')
-        }, 1200)
+          window.location.href = dest
+        }, 700)
       }
     } catch (err: any) {
       setAuthError(
@@ -452,7 +557,7 @@ function InviteContent() {
                 <div className="space-y-3 pt-1">
                   <button
                     type="button"
-                    onClick={handleGoogleAuth}
+                    onClick={() => setIsGoogleModalOpen(true)}
                     disabled={isGoogleLoading || !!successMessage}
                     className="w-full h-11 rounded-2xl border border-white/15 bg-white/5 hover:bg-white/10 text-white font-bold text-xs transition-all flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
@@ -614,6 +719,13 @@ function InviteContent() {
           </div>
         )}
       </div>
+
+      <GoogleOAuthModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        onDirectGoogleLogin={handleDirectGoogleLogin}
+        initialEmail={invitation?.email || authEmail}
+      />
     </div>
   )
 }
