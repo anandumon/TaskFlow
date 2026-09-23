@@ -45,3 +45,18 @@ export function generateSlug(text: string): string {
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
+
+export function getFirstName(raw?: string): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  if (trimmed.toLowerCase() === 'you') return 'You'
+  if (trimmed.toLowerCase() === 'lead reviewer') return 'Lead Reviewer'
+  if (trimmed.includes('@')) {
+    const local = trimmed.split('@')[0]
+    const part = local.split(/[._-]/)[0]
+    return part.charAt(0).toUpperCase() + part.slice(1)
+  }
+  const parts = trimmed.split(/\s+/)
+  return parts[0]
+}

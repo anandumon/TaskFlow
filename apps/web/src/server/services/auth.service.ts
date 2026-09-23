@@ -75,11 +75,19 @@ export async function registerUser(input: {
     )
   } else {
     userId = crypto.randomUUID()
+    const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'user'
+    let candidateUsername = baseUsername
+    let counter = 1
+    while (await queryOne(`SELECT id FROM users WHERE LOWER(username) = $1 LIMIT 1`, [candidateUsername])) {
+      counter++
+      candidateUsername = `${baseUsername}_${counter}`
+    }
+
     await query(
       `INSERT INTO users (
-        id, email, password_hash, first_name, last_name, display_name, status, email_verified, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', false, NOW(), NOW())`,
-      [userId, email, passwordHash, firstName, lastName, `${firstName} ${lastName}`.trim()]
+        id, email, username, password_hash, first_name, last_name, display_name, status, email_verified, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', false, NOW(), NOW())`,
+      [userId, email, candidateUsername, passwordHash, firstName, lastName, `${firstName} ${lastName}`.trim()]
     )
   }
 
@@ -262,6 +270,7 @@ export async function verifyEmailOtp(input: {
     user: {
       id: effectiveUserId,
       email,
+      username: user?.username || '',
       firstName: user?.first_name || cached?.firstName || '',
       lastName: user?.last_name || cached?.lastName || '',
       displayName: user?.display_name || `${firstName}`.trim(),

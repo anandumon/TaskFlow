@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email                   VARCHAR(255) NOT NULL,
     password_hash           VARCHAR(255),
+    username                VARCHAR(50),
     first_name              VARCHAR(100) NOT NULL,
     last_name               VARCHAR(100) NOT NULL,
     display_name            VARCHAR(200),
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE deleted = false;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(LOWER(username)) WHERE (deleted = false OR deleted IS NULL);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status) WHERE deleted = false;
 CREATE INDEX IF NOT EXISTS idx_users_auth_provider ON users(auth_provider, provider_id) WHERE deleted = false;
 

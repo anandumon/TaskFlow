@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     let userRow: any = null
     try {
       userRow = await queryOne(
-        `SELECT id, email, first_name, last_name, display_name, avatar_url, status, email_verified FROM users WHERE id = $1 LIMIT 1`,
+        `SELECT id, email, first_name, last_name, display_name, avatar_url, status, email_verified, username FROM users WHERE id = $1 LIMIT 1`,
         [authUser.id]
       )
     } catch {}
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     return apiSuccess({
       id: authUser.id,
       email: authUser.email,
+      username: userRow?.username || null,
       firstName,
       lastName,
       displayName,
@@ -52,7 +53,31 @@ export async function PATCH(req: NextRequest) {
       return apiError('Authentication required', 401, 'UNAUTHORIZED')
     }
     const body = await req.json()
-    const { firstName, lastName, displayName, avatarUrl } = body
+    const { firstName, lastName, displayName, avatarUrl, username } = body
+
+    // 1. If username update requested, check uniqueness and format
+    let cleanUsername: string | null = null
+    if (typeof username === 'string' && username.trim()) {
+      cleanUsername = username.trim().toLowerCase()
+      if (cleanUsername.length < 3) {
+        return apiError('Username must be at least 3 characters long', 400)
+      }
+      if (cleanUsername.length > 30) {
+        return apiError('Username cannot exceed 30 characters', 400)
+      }
+      if (!/^[a-z0-9_-]+$/.test(cleanUsername)) {
+        return apiError('Username can only contain letters, numbers, underscores, and hyphens', 400)
+      }
+
+      // Check if another user already has this username
+      const existingUser = await queryOne(
+        `SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2 AND (deleted = false OR deleted IS NULL) LIMIT 1`,
+        [cleanUsername, authUser.id]
+      )
+      if (existingUser) {
+        return apiError('This username is already taken. Please choose another.', 409, 'USERNAME_TAKEN')
+      }
+    }
 
     const hasAvatar = Object.prototype.hasOwnProperty.call(body, 'avatarUrl')
     const cleanAvatar = avatarUrl && typeof avatarUrl === 'string' && avatarUrl.trim() !== '' ? avatarUrl.trim() : null
@@ -64,10 +89,11 @@ export async function PATCH(req: NextRequest) {
              last_name = COALESCE($2, last_name),
              display_name = COALESCE($3, display_name),
              avatar_url = $4,
+             username = COALESCE($5, username),
              updated_at = NOW()
-         WHERE id = $5
-         RETURNING id, email, first_name, last_name, display_name, avatar_url`,
-        [firstName ?? null, lastName ?? null, displayName ?? null, cleanAvatar, authUser.id]
+         WHERE id = $6
+         RETURNING id, email, username, first_name, last_name, display_name, avatar_url`,
+        [firstName ?? null, lastName ?? null, displayName ?? null, cleanAvatar, cleanUsername, authUser.id]
       )
     } else {
       await queryOne(
@@ -75,21 +101,23 @@ export async function PATCH(req: NextRequest) {
          SET first_name = COALESCE($1, first_name),
              last_name = COALESCE($2, last_name),
              display_name = COALESCE($3, display_name),
+             username = COALESCE($4, username),
              updated_at = NOW()
-         WHERE id = $4
-         RETURNING id, email, first_name, last_name, display_name, avatar_url`,
-        [firstName ?? null, lastName ?? null, displayName ?? null, authUser.id]
+         WHERE id = $5
+         RETURNING id, email, username, first_name, last_name, display_name, avatar_url`,
+        [firstName ?? null, lastName ?? null, displayName ?? null, cleanUsername, authUser.id]
       )
     }
 
     const updated = await queryOne(
-      `SELECT id, email, first_name, last_name, display_name, avatar_url, status, email_verified FROM users WHERE id = $1`,
+      `SELECT id, email, username, first_name, last_name, display_name, avatar_url, status, email_verified FROM users WHERE id = $1`,
       [authUser.id]
     )
 
     return apiSuccess({
       id: authUser.id,
       email: authUser.email,
+      username: updated?.username || null,
       firstName: updated?.first_name || '',
       lastName: updated?.last_name || '',
       displayName: updated?.display_name || authUser.fullName || authUser.email,

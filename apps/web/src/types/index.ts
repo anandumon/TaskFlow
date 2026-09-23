@@ -1,5 +1,5 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | string
-export type TaskEnvironment = 'DEV' | 'SIT' | 'UAT' | 'RELEASE' | 'MAIN'
+export type TaskEnvironment = 'DEV' | 'SIT' | 'UAT' | 'RELEASE' | 'MAIN' | string
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface TaskAttachment {
@@ -114,6 +114,7 @@ export interface Workspace {
 export interface User {
   id: string
   email: string
+  username?: string
   firstName: string
   lastName: string
   displayName?: string

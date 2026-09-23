@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban, Lock } from 'lucide-react'
+import { getEnvForStatus, getStatusForEnv, getProjectEnvironments } from '@/lib/task-category'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -26,6 +27,7 @@ import { TaskPropertiesCard } from '@/features/tasks/components/TaskPropertiesCa
 import { TaskDiscussionCard } from '@/features/tasks/components/TaskDiscussionCard'
 import { TaskDetailsSkeleton } from '@/components/loading'
 import { AssignableUser, getInitials, getAvatarColor } from '@/components/ui/user-select'
+import { getFirstName } from '@/lib/utils'
 
 export default function TaskDetailsPage() {
   const params = useParams()
@@ -236,6 +238,32 @@ export default function TaskDetailsPage() {
     showToast('File change removed!')
   }
 
+  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses } = useStatusStore()
+  const workspaceStatuses = useMemo(
+    () => getStatuses(currentWorkspace?.id || 'default'),
+    [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses]
+  )
+
+  // Only show the selected environments for this project
+  const projectEnvs = useMemo(() => {
+    return getProjectEnvironments(project)
+  }, [project])
+
+  // Current environment dynamically computed according to status rule:
+  // in dev -> DEV, in sit -> SIT, in uat -> UAT, release -> RELEASE, completed -> MAIN.
+  // for others -> show the same as the status for env!
+  const currentEnv = useMemo(() => {
+    return task ? getEnvForStatus(task.status, task.environment) : 'DEV'
+  }, [task?.status, task?.environment])
+
+  const envOptions = useMemo(() => {
+    const list = [...projectEnvs]
+    if (currentEnv && !list.includes(currentEnv)) {
+      list.unshift(currentEnv)
+    }
+    return list
+  }, [projectEnvs, currentEnv])
+
   const handleAddNote = async (noteText: string) => {
     await addNote(task.id, noteText)
     showToast('Note added to discussion!')
@@ -247,36 +275,39 @@ export default function TaskDetailsPage() {
       return
     }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    await updateStatus(task.id, newStatus)
+    const newEnv = getEnvForStatus(newStatus)
+    await updateStatus(task.id, newStatus, newEnv as TaskEnvironment)
     loadProjects(wsId)
     showToast(`Status updated to ${newStatus.toUpperCase()}`)
   }
 
-  const handleEnvUpdate = async (newEnv: TaskEnvironment) => {
+  const handleEnvUpdate = async (newEnv: string) => {
     if (!canEdit) {
       showToast('You can only edit tasks assigned to you.')
       return
     }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
-    if (newEnv === 'MAIN') {
-      await updateStatus(task.id, 'done', 'MAIN')
-      showToast('Task promoted to MAIN & marked as Done!')
+    const matchingStatus = getStatusForEnv(newEnv, workspaceStatuses)
+    if (matchingStatus) {
+      await updateStatus(task.id, matchingStatus as TaskStatus, newEnv as TaskEnvironment)
+      showToast(`Environment updated to ${newEnv}`)
     } else {
-      await updateEnvironment(task.id, newEnv)
+      await updateEnvironment(task.id, newEnv as TaskEnvironment)
       showToast(`Review environment updated to ${newEnv}`)
     }
     loadProjects(wsId)
   }
 
-  const currentUserName =
+  const currentUserName = getFirstName(
     user?.firstName ||
     user?.displayName?.split(' ')[0] ||
     user?.displayName ||
     user?.email?.split('@')[0] ||
     'You'
+  )
 
   const availableUsers: AssignableUser[] = (orgMembers || []).map((m: any) => {
-    const name = m.firstName || (m.name ? m.name.split(' ')[0] : '') || m.email?.split('@')[0] || 'Member'
+    const name = getFirstName(m.firstName || m.name || m.displayName || m.email?.split('@')[0] || 'Member')
     return {
       id: m.userId || m.id,
       name,
@@ -287,7 +318,7 @@ export default function TaskDetailsPage() {
     }
   })
 
-  if (user && !availableUsers.some((u) => u.id === user.id)) {
+  if (user && !availableUsers.some((u) => u.id === user.id || u.name.toLowerCase() === currentUserName.toLowerCase())) {
     availableUsers.unshift({
       id: user.id,
       name: currentUserName,
@@ -355,8 +386,8 @@ export default function TaskDetailsPage() {
               onChange={(e) => handleStatusUpdate(e.target.value as TaskStatus)}
               className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {useStatusStore.getState().getStatuses(currentWorkspace?.id || 'default').map((st) => (
-                <option key={st.id} value={st.id}>
+              {workspaceStatuses.map((st) => (
+                <option key={st.id} value={st.id} className="bg-background text-foreground">
                   {st.name}
                 </option>
               ))}
@@ -366,16 +397,16 @@ export default function TaskDetailsPage() {
           <div className="flex items-center gap-1.5 bg-muted/80 px-3 py-1.5 rounded-xl border border-border text-xs">
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Env:</span>
             <select
-              value={task.environment || 'DEV'}
-              disabled={!canEdit || task.status === 'done'}
-              onChange={(e) => handleEnvUpdate(e.target.value as TaskEnvironment)}
+              value={currentEnv}
+              disabled={!canEdit}
+              onChange={(e) => handleEnvUpdate(e.target.value)}
               className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <option value="DEV">DEV</option>
-              <option value="SIT">SIT</option>
-              <option value="UAT">UAT</option>
-              <option value="RELEASE">RELEASE</option>
-              <option value="MAIN">MAIN</option>
+              {envOptions.map((env) => (
+                <option key={env} value={env} className="bg-background text-foreground">
+                  {env}
+                </option>
+              ))}
             </select>
           </div>
 

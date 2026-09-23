@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { apiClient } from '@/lib/api-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
-import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, User, AtSign, Check } from 'lucide-react'
 
 // Helper: Safely decode standard JWT payload in browser
 function decodeJwtPayload(token: string): any {
@@ -34,16 +34,154 @@ function decodeJwtPayload(token: string): any {
 
 export default function AuthCallbackPage() {
   const router = useRouter()
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'prompt_username' | 'success' | 'error'>('loading')
   const [statusMessage, setStatusMessage] = useState('Verifying Google credentials...')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // Prompt username state
+  const [promptEmail, setPromptEmail] = useState('')
+  const [promptUsername, setPromptUsername] = useState('')
+  const [promptName, setPromptName] = useState('')
+  const [promptAvatarUrl, setPromptAvatarUrl] = useState('')
+  const [promptDirectTokens, setPromptDirectTokens] = useState<{ accessToken?: string; refreshToken?: string }>({})
+  const [isSubmittingUsername, setIsSubmittingUsername] = useState(false)
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false)
+  const [usernameStatus, setUsernameStatus] = useState<{ available: boolean; message: string } | null>(null)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Live debounced check for username
+  useEffect(() => {
+    const cleanUser = promptUsername.trim().toLowerCase()
+    if (!cleanUser) {
+      setUsernameStatus(null)
+      setIsCheckingUsername(false)
+      return
+    }
+
+    if (cleanUser.length < 3) {
+      setUsernameStatus({ available: false, message: 'Username must be at least 3 characters' })
+      return
+    }
+
+    if (!/^[a-z0-9_-]+$/.test(cleanUser)) {
+      setUsernameStatus({ available: false, message: 'Only letters, numbers, underscores, and hyphens allowed' })
+      return
+    }
+
+    setIsCheckingUsername(true)
+    if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current)
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await apiClient.get<{ available: boolean; message: string }>(
+          `/api/v1/users/check-username?username=${encodeURIComponent(cleanUser)}`
+        )
+        if (res.data) {
+          setUsernameStatus(res.data)
+        }
+      } catch {
+        setUsernameStatus(null)
+      } finally {
+        setIsCheckingUsername(false)
+      }
+    }, 400)
+
+    return () => {
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current)
+    }
+  }, [promptUsername])
+
+  const finishAuth = (authData: any, directAccessToken?: string, directRefreshToken?: string) => {
+    const tokenToSave = authData?.accessToken || directAccessToken
+    if (tokenToSave) {
+      apiClient.setAccessToken(tokenToSave)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('accessToken', tokenToSave)
+        const refreshToSave = authData?.refreshToken || directRefreshToken
+        if (refreshToSave) {
+          localStorage.setItem('refreshToken', refreshToSave)
+        }
+      }
+    }
+
+    useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
+    useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
+
+    if (authData?.user) {
+      useAuthStore.setState({
+        user: authData.user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      })
+    }
+
+    setStatus('success')
+    const inviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
+    if (inviteToken) {
+      setStatusMessage('Google authentication verified! Opening project invite...')
+      setTimeout(() => {
+        window.location.href = `/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`
+      }, 100)
+    } else {
+      setStatusMessage('Authentication successful! Opening dashboard...')
+      setTimeout(() => {
+        window.location.href = '/app/home'
+      }, 100)
+    }
+  }
+
+  const handlePromptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setUsernameError(null)
+
+    const cleanEmail = promptEmail.trim().toLowerCase()
+    const cleanUser = promptUsername.trim().toLowerCase()
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setUsernameError('Please enter a valid Google email address.')
+      return
+    }
+
+    if (!cleanUser) {
+      setUsernameError('Please choose a username.')
+      return
+    }
+
+    if (usernameStatus && !usernameStatus.available) {
+      setUsernameError(usernameStatus.message || 'Username is not available.')
+      return
+    }
+
+    try {
+      setIsSubmittingUsername(true)
+      const res = await apiClient.post<any>('/api/v1/auth/oauth', {
+        provider: 'google',
+        email: cleanEmail,
+        username: cleanUser,
+        name: promptName || cleanUser,
+        avatarUrl: promptAvatarUrl,
+      })
+
+      if (res.data?.requiresUsername) {
+        setUsernameError('Please provide a unique username.')
+        return
+      }
+
+      finishAuth(res.data, promptDirectTokens.accessToken, promptDirectTokens.refreshToken)
+    } catch (err: any) {
+      setUsernameError(err?.response?.data?.message || err?.message || 'Failed to save username.')
+    } finally {
+      setIsSubmittingUsername(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
 
     const processOAuth = async () => {
       try {
-        // 1. Determine mode: 'signin' vs 'signup' and invite token
         let mode: 'signin' | 'signup' = 'signin'
         let inviteToken: string | null = null
 
@@ -56,12 +194,9 @@ export default function AuthCallbackPage() {
           }
           inviteToken = urlParams.get('invite_token') || localStorage.getItem('tf_invite_token')
           localStorage.removeItem('tf_auth_mode')
-          if (inviteToken) {
-            localStorage.removeItem('tf_invite_token')
-          }
         }
 
-        // 2. Check for explicit OAuth error in query or hash
+        // Check for explicit OAuth error in query or hash
         if (typeof window !== 'undefined') {
           const searchParams = new URLSearchParams(window.location.search)
           const hashString = window.location.hash.startsWith('#')
@@ -87,12 +222,10 @@ export default function AuthCallbackPage() {
         let userEmail = ''
         let fullName = ''
         let avatarUrl = ''
-        let providerId = ''
         let directAccessToken = ''
         let directRefreshToken = ''
 
-        // 3. PRIORITY 1: Direct Token Extraction from URL Hash fragment (#access_token=...)
-        // This is where Supabase Google OAuth returns session credentials instantly!
+        // 1. Direct Token Extraction from URL Hash fragment
         if (typeof window !== 'undefined' && window.location.hash) {
           try {
             const hashString = window.location.hash.startsWith('#')
@@ -106,24 +239,12 @@ export default function AuthCallbackPage() {
               directAccessToken = token
               directRefreshToken = refreshToken || ''
 
-              // Directly decode JWT payload in 0ms without waiting for external network calls
               const payload = decodeJwtPayload(token)
               if (payload && payload.email) {
                 userEmail = (payload.email as string).toLowerCase().trim()
                 const metadata = payload.user_metadata || {}
                 fullName = metadata.full_name || metadata.name || payload.name || ''
                 avatarUrl = metadata.avatar_url || metadata.picture || payload.picture || ''
-                providerId = payload.sub || ''
-
-                // Non-blocking sync with Supabase client in background
-                supabase.auth
-                  .setSession({
-                    access_token: token,
-                    refresh_token: directRefreshToken,
-                  })
-                  .catch((err) => {
-                    console.debug('[AuthCallback] Non-fatal setSession sync:', err)
-                  })
               }
             }
           } catch (hashErr) {
@@ -131,24 +252,19 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 4. PRIORITY 2: Code exchange if ?code= is present (with 4s timeout)
+        // 2. Code exchange fallback
         if (!userEmail && typeof window !== 'undefined') {
           const searchParams = new URLSearchParams(window.location.search)
           const code = searchParams.get('code')
           if (code) {
             try {
-              const exchangePromise = supabase.auth.exchangeCodeForSession(code)
-              const timeoutPromise = new Promise<{ data: { session: null }; error: any }>((resolve) =>
-                setTimeout(() => resolve({ data: { session: null }, error: 'Timeout' }), 4000)
-              )
-              const { data: exchangeData } = await Promise.race([exchangePromise, timeoutPromise])
+              const { data: exchangeData } = await supabase.auth.exchangeCodeForSession(code)
               if (exchangeData?.session?.user) {
                 const u = exchangeData.session.user
                 userEmail = (u.email || '').toLowerCase().trim()
                 const meta = u.user_metadata || {}
                 fullName = meta.full_name || meta.name || ''
                 avatarUrl = meta.avatar_url || meta.picture || ''
-                providerId = u.id || ''
                 directAccessToken = exchangeData.session.access_token
                 directRefreshToken = exchangeData.session.refresh_token || ''
               }
@@ -158,53 +274,19 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 5. PRIORITY 3: Existing Supabase session with 3s timeout
+        // 3. Existing Supabase session fallback
         if (!userEmail) {
-          try {
-            const getSessionPromise = supabase.auth.getSession()
-            const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-              setTimeout(() => resolve({ data: { session: null } }), 3000)
-            )
-            const { data: { session } } = await Promise.race([getSessionPromise, timeoutPromise])
-            if (session?.user) {
-              userEmail = (session.user.email || '').toLowerCase().trim()
-              const meta = session.user.user_metadata || {}
-              fullName = meta.full_name || meta.name || ''
-              avatarUrl = meta.avatar_url || meta.picture || ''
-              providerId = session.user.id || ''
-              directAccessToken = session.access_token
-              directRefreshToken = session.refresh_token || ''
-            }
-          } catch (sessErr) {
-            console.debug('[AuthCallback] Session check fallback:', sessErr)
-          }
-        }
-
-        // 6. PRIORITY 4: onAuthStateChange with 3s timeout
-        if (!userEmail) {
-          const authStateSession: any = await new Promise((resolve) => {
-            const timer = setTimeout(() => resolve(null), 3000)
-            const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-              if (sess) {
-                clearTimeout(timer)
-                subscription.unsubscribe()
-                resolve(sess)
-              }
-            })
-          })
-
-          if (authStateSession?.user) {
-            userEmail = (authStateSession.user.email || '').toLowerCase().trim()
-            const meta = authStateSession.user.user_metadata || {}
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user) {
+            userEmail = (session.user.email || '').toLowerCase().trim()
+            const meta = session.user.user_metadata || {}
             fullName = meta.full_name || meta.name || ''
             avatarUrl = meta.avatar_url || meta.picture || ''
-            providerId = authStateSession.user.id || ''
-            directAccessToken = authStateSession.access_token
-            directRefreshToken = authStateSession.refresh_token || ''
+            directAccessToken = session.access_token
+            directRefreshToken = session.refresh_token || ''
           }
         }
 
-        // If after all attempts we still don't have user info
         if (!userEmail || !active) {
           if (active) {
             setStatus('error')
@@ -213,7 +295,12 @@ export default function AuthCallbackPage() {
           return
         }
 
-        // 7. Authenticate & Sync with TaskFlow Backend
+        // Check if pending username was pre-set in localStorage
+        const pendingUser = typeof window !== 'undefined' ? localStorage.getItem('tf_pending_username') : null
+        if (pendingUser) {
+          localStorage.removeItem('tf_pending_username')
+        }
+
         if (active) {
           setStatusMessage('Connecting your TaskFlow account...')
         }
@@ -222,52 +309,26 @@ export default function AuthCallbackPage() {
           provider: 'google',
           email: userEmail,
           name: fullName,
+          username: pendingUser || undefined,
           avatarUrl,
-          providerId,
           mode,
         })
 
         const authData = oauthRes.data
-        const tokenToSave = authData?.accessToken || directAccessToken
 
-        if (tokenToSave) {
-          apiClient.setAccessToken(tokenToSave)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('accessToken', tokenToSave)
-            const refreshToSave = authData?.refreshToken || directRefreshToken
-            if (refreshToSave) {
-              localStorage.setItem('refreshToken', refreshToSave)
-            }
-          }
+        if (authData?.requiresUsername) {
+          // Prompt user for username & confirm email
+          setPromptEmail(userEmail)
+          setPromptName(fullName)
+          setPromptAvatarUrl(avatarUrl)
+          setPromptDirectTokens({ accessToken: directAccessToken, refreshToken: directRefreshToken })
+          const suggestedUser = userEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '')
+          setPromptUsername(suggestedUser)
+          setStatus('prompt_username')
+          return
         }
 
-        // Reset previous stores to prevent cross-account contamination
-        useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
-        useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
-
-        if (authData?.user) {
-          useAuthStore.setState({
-            user: authData.user,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          })
-        }
-
-        if (active) {
-          setStatus('success')
-          if (inviteToken) {
-            setStatusMessage('Google authentication verified! Opening project invite...')
-            setTimeout(() => {
-              window.location.href = `/invite?token=${encodeURIComponent(inviteToken!)}&auto_accept=true`
-            }, 100)
-          } else {
-            setStatusMessage('Authentication successful! Opening dashboard...')
-            setTimeout(() => {
-              window.location.href = '/app/home'
-            }, 100)
-          }
-        }
+        finishAuth(authData, directAccessToken, directRefreshToken)
       } catch (err: any) {
         console.error('[AuthCallback] Error completing authentication:', err)
         if (active) {
@@ -288,30 +349,141 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md p-8 rounded-2xl border border-border bg-card shadow-xl text-center space-y-4">
+      <div className="w-full max-w-md p-8 rounded-3xl border border-border bg-card shadow-2xl text-center space-y-5 animate-scale-in">
         {status === 'loading' && (
-          <>
-            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
-              <Loader2 className="w-6 h-6 animate-spin text-[#00638E]" />
+          <div className="space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-xs">
+              <Loader2 className="w-6 h-6 animate-spin" />
             </div>
             <h2 className="text-lg font-bold text-foreground">Completing authentication...</h2>
             <p className="text-xs text-muted-foreground">{statusMessage}</p>
-          </>
+          </div>
+        )}
+
+        {status === 'prompt_username' && (
+          <div className="text-left space-y-4">
+            <div className="text-center space-y-1">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-xs">
+                <User className="w-5 h-5 text-primary" />
+              </div>
+              <h2 className="text-base font-bold text-foreground">Complete Google Sign-In</h2>
+              <p className="text-xs text-muted-foreground">
+                Confirm your email and choose your unique TaskFlow username.
+              </p>
+            </div>
+
+            {usernameError && (
+              <div className="p-3 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{usernameError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handlePromptSubmit} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <AtSign className="w-3.5 h-3.5 text-primary" /> Google Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={promptEmail}
+                  onChange={(e) => setPromptEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-primary" /> Choose Unique Username *
+                  </label>
+                  {isCheckingUsername && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" /> Checking...
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. anandu, dev_alex"
+                    value={promptUsername}
+                    onChange={(e) => setPromptUsername(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-background border text-xs text-foreground focus:outline-none focus:ring-2 pr-9 shadow-xs transition-colors ${
+                      usernameStatus
+                        ? usernameStatus.available
+                          ? 'border-emerald-500/60 focus:ring-emerald-500'
+                          : 'border-destructive/60 focus:ring-destructive'
+                        : 'border-border focus:ring-primary'
+                    }`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {isCheckingUsername ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    ) : usernameStatus ? (
+                      usernameStatus.available ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-destructive" />
+                      )
+                    ) : null}
+                  </div>
+                </div>
+                {usernameStatus && (
+                  <p
+                    className={`text-[10px] font-medium pl-1 flex items-center gap-1 ${
+                      usernameStatus.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                    }`}
+                  >
+                    {usernameStatus.available ? (
+                      <>
+                        <Check className="w-3 h-3" /> {usernameStatus.message}
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3 h-3" /> {usernameStatus.message}
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingUsername || (usernameStatus !== null && !usernameStatus.available)}
+                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-md active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingUsername ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving to database...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Save & Proceed to TaskFlow</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
         )}
 
         {status === 'success' && (
-          <>
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto">
+          <div className="space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto shadow-xs">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <h2 className="text-lg font-bold text-foreground">Authentication Verified!</h2>
             <p className="text-xs text-muted-foreground">{statusMessage}</p>
-          </>
+          </div>
         )}
 
         {status === 'error' && (
-          <>
-            <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+          <div className="space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto shadow-xs">
               <AlertCircle className="w-6 h-6" />
             </div>
             <h2 className="text-lg font-bold text-foreground">Authentication Failed</h2>
@@ -332,7 +504,7 @@ export default function AuthCallbackPage() {
                 Retry
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

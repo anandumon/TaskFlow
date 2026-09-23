@@ -2,9 +2,10 @@
 
 import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
+import { getEnvForStatus } from '@/lib/task-category'
 
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | string
-export type TaskEnvironment = 'DEV' | 'SIT' | 'UAT' | 'RELEASE' | 'MAIN'
+export type TaskEnvironment = 'DEV' | 'SIT' | 'UAT' | 'RELEASE' | 'MAIN' | string
 
 export interface Subtask {
   id: string
@@ -145,7 +146,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       description: taskData.description || '',
       status: taskData.status || 'todo',
       priority: taskData.priority || 'MEDIUM',
-      environment: taskData.environment || 'DEV',
+      environment: taskData.environment || (getEnvForStatus(taskData.status || 'todo') as TaskEnvironment),
       dueDate: taskData.dueDate,
       tag: taskData.tag || 'General',
       subtasks: taskData.subtasks || '[]',
@@ -201,12 +202,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
 
   updateStatus: async (id: string, newStatus: TaskStatus, newEnv?: TaskEnvironment) => {
-    let env = newEnv
-    if (newStatus === 'done' || newStatus === 'complete') {
-      env = 'MAIN'
-    } else if (newStatus === 'in_review' && !env) {
-      env = 'DEV'
-    }
+    const env = newEnv || (getEnvForStatus(newStatus) as TaskEnvironment)
 
     const prevTasks = get().tasks
     // Optimistic status change in 0ms

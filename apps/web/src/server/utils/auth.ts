@@ -60,12 +60,13 @@ async function ensureDbUser(authId: string, email: string, fullName?: string): P
     const lastName = nameParts.slice(1).join(' ') || ''
     const effectiveAuthUserId = isUuid(authId) ? authId : newId
 
+    const baseUsername = cleanEmail ? cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') : `user_${newId.slice(0, 8)}`
     await query(
       `INSERT INTO users (
-        id, email, first_name, last_name, display_name, status, email_verified, auth_user_id, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, 'ACTIVE', true, $6, NOW(), NOW())
+        id, email, username, first_name, last_name, display_name, status, email_verified, auth_user_id, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', true, $7, NOW(), NOW())
       ON CONFLICT (id) DO NOTHING`,
-      [newId, cleanEmail || `${newId}@taskflow.local`, firstName, lastName, fullName || firstName, effectiveAuthUserId]
+      [newId, cleanEmail || `${newId}@taskflow.local`, baseUsername || 'user', firstName, lastName, fullName || firstName, effectiveAuthUserId]
     )
 
     return newId

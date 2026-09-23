@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
@@ -83,10 +83,66 @@ export default function SettingsPage() {
   // Profile state
   const [firstName, setFirstName] = useState(user?.firstName || 'Admin')
   const [lastName, setLastName] = useState(user?.lastName || 'User')
+  const [username, setUsername] = useState(user?.username || '')
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false)
+  const [usernameStatus, setUsernameStatus] = useState<{ available: boolean; message: string } | null>(null)
+  const checkUsernameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [jobTitle, setJobTitle] = useState('Chief System Architect')
   const [timezone, setTimezone] = useState('UTC (GMT+0:00)')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl || null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  useEffect(() => {
+    if (user?.username) {
+      setUsername(user.username)
+    }
+    if (user?.firstName) setFirstName(user.firstName)
+    if (user?.lastName) setLastName(user.lastName)
+    if (user?.avatarUrl) setAvatarPreview(user.avatarUrl)
+  }, [user])
+
+  // Live debounced check for username uniqueness
+  useEffect(() => {
+    const clean = username.trim().toLowerCase()
+    if (!clean || clean === user?.username?.toLowerCase()) {
+      setUsernameStatus(null)
+      setIsCheckingUsername(false)
+      return
+    }
+
+    if (clean.length < 3) {
+      setUsernameStatus({ available: false, message: 'Username must be at least 3 characters' })
+      return
+    }
+
+    if (!/^[a-z0-9_-]+$/.test(clean)) {
+      setUsernameStatus({ available: false, message: 'Only letters, numbers, underscores, and hyphens' })
+      return
+    }
+
+    setIsCheckingUsername(true)
+    if (checkUsernameTimeoutRef.current) clearTimeout(checkUsernameTimeoutRef.current)
+
+    checkUsernameTimeoutRef.current = setTimeout(async () => {
+      try {
+        const { apiClient } = await import('@/lib/api-client')
+        const res = await apiClient.get<{ available: boolean; message: string }>(
+          `/api/v1/users/check-username?username=${encodeURIComponent(clean)}&excludeUserId=${user?.id || ''}`
+        )
+        if (res.data) {
+          setUsernameStatus(res.data)
+        }
+      } catch {
+        setUsernameStatus(null)
+      } finally {
+        setIsCheckingUsername(false)
+      }
+    }, 400)
+
+    return () => {
+      if (checkUsernameTimeoutRef.current) clearTimeout(checkUsernameTimeoutRef.current)
+    }
+  }, [username, user?.username, user?.id])
 
   // Mounted check for React Portal
   const [mounted, setMounted] = useState(false)
@@ -336,10 +392,17 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (usernameStatus && !usernameStatus.available) {
+      showToast(usernameStatus.message || 'Username is not available')
+      return
+    }
+
+    const cleanUsername = username.trim().toLowerCase()
     try {
       const { apiClient } = await import('@/lib/api-client')
       const targetAvatar = avatarPreview !== undefined ? avatarPreview : (user?.avatarUrl || null)
-      await apiClient.patch('/api/v1/auth/me', {
+      const res = await apiClient.patch<any>('/api/v1/auth/me', {
+        username: cleanUsername || undefined,
         firstName,
         lastName,
         displayName: `${firstName} ${lastName}`.trim(),
@@ -349,6 +412,7 @@ export default function SettingsPage() {
         user: state.user
           ? {
               ...state.user,
+              username: res.data?.username || cleanUsername || state.user.username,
               firstName,
               lastName,
               displayName: `${firstName} ${lastName}`.trim(),
@@ -356,9 +420,11 @@ export default function SettingsPage() {
             }
           : null,
       }))
-      showToast('Profile settings and avatar saved successfully!')
+      setUsernameStatus(null)
+      showToast('Profile settings and username saved successfully!')
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update profile')
+      const msg = err?.response?.data?.message || err?.message || 'Failed to update profile'
+      showToast(msg)
     }
   }
 
@@ -750,6 +816,63 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <span>Unique Username</span>
+                {username && <span className="text-primary font-bold lowercase">(@{username})</span>}
+              </label>
+              {isCheckingUsername && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" /> Checking availability...
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={username}
+                placeholder="e.g. anandu, sam_dev"
+                onChange={e => setUsername(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl border text-xs focus:ring-2 focus:outline-none transition-colors pr-9 ${
+                  usernameStatus
+                    ? usernameStatus.available
+                      ? 'border-emerald-500/60 focus:ring-emerald-500 bg-emerald-500/5'
+                      : 'border-destructive/60 focus:ring-destructive bg-destructive/5'
+                    : 'border-input bg-background focus:ring-primary'
+                }`}
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {isCheckingUsername ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : usernameStatus ? (
+                  usernameStatus.available ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-destructive" />
+                  )
+                ) : null}
+              </div>
+            </div>
+            {usernameStatus && (
+              <p
+                className={`text-[11px] font-medium flex items-center gap-1 ${
+                  usernameStatus.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                }`}
+              >
+                {usernameStatus.available ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" /> {usernameStatus.message}
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" /> {usernameStatus.message}
+                  </>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

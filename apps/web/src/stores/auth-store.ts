@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api-client'
 export interface User {
   id: string
   email: string
+  username?: string
   firstName: string
   lastName: string
   displayName?: string
@@ -89,6 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: {
           id: u?.id || '',
           email: u?.email || cleanEmail,
+          username: u?.username,
           firstName: u?.firstName || '',
           lastName: u?.lastName || '',
           displayName: u?.displayName || `${u?.firstName || ''} ${u?.lastName || ''}`.trim() || cleanEmail,
@@ -236,6 +238,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               user: {
                 id: u.id,
                 email: u.email || '',
+                username: u.username,
                 firstName: u.firstName || '',
                 lastName: u.lastName || '',
                 displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'User',

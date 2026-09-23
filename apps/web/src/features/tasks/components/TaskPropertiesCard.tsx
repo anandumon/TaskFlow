@@ -3,6 +3,7 @@
 import { FolderKanban, Users, ShieldCheck, Calendar, Tag, History } from 'lucide-react'
 import { Task } from '@/stores/task-store'
 import { Project } from '@/stores/project-store'
+import { getEnvForStatus } from '@/lib/task-category'
 
 interface TaskPropertiesCardProps {
   task: Task
@@ -116,7 +117,7 @@ export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
         <div className="space-y-3 text-xs">
           <div className="p-3 rounded-2xl bg-muted/40 border border-border/60 space-y-1">
             <div className="flex items-center justify-between font-bold text-foreground">
-              <span>Current Stage: {task.environment || 'DEV'}</span>
+              <span>Current Stage: {getEnvForStatus(task.status, task.environment)}</span>
               <span className="text-[10px] text-muted-foreground font-normal">Active</span>
             </div>
             <div className="text-[11px] text-muted-foreground">

@@ -10,6 +10,7 @@ import {
   Check,
   ChevronDown,
 } from 'lucide-react'
+import { getFirstName } from '@/lib/utils'
 
 export interface AssignableUser {
   id: string
@@ -161,7 +162,7 @@ export function UserSelect({
                   {selectedUser ? selectedUser.initials : getInitials(value)}
                 </div>
                 <span className="truncate font-medium">
-                  {value === 'You' ? (selectedUser?.name || 'You') : value}
+                  {getFirstName(value === 'You' ? (selectedUser?.name || 'You') : value)}
                 </span>
                 {selectedUser?.role && (
                   <span className="text-[9px] text-muted-foreground px-1.5 py-0.2 rounded bg-muted border border-border/50 shrink-0">
@@ -203,7 +204,7 @@ export function UserSelect({
                 <button
                   type="button"
                   onClick={() => {
-                    onChange(searchTerm.trim())
+                    onChange(getFirstName(searchTerm.trim()))
                     setIsOpen(false)
                   }}
                   className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2 text-left bg-primary/10 hover:bg-primary/15 text-primary transition-colors cursor-pointer text-xs font-semibold border border-primary/25 shadow-xs mb-1"
@@ -211,7 +212,7 @@ export function UserSelect({
                   <UserPlus className="w-3.5 h-3.5 shrink-0" />
                   <div className="min-w-0">
                     <div className="truncate">
-                      Assign custom name: <span className="font-bold underline text-foreground">"{searchTerm.trim()}"</span>
+                      Assign custom name: <span className="font-bold underline text-foreground">"{getFirstName(searchTerm.trim())}"</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-normal">Person without a TaskFlow account</div>
                   </div>
@@ -233,7 +234,7 @@ export function UserSelect({
                       key={u.id}
                       type="button"
                       onClick={() => {
-                        onChange(u.name)
+                        onChange(getFirstName(u.name))
                         setIsOpen(false)
                       }}
                       className={`w-full px-2.5 py-1.5 rounded-xl flex items-center justify-between transition-colors cursor-pointer text-left ${
@@ -247,7 +248,7 @@ export function UserSelect({
                           {u.initials}
                         </div>
                         <div className="truncate">
-                          <div className="text-xs truncate">{u.name}</div>
+                          <div className="text-xs truncate">{getFirstName(u.name)}</div>
                           {u.email && (
                             <div className="text-[10px] text-muted-foreground truncate">{u.email}</div>
                           )}

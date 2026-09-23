@@ -32,6 +32,7 @@ import { Subtask, FileChange, HistoryLog } from '@/stores/task-store'
 import { ServiceBranchEntry } from './TaskGitBranchCard'
 import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
 import { AssignableUser } from '@/components/ui/user-select'
+import { getFirstName } from '@/lib/utils'
 
 export const SUBTASK_CATEGORIES = [
   'Feature',
@@ -576,7 +577,7 @@ export function TaskSubtasksCard({
                     )}
                     {st.assigneeName && (
                       <span className="text-[10px] font-semibold text-foreground/80 bg-background px-2 py-0.5 rounded-md border border-border/60 inline-flex items-center gap-1">
-                        <User className="w-2.5 h-2.5 text-primary" /> {st.assigneeName}
+                        <User className="w-2.5 h-2.5 text-primary" /> {getFirstName(st.assigneeName)}
                       </span>
                     )}
                     {st.dueDate && (

@@ -67,6 +67,8 @@ import { TaskListSkeleton } from '@/components/loading'
 import { UserGuideModal } from '@/components/user-guide-modal'
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
+import { getFirstName } from '@/lib/utils'
+import { isBugTask, isFeatureTask, getEnvForStatus } from '@/lib/task-category'
 
 interface AssignableUser {
   id: string
@@ -363,7 +365,7 @@ export default function TasksPage() {
   const { user } = useAuthStore()
 
   const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
-  const currentUserName = user?.firstName || user?.displayName?.split(' ')[0] || user?.displayName || user?.email?.split('@')[0] || 'You'
+  const currentUserName = getFirstName(user?.firstName || user?.displayName || user?.email?.split('@')[0] || 'You')
 
   // View modes: 'grid' (minimal spacious liquid glass), 'list', 'tree' (graph / tree view)
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('grid')
@@ -381,13 +383,8 @@ export default function TasksPage() {
 
   // Deliverables summary metrics identical to Project Board
   const totalDeliverablesCount = tasks.length
-  const bugTasksCount = tasks.filter(
-    (t) =>
-      t.tag?.toLowerCase() === 'bug' ||
-      t.tag?.toLowerCase() === 'bug fix' ||
-      t.title?.toLowerCase().includes('bug')
-  ).length
-  const featureTasksCount = Math.max(0, totalDeliverablesCount - bugTasksCount)
+  const bugTasksCount = tasks.filter(isBugTask).length
+  const featureTasksCount = tasks.filter(isFeatureTask).length
   const completedTasksCount = tasks.filter(
     (t) =>
       t.status === 'done' ||
@@ -643,38 +640,39 @@ export default function TasksPage() {
     }
 
     const addUser = (name: string, email?: string, role?: string, id?: string) => {
-      const cleanName = name ? name.trim().replace(/\s+/g, ' ') : ''
+      const cleanFirst = getFirstName(name)
       const cleanEmail = email ? email.trim() : undefined
       const cleanId = id ? id.trim() : undefined
 
-      if (!cleanName && !cleanEmail) return
+      if (!cleanFirst && !cleanEmail) return
 
       // Never add placeholder 'You' as a separate user
-      if (cleanName.toLowerCase() === 'you') return
+      if (cleanFirst.toLowerCase() === 'you') return
 
-      if (isAlreadySeen(cleanName, cleanEmail, cleanId)) {
+      if (isAlreadySeen(cleanFirst, cleanEmail, cleanId)) {
         return
       }
 
-      registerSeen(cleanName, cleanEmail, cleanId)
+      registerSeen(cleanFirst, cleanEmail, cleanId)
 
       list.push({
-        id: cleanId || cleanEmail?.toLowerCase() || cleanName.toLowerCase(),
-        name: cleanName || cleanEmail || 'User',
+        id: cleanId || cleanEmail?.toLowerCase() || cleanFirst.toLowerCase(),
+        name: cleanFirst,
         email: cleanEmail,
         role: role || 'Member',
-        initials: getInitials(cleanName || cleanEmail || 'User'),
-        color: getAvatarColor(cleanName || cleanEmail || 'User'),
+        initials: getInitials(cleanFirst),
+        color: getAvatarColor(cleanFirst),
       })
     }
 
     // 1. Current logged-in user (always placed first)
     if (user) {
-      const myName =
-        user.displayName?.trim() ||
-        (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '') ||
-        user.email?.split('@')[0]?.trim() ||
+      const myName = getFirstName(
+        user.firstName ||
+        user.displayName ||
+        user.email?.split('@')[0] ||
         'You'
+      )
 
       const cleanMyEmail = user.email?.trim()
       const cleanMyId = user.id?.trim()
@@ -842,11 +840,11 @@ export default function TasksPage() {
         description: newTaskDescription.trim(),
         tag: finalTag,
         tagColor: getTagColor(finalTag),
-        assigneeName: newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName),
-        reviewerName: newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName),
+        assigneeName: getFirstName(newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName)),
+        reviewerName: getFirstName(newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName)),
         dueDate: newTaskDue || todayStr,
         status: 'todo', // Always defaults to todo
-        environment: 'DEV',
+        environment: getEnvForStatus('todo') as TaskEnvironment,
         priority: newTaskPriority,
         progress: initialProgress,
         filesChanged: JSON.stringify(newTaskAttachments),
@@ -1005,8 +1003,8 @@ export default function TasksPage() {
         title: editTitle.trim(),
         description: editDescription.trim(),
         tag: editTag,
-        assigneeName: editAssignee === 'You' ? currentUserName : (editAssignee || currentUserName),
-        reviewerName: editAssignedBy === 'You' ? currentUserName : (editAssignedBy || currentUserName),
+        assigneeName: getFirstName(editAssignee === 'You' ? currentUserName : (editAssignee || currentUserName)),
+        reviewerName: getFirstName(editAssignedBy === 'You' ? currentUserName : (editAssignedBy || currentUserName)),
         dueDate: editDue,
         priority: editPriority,
         status: editStatus,
@@ -1014,7 +1012,7 @@ export default function TasksPage() {
         subtasks: JSON.stringify(editSubtasks),
         filesChanged: JSON.stringify(editAttachments),
         historyLogs: JSON.stringify(editComments),
-        environment: isDone ? 'MAIN' : (editingTask.environment || 'DEV'),
+        environment: getEnvForStatus(editStatus, editingTask.environment) as TaskEnvironment,
       })
       setEditingTask(null)
       loadProjects(wsId)
@@ -1138,10 +1136,7 @@ export default function TasksPage() {
     const matchesEnv = filterEnv === 'all' || t.environment?.toUpperCase() === filterEnv.toUpperCase()
     const matchesProj = filterProject === 'all' || t.projectId === filterProject
     const matchesStatusTab = selectedStatusTab === 'all' || t.status === selectedStatusTab || (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
-    const isBug =
-      t.tag?.toLowerCase() === 'bug' ||
-      t.tag?.toLowerCase() === 'bug fix' ||
-      t.title?.toLowerCase().includes('bug')
+    const isBug = isBugTask(t)
     const matchesCategory =
       activeCategoryTab === 'all'
         ? true
@@ -1720,14 +1715,14 @@ export default function TasksPage() {
                         <div className="pt-2 border-t border-slate-100 dark:border-[#2B2B2B] flex items-center justify-between gap-2 text-xs">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-6 h-6 rounded-full bg-[#00638E]/15 dark:bg-[#00638E]/25 border border-[#00638E]/30 dark:border-[#00638E]/40 text-[#00638E] dark:text-[#BFD8E3] font-bold text-[10px] flex items-center justify-center shrink-0">
-                              {(task.assigneeName || 'You').charAt(0).toUpperCase()}
+                              {(getFirstName(task.assigneeName || 'You')).charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">
-                                {task.assigneeName || 'You'}
+                                {getFirstName(task.assigneeName || 'You')}
                               </p>
                               <p className="text-[9px] text-slate-500 dark:text-slate-400 truncate">
-                                By: {task.reviewerName || 'You'}
+                                By: {getFirstName(task.reviewerName || 'You')}
                               </p>
                             </div>
                           </div>
@@ -2039,10 +2034,10 @@ export default function TasksPage() {
                                         <span className="flex items-center gap-1">
                                           <User className="w-3 h-3 text-[#00638E]" />
                                           <span className="text-[11px] font-medium text-slate-900 dark:text-white">
-                                            {t.assigneeName || 'You'}
+                                            {getFirstName(t.assigneeName || 'You')}
                                           </span>
                                           <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            (By: {t.reviewerName || 'You'})
+                                            (By: {getFirstName(t.reviewerName || 'You')})
                                           </span>
                                         </span>
                                       </div>
@@ -2311,8 +2306,8 @@ export default function TasksPage() {
                             {t.tag}
                           </span>
                         </td>
-                        <td className="p-3.5 text-slate-900 dark:text-white font-medium">{t.assigneeName || 'You'}</td>
-                        <td className="p-3.5 text-slate-500 dark:text-slate-400">{t.reviewerName || 'You'}</td>
+                        <td className="p-3.5 text-slate-900 dark:text-white font-medium">{getFirstName(t.assigneeName || 'You')}</td>
+                        <td className="p-3.5 text-slate-500 dark:text-slate-400">{getFirstName(t.reviewerName || 'You')}</td>
                         <td className="p-3.5 text-slate-500 dark:text-slate-400">
                           <span
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
