@@ -1089,6 +1089,27 @@ export default function TasksPage() {
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverStatusId, setDragOverStatusId] = useState<string | null>(null)
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
+  const [dragOverTaskPosition, setDragOverTaskPosition] = useState<'before' | 'after' | null>(null)
+
+  // Load custom task order from localStorage
+  useEffect(() => {
+    const wsId = currentWorkspace?.id || 'default'
+    try {
+      const stored = localStorage.getItem(`taskflow_tasks_order_${wsId}`)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const currentIds = tasks.map((t) => t.id)
+          const validSavedIds = parsed.filter((id: string) => currentIds.includes(id))
+          const missingIds = currentIds.filter((id) => !validSavedIds.includes(id))
+          setTaskOrder([...validSavedIds, ...missingIds])
+          return
+        }
+      }
+    } catch {}
+    setTaskOrder(tasks.map((t) => t.id))
+  }, [currentWorkspace?.id, tasks.map((t) => t.id).join(',')])
 
   const handleTaskDragStart = (e: React.DragEvent, id: string) => {
     setDraggedTaskId(id)
@@ -1096,27 +1117,76 @@ export default function TasksPage() {
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  const handleTaskDragOver = (e: React.DragEvent) => {
+  const handleTaskDragOver = (e: React.DragEvent, targetId: string) => {
     e.preventDefault()
+    e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
+
+    const sourceId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    if (!sourceId || sourceId === targetId) {
+      if (dragOverTaskId !== null) {
+        setDragOverTaskId(null)
+        setDragOverTaskPosition(null)
+      }
+      return
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    const position = e.clientY < midpoint ? 'before' : 'after'
+
+    if (dragOverTaskId !== targetId || dragOverTaskPosition !== position) {
+      setDragOverTaskId(targetId)
+      setDragOverTaskPosition(position)
+    }
+  }
+
+  const handleTaskDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setDragOverTaskId(null)
+    setDragOverTaskPosition(null)
   }
 
   const handleTaskDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault()
+    e.stopPropagation()
     const sourceId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    const position = dragOverTaskPosition || 'after'
+
+    setDragOverTaskId(null)
+    setDragOverTaskPosition(null)
+    setDraggedTaskId(null)
+
     if (!sourceId || sourceId === targetId) return
 
-    setTaskOrder((prev) => {
-      const allIds = prev.length > 0 ? [...prev] : tasks.map((t) => t.id)
-      const fromIndex = allIds.indexOf(sourceId)
-      const toIndex = allIds.indexOf(targetId)
-      if (fromIndex === -1 || toIndex === -1) return prev
-
-      const [moved] = allIds.splice(fromIndex, 1)
-      allIds.splice(toIndex, 0, moved)
-      return allIds
+    const allIds = taskOrder.length > 0 ? [...taskOrder] : tasks.map((t) => t.id)
+    tasks.forEach((t) => {
+      if (!allIds.includes(t.id)) allIds.push(t.id)
     })
-    setDraggedTaskId(null)
+
+    const fromIndex = allIds.indexOf(sourceId)
+    const toIndex = allIds.indexOf(targetId)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const [moved] = allIds.splice(fromIndex, 1)
+    const newTargetIdx = allIds.indexOf(targetId)
+    const insertIdx = position === 'after' ? newTargetIdx + 1 : newTargetIdx
+    allIds.splice(Math.max(0, Math.min(insertIdx, allIds.length)), 0, moved)
+
+    setTaskOrder(allIds)
+
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    try {
+      localStorage.setItem(`taskflow_tasks_order_${wsId}`, JSON.stringify(allIds))
+    } catch {}
+
+    const reorderedTasks = [...tasks].sort((a, b) => {
+      const idxA = allIds.indexOf(a.id)
+      const idxB = allIds.indexOf(b.id)
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
+    })
+    useTaskStore.getState().reorderTasks(wsId, reorderedTasks)
+    showToast('✨ Task card repositioned!')
   }
 
   const handleDropOnStatusTab = async (e: React.DragEvent, statusId: string) => {
@@ -1542,14 +1612,29 @@ export default function TasksPage() {
                       key={task.id}
                       draggable={true}
                       onDragStart={(e) => handleTaskDragStart(e, task.id)}
-                      onDragOver={handleTaskDragOver}
+                      onDragOver={(e) => handleTaskDragOver(e, task.id)}
+                      onDragLeave={handleTaskDragLeave}
                       onDrop={(e) => handleTaskDrop(e, task.id)}
-                      onDragEnd={() => setDraggedTaskId(null)}
+                      onDragEnd={() => {
+                        setDraggedTaskId(null)
+                        setDragOverTaskId(null)
+                        setDragOverTaskPosition(null)
+                      }}
                       className={`group relative rounded-3xl border border-slate-200 dark:border-[#2B2B2B] bg-white dark:bg-[#141414] p-5 space-y-4 backdrop-blur-xl overflow-hidden cursor-move flex flex-col justify-between select-none smooth-card animate-slide-up hover:border-[#00638E]/70 dark:hover:border-[#00638E]/70 shadow-md hover:shadow-xl dark:shadow-2xl dark:shadow-black/40 dark:hover:shadow-[#00638E]/10 transition-all ${
                         draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-[#00638E] ring-2 ring-[#00638E]/40' : ''
+                      } ${
+                        dragOverTaskId === task.id ? 'ring-2 ring-[#00638E] border-[#00638E] bg-[#00638E]/[0.04] scale-[1.01] shadow-lg' : ''
                       }`}
-                      title="Drag to place at any position or drop on status tabs"
+                      title="Drag deliverable to status tab or reorder position"
                     >
+                      {/* Drag Insertion Indicator Beam */}
+                      {dragOverTaskId === task.id && (
+                        <div
+                          className={`absolute left-3 right-3 h-1.5 bg-gradient-to-r from-[#00638E] via-sky-400 to-[#00638E] rounded-full shadow-[0_0_14px_rgba(0,99,142,0.9)] z-30 animate-pulse pointer-events-none ${
+                            dragOverTaskPosition === 'before' ? 'top-1.5' : 'bottom-1.5'
+                          }`}
+                        />
+                      )}
 
                       {/* Gloss Reflection Highlights */}
                       <div className="absolute -top-16 -right-16 w-36 h-36 bg-gradient-to-br from-[#00638E]/10 dark:from-white/10 to-transparent rounded-full blur-2xl pointer-events-none" />
@@ -2204,9 +2289,14 @@ export default function TasksPage() {
                       <tr
                         draggable={true}
                         onDragStart={(e) => handleTaskDragStart(e, t.id)}
-                        onDragOver={handleTaskDragOver}
+                        onDragOver={(e) => handleTaskDragOver(e, t.id)}
+                        onDragLeave={handleTaskDragLeave}
                         onDrop={(e) => handleTaskDrop(e, t.id)}
-                        onDragEnd={() => setDraggedTaskId(null)}
+                        onDragEnd={() => {
+                          setDraggedTaskId(null)
+                          setDragOverTaskId(null)
+                          setDragOverTaskPosition(null)
+                        }}
                         className={`hover:bg-slate-50/80 dark:hover:bg-[#2B2B2B]/40 transition-colors cursor-move select-none ${
                           draggedTaskId === t.id ? 'opacity-40 bg-[#00638E]/15 border-[#00638E] border-y-2' : ''
                         }`}

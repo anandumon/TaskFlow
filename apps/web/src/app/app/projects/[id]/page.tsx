@@ -111,7 +111,7 @@ export default function ProjectDetailsPage() {
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>('all')
   const [filterTag, setFilterTag] = useState<string>('all')
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'assignee' | 'due' | 'priority' | 'status' | 'title'>('assignee')
+  const [sortBy, setSortBy] = useState<'custom' | 'assignee' | 'due' | 'priority' | 'status' | 'title'>('custom')
 
   const { user } = useAuthStore()
   const { members: orgMembers } = useOrgStore()
@@ -163,6 +163,8 @@ export default function ProjectDetailsPage() {
   const [dragOverColId, setDragOverColId] = useState<string | null>(null)
   const [dragOverStatusId, setDragOverStatusId] = useState<string | null>(null)
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
+  const [dragOverTaskPosition, setDragOverTaskPosition] = useState<'before' | 'after' | null>(null)
+  const [taskOrder, setTaskOrder] = useState<string[]>([])
 
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [isUpdatingTask, setIsUpdatingTask] = useState(false)
@@ -323,6 +325,25 @@ export default function ProjectDetailsPage() {
   // Bug & Feature tasks strictly scoped to this project using unified categorization
   const bugTasks = useMemo(() => projectTasks.filter(isBugTask), [projectTasks])
   const featureTasks = useMemo(() => projectTasks.filter(isFeatureTask), [projectTasks])
+
+  // Load and sync custom drag-and-drop order for project deliverable cards
+  useEffect(() => {
+    if (!projectId) return
+    try {
+      const stored = localStorage.getItem(`taskflow_project_tasks_order_${projectId}`)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const currentIds = projectTasks.map((t) => t.id)
+          const validSavedIds = parsed.filter((id: string) => currentIds.includes(id))
+          const missingIds = currentIds.filter((id) => !validSavedIds.includes(id))
+          setTaskOrder([...validSavedIds, ...missingIds])
+          return
+        }
+      }
+    } catch {}
+    setTaskOrder(projectTasks.map((t) => t.id))
+  }, [projectId, projectTasks.map((t) => t.id).join(',')])
 
   // Weighted progress calculation for this project
   const completedTasksCount = useMemo(() => {
@@ -485,6 +506,17 @@ export default function ProjectDetailsPage() {
   // Sorted tasks
   const displayTasks = useMemo(() => {
     const list = [...filteredTasks]
+    if (sortBy === 'custom') {
+      list.sort((a, b) => {
+        const idxA = taskOrder.indexOf(a.id)
+        const idxB = taskOrder.indexOf(b.id)
+        if (idxA === -1 && idxB === -1) return 0
+        if (idxA === -1) return 1
+        if (idxB === -1) return -1
+        return idxA - idxB
+      })
+      return list
+    }
     list.sort((a, b) => {
       if (sortBy === 'assignee') {
         const nameA = getFirstName(a.assigneeName || 'You')
@@ -515,7 +547,7 @@ export default function ProjectDetailsPage() {
       return 0
     })
     return list
-  }, [filteredTasks, sortBy, workspaceStatuses])
+  }, [filteredTasks, sortBy, taskOrder, workspaceStatuses])
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
@@ -539,6 +571,85 @@ export default function ProjectDetailsPage() {
     setDragOverColId(null)
     setDragOverStatusId(null)
     setDragOverTaskId(null)
+    setDragOverTaskPosition(null)
+  }
+
+  const handleCardDragOver = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    const sourceId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    if (!sourceId || sourceId === targetTaskId) {
+      if (dragOverTaskId !== null) {
+        setDragOverTaskId(null)
+        setDragOverTaskPosition(null)
+      }
+      return
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    const position = e.clientY < midpoint ? 'before' : 'after'
+
+    if (dragOverTaskId !== targetTaskId || dragOverTaskPosition !== position) {
+      setDragOverTaskId(targetTaskId)
+      setDragOverTaskPosition(position)
+    }
+  }
+
+  const handleCardDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setDragOverTaskId(null)
+    setDragOverTaskPosition(null)
+  }
+
+  const handleCardDrop = async (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const sourceId = draggedTaskId || e.dataTransfer.getData('text/plain')
+    const position = dragOverTaskPosition || 'after'
+
+    setDragOverTaskId(null)
+    setDragOverTaskPosition(null)
+    setDraggedTaskId(null)
+
+    if (!sourceId || sourceId === targetTaskId) return
+
+    // 1. Reconstruct order list
+    const baseOrder = taskOrder.length > 0 ? [...taskOrder] : projectTasks.map((t) => t.id)
+    projectTasks.forEach((t) => {
+      if (!baseOrder.includes(t.id)) baseOrder.push(t.id)
+    })
+
+    const fromIdx = baseOrder.indexOf(sourceId)
+    const toIdx = baseOrder.indexOf(targetTaskId)
+    if (fromIdx === -1 || toIdx === -1) return
+
+    const [movedId] = baseOrder.splice(fromIdx, 1)
+    const newTargetIdx = baseOrder.indexOf(targetTaskId)
+    const insertIdx = position === 'after' ? newTargetIdx + 1 : newTargetIdx
+    baseOrder.splice(Math.max(0, Math.min(insertIdx, baseOrder.length)), 0, movedId)
+
+    // 2. Set state & persist order in localStorage
+    setTaskOrder(baseOrder)
+    setSortBy('custom')
+    try {
+      localStorage.setItem(`taskflow_project_tasks_order_${projectId}`, JSON.stringify(baseOrder))
+    } catch {}
+
+    // 3. Update task store
+    const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
+    const otherTasks = tasks.filter((t) => t.projectId !== projectId)
+    const reorderedProjectTasks = [...projectTasks].sort((a, b) => {
+      const idxA = baseOrder.indexOf(a.id)
+      const idxB = baseOrder.indexOf(b.id)
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
+    })
+    useTaskStore.getState().reorderTasks(wsId, [...otherTasks, ...reorderedProjectTasks])
+
+    showToast('✨ Deliverable card repositioned!')
   }
 
   const handleDropOnStatusTab = async (e: React.DragEvent, statusId: string) => {
@@ -1281,11 +1392,25 @@ export default function ProjectDetailsPage() {
                       draggable={true}
                       onDragStart={(e) => handleTaskDragStart(e, task.id)}
                       onDragEnd={handleTaskDragEnd}
+                      onDragOver={(e) => handleCardDragOver(e, task.id)}
+                      onDragLeave={handleCardDragLeave}
+                      onDrop={(e) => handleCardDrop(e, task.id)}
                       className={`group relative rounded-3xl border border-border/80 bg-card p-5 space-y-4 backdrop-blur-xl overflow-hidden cursor-move flex flex-col justify-between select-none shadow-sm hover:shadow-xl hover:border-primary/60 transition-all ${
                         draggedTaskId === task.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : ''
+                      } ${
+                        dragOverTaskId === task.id ? 'ring-2 ring-primary border-primary bg-primary/[0.04] scale-[1.01] shadow-lg' : ''
                       }`}
-                      title="Drag deliverable to status tab or reorder"
+                      title="Drag deliverable to status tab or reorder position"
                     >
+                      {/* Drag Insertion Indicator Beam */}
+                      {dragOverTaskId === task.id && (
+                        <div
+                          className={`absolute left-3 right-3 h-1.5 bg-gradient-to-r from-primary via-indigo-400 to-primary rounded-full shadow-[0_0_14px_rgba(99,102,241,0.9)] z-30 animate-pulse pointer-events-none ${
+                            dragOverTaskPosition === 'before' ? 'top-1.5' : 'bottom-1.5'
+                          }`}
+                        />
+                      )}
+
                       {/* Left Accent Strip */}
                       <div
                         className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-3xl transition-all group-hover:w-2"
@@ -1900,8 +2025,23 @@ export default function ProjectDetailsPage() {
                             draggable={true}
                             onDragStart={(e) => handleTaskDragStart(e, t.id)}
                             onDragEnd={handleTaskDragEnd}
-                            className="p-3.5 rounded-2xl border border-border/80 bg-card hover:bg-card/95 shadow-xs hover:shadow-md transition-all space-y-2.5 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
+                            onDragOver={(e) => handleCardDragOver(e, t.id)}
+                            onDragLeave={handleCardDragLeave}
+                            onDrop={(e) => handleCardDrop(e, t.id)}
+                            className={`p-3.5 rounded-2xl border border-border/80 bg-card hover:bg-card/95 shadow-xs hover:shadow-md transition-all space-y-2.5 group relative overflow-hidden cursor-grab active:cursor-grabbing select-none ${
+                              draggedTaskId === t.id ? 'opacity-40 scale-95 border-dashed border-primary ring-2 ring-primary/40' : ''
+                            } ${
+                              dragOverTaskId === t.id ? 'ring-2 ring-primary border-primary bg-primary/[0.04] scale-[1.01]' : ''
+                            }`}
                           >
+                            {/* Drag Insertion Indicator Beam */}
+                            {dragOverTaskId === t.id && (
+                              <div
+                                className={`absolute left-2 right-2 h-1 bg-gradient-to-r from-primary via-indigo-400 to-primary rounded-full shadow-[0_0_12px_rgba(99,102,241,0.9)] z-30 animate-pulse pointer-events-none ${
+                                  dragOverTaskPosition === 'before' ? 'top-1' : 'bottom-1'
+                                }`}
+                              />
+                            )}
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {isBug ? (
