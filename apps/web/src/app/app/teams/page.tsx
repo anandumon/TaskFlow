@@ -57,7 +57,7 @@ export default function TeamsPage() {
   const [draggedMemberId, setDraggedMemberId] = useState<string | null>(null)
 
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<MemberItem['role']>('Member')
+  const [inviteRole, setInviteRole] = useState<MemberItem['role']>('Admin')
   const [inviteName, setInviteName] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedFilterProjectId, setSelectedFilterProjectId] = useState<string>('ALL')
@@ -1044,9 +1044,9 @@ export default function TeamsPage() {
                     onChange={(e) => setInviteRole(e.target.value as any)}
                     className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
-                    <option value="Admin">Admin (Can manage workspaces &amp; billing)</option>
-                    <option value="Manager">Manager (Can manage projects &amp; sprints)</option>
-                    <option value="Member">Member (Can edit tasks &amp; comments)</option>
+                    <option value="Admin">Admin (Full Access — Manage projects, tasks, sprints &amp; settings)</option>
+                    <option value="Manager">Manager (Manage projects &amp; sprints)</option>
+                    <option value="Member">Member (Edit tasks &amp; comments)</option>
                     <option value="Guest">Guest (Read-only access)</option>
                   </select>
                 </div>

@@ -87,11 +87,13 @@ export async function createInvitation(
   }
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
-  const roleName = (input.role || 'Member').toLowerCase()
-  let roleId: string = 'a0000000-0000-0000-0000-000000000004'
-  if (roleName.includes('admin')) roleId = 'a0000000-0000-0000-0000-000000000002'
-  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000003'
+  const roleName = (input.role || 'Admin').toLowerCase()
+  let roleId: string = 'a0000000-0000-0000-0000-000000000002' // Admin full permission default
+  if (roleName.includes('owner')) roleId = 'a0000000-0000-0000-0000-000000000001'
+  else if (roleName.includes('admin')) roleId = 'a0000000-0000-0000-0000-000000000002'
+  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000002'
   else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
+  else roleId = 'a0000000-0000-0000-0000-000000000002'
 
   const row = await queryOne(
     `INSERT INTO invitations (
@@ -103,9 +105,9 @@ export async function createInvitation(
     [
       id,
       input.email.toLowerCase().trim(),
-      input.role || 'MEMBER',
+      input.role || 'ADMIN',
       roleId,
-      input.scope || 'ORGANIZATION',
+      input.scope || 'PROJECT',
       input.organizationId || null,
       orgName,
       input.workspaceId || null,
@@ -243,12 +245,13 @@ export async function acceptInvitation(
   )
 
   // Map role to standard role ID
-  const roleName = (inv.role || 'Member').toLowerCase()
-  let roleId: string = 'a0000000-0000-0000-0000-000000000004' // Member
+  const roleName = (inv.role || 'Admin').toLowerCase()
+  let roleId: string = 'a0000000-0000-0000-0000-000000000002' // Admin full permission default
   if (roleName.includes('owner')) roleId = 'a0000000-0000-0000-0000-000000000001'
   else if (roleName.includes('admin')) roleId = 'a0000000-0000-0000-0000-000000000002'
-  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000003'
+  else if (roleName.includes('manager')) roleId = 'a0000000-0000-0000-0000-000000000002'
   else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
+  else roleId = 'a0000000-0000-0000-0000-000000000002'
 
   if (inv.workspace_id && isUuid(targetUserId)) {
     try {

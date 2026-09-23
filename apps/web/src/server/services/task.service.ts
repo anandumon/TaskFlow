@@ -89,12 +89,26 @@ function mapTask(row: any): TaskDto {
   }
 }
 
-export async function getTasksByWorkspace(workspaceId: string): Promise<TaskDto[]> {
+export async function getTasksByWorkspace(workspaceId: string, userId?: string): Promise<TaskDto[]> {
   try {
     await ensureTasksSchema()
+    let projectFilterClause = ''
+    const params: any[] = [workspaceId]
+
+    if (userId) {
+      const { getProjectsByWorkspace } = await import('./project.service')
+      const allowedProjects = await getProjectsByWorkspace(workspaceId, userId)
+      const allowedIds = allowedProjects.map((p) => p.id)
+      if (allowedIds.length === 0) {
+        return []
+      }
+      projectFilterClause = ` AND (project_id IS NULL OR project_id = ANY($2))`
+      params.push(allowedIds)
+    }
+
     const rows = await query(
-      `SELECT * FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL) ORDER BY created_at DESC`,
-      [workspaceId]
+      `SELECT * FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)${projectFilterClause} ORDER BY created_at DESC`,
+      params
     )
     return rows.map(mapTask)
   } catch (err) {

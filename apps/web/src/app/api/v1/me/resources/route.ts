@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       const workspaces = await getWorkspacesByOrg(org.id)
       const wsResources = []
       for (const ws of workspaces) {
-        const projects = await getProjectsByWorkspace(ws.id)
+        const projects = await getProjectsByWorkspace(ws.id, user?.id)
         wsResources.push({
           id: ws.id,
           name: ws.name,

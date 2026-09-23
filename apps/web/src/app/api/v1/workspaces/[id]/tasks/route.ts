@@ -8,7 +8,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const tasks = await getTasksByWorkspace(params.id)
+    const user = await getAuthUser(req)
+    const tasks = await getTasksByWorkspace(params.id, user?.id)
     return apiSuccess(tasks)
   } catch (err: any) {
     return apiError(err.message || 'Failed to fetch tasks', 500)

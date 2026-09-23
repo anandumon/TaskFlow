@@ -37,12 +37,87 @@ function mapProject(row: any, counts?: { total: number; completed: number }): Pr
   }
 }
 
-export async function getProjectsByWorkspace(workspaceId: string): Promise<ProjectDto[]> {
+export async function getProjectsByWorkspace(workspaceId: string, userId?: string): Promise<ProjectDto[]> {
   try {
-    const projects = await query(
-      `SELECT * FROM projects WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL) ORDER BY created_at ASC`,
-      [workspaceId]
-    )
+    let allowedProjectIds: string[] | null = null
+
+    if (userId) {
+      // 1. Check if user is the Owner of this workspace or organization
+      const ws = await queryOne(
+        `SELECT w.owner_id as ws_owner, o.owner_id as org_owner 
+         FROM workspaces w 
+         LEFT JOIN organizations o ON w.organization_id = o.id 
+         WHERE w.id = $1`,
+        [workspaceId]
+      )
+      const isOwner = Boolean(
+        ws && (ws.ws_owner === userId || ws.org_owner === userId)
+      )
+
+      if (!isOwner) {
+        // 2. Fetch user's email
+        const userRow = await queryOne(`SELECT email FROM users WHERE id = $1`, [userId])
+        const userEmail = (userRow?.email || '').toLowerCase().trim()
+
+        // 3. Check if user has an accepted workspace-wide or org-wide invitation
+        const wideInvite = await queryOne(
+          `SELECT id FROM invitations 
+           WHERE (invited_user_id = $1 OR ($2 <> '' AND LOWER(email) = $2))
+           AND (workspace_id = $3 OR organization_id = (SELECT organization_id FROM workspaces WHERE id = $3))
+           AND status = 'ACCEPTED'
+           AND (scope = 'WORKSPACE' OR scope = 'ORGANIZATION' OR project_id IS NULL)
+           LIMIT 1`,
+          [userId, userEmail, workspaceId]
+        )
+
+        // If the user does not have a wide invite, restrict to specific project(s) they were invited to
+        if (!wideInvite) {
+          const projectInvites = await query(
+            `SELECT DISTINCT project_id FROM invitations 
+             WHERE (invited_user_id = $1 OR ($2 <> '' AND LOWER(email) = $2))
+             AND workspace_id = $3
+             AND status = 'ACCEPTED'
+             AND project_id IS NOT NULL`,
+            [userId, userEmail, workspaceId]
+          )
+
+          const set = new Set<string>()
+          projectInvites.forEach((r) => {
+            if (r.project_id) set.add(String(r.project_id))
+          })
+
+          // Also allow any projects where the user is an assignee on tasks or created tasks
+          const assignedTasks = await query(
+            `SELECT DISTINCT project_id FROM tasks 
+             WHERE workspace_id = $1 AND project_id IS NOT NULL 
+             AND (assignee_id = $2 OR created_by = $2)`,
+            [workspaceId, userId]
+          )
+          assignedTasks.forEach((r) => {
+            if (r.project_id) set.add(String(r.project_id))
+          })
+
+          if (projectInvites.length > 0 || set.size > 0) {
+            allowedProjectIds = Array.from(set)
+          }
+        }
+      }
+    }
+
+    let projectsSql = `SELECT * FROM projects WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`
+    const params: any[] = [workspaceId]
+
+    if (allowedProjectIds !== null) {
+      if (allowedProjectIds.length === 0) {
+        return []
+      }
+      projectsSql += ` AND id = ANY($2)`
+      params.push(allowedProjectIds)
+    }
+
+    projectsSql += ` ORDER BY created_at ASC`
+
+    const projects = await query(projectsSql, params)
 
     const tasks = await query(
       `SELECT id, project_id, status FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`,

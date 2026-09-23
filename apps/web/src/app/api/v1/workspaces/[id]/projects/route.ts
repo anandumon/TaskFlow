@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
+import { getAuthUser } from '@/server/utils/auth'
 import { getProjectsByWorkspace, createProject } from '@/server/services/project.service'
 
 export async function GET(
@@ -7,7 +8,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const projects = await getProjectsByWorkspace(params.id)
+    const user = await getAuthUser(req)
+    const projects = await getProjectsByWorkspace(params.id, user?.id)
     return apiSuccess(projects)
   } catch (err: any) {
     return apiError(err.message || 'Failed to fetch projects', 500)
