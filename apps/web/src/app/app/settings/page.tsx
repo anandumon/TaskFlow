@@ -390,6 +390,20 @@ export default function SettingsPage() {
     reader.readAsDataURL(file)
   }
 
+  const handleRemoveOrgLogo = async () => {
+    if (!currentOrg) return
+    try {
+      setIsUploadingOrgLogo(true)
+      await updateOrg(currentOrg.id, { logoUrl: '', name: orgName })
+      setOrgLogoPreview(null)
+      showToast('Organization logo removed')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to remove logo')
+    } finally {
+      setIsUploadingOrgLogo(false)
+    }
+  }
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (usernameStatus && !usernameStatus.available) {
@@ -1033,6 +1047,18 @@ export default function SettingsPage() {
                     {isUploadingOrgLogo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
                     <span>Upload Logo</span>
                   </label>
+                  {orgLogoPreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveOrgLogo}
+                      disabled={isUploadingOrgLogo}
+                      className="px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-[11px] font-semibold hover:bg-destructive/20 transition-all cursor-pointer inline-flex items-center gap-1"
+                      title="Remove organization logo"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove Logo</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1041,39 +1067,17 @@ export default function SettingsPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                Organization Name
-              </label>
-              <input
-                type="text"
-                value={orgName}
-                onChange={e => setOrgName(e.target.value)}
-                placeholder="Acme Corporation"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                Organization Slug
-              </label>
-              <input
-                type="text"
-                disabled
-                value={currentOrg?.slug || 'my-org'}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-muted/60 text-muted-foreground text-xs font-mono cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-primary" />
-              <span>Multi-tenant Isolation</span>
-            </div>
-            <span className="text-[11px] font-medium text-foreground">Active & Secure</span>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              Organization Name
+            </label>
+            <input
+              type="text"
+              value={orgName}
+              onChange={e => setOrgName(e.target.value)}
+              placeholder="Acme Corporation"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
+            />
           </div>
 
           <div className="pt-4 flex justify-end border-t border-border/60">

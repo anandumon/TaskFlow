@@ -194,17 +194,24 @@ export async function removeOrgMember(orgId: string, memberId: string): Promise<
 
 export async function updateOrganization(
   orgId: string,
-  input: { name?: string; logoUrl?: string; plan?: string }
+  input: { name?: string; logoUrl?: string | null; plan?: string }
 ): Promise<OrganizationDto | null> {
+  const existing = await queryOne(`SELECT * FROM organizations WHERE id = $1`, [orgId])
+  if (!existing) return null
+
+  const name = input.name !== undefined ? input.name : existing.name
+  const logoUrl = input.logoUrl !== undefined ? (input.logoUrl === '' || input.logoUrl === null ? null : input.logoUrl) : existing.logo_url
+  const plan = input.plan !== undefined ? input.plan : existing.plan
+
   const row = await queryOne(
     `UPDATE organizations
-     SET name = COALESCE($1, name),
-         logo_url = COALESCE($2, logo_url),
-         plan = COALESCE($3, plan),
+     SET name = $1,
+         logo_url = $2,
+         plan = $3,
          updated_at = NOW()
      WHERE id = $4
      RETURNING *`,
-    [input.name ?? null, input.logoUrl ?? null, input.plan ?? null, orgId]
+    [name, logoUrl, plan, orgId]
   )
   if (!row) return null
   return mapOrg(row)

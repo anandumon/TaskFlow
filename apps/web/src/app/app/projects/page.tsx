@@ -21,6 +21,11 @@ import {
   Check,
   GripVertical,
   Loader2,
+  Pencil,
+  Upload,
+  Camera,
+  Save,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { Portal } from '@/components/ui/portal'
 import { useOrgStore } from '@/stores/org-store'
@@ -32,13 +37,23 @@ import { ProjectSkeleton } from '@/components/loading'
 export default function ProjectsPage() {
   const { currentOrg } = useOrgStore()
   const { currentWorkspace, workspaces, setCurrentWorkspace, fetchWorkspaces } = useWorkspaceStore()
-  const { projects, loadProjects, createProject, deleteProject, isLoading } = useProjectStore()
+  const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading } = useProjectStore()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
   const [newProjectColor, setNewProjectColor] = useState('#6366F1')
+  const [newProjectIcon, setNewProjectIcon] = useState('')
   const [newProjectStatus, setNewProjectStatus] = useState<Project['status']>('ACTIVE')
+
+  // Edit Project State
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editProjectName, setEditProjectName] = useState('')
+  const [editProjectDescription, setEditProjectDescription] = useState('')
+  const [editProjectColor, setEditProjectColor] = useState('#6366F1')
+  const [editProjectIcon, setEditProjectIcon] = useState('')
+  const [editProjectEnvs, setEditProjectEnvs] = useState<string[]>([])
+  const [isUpdatingProject, setIsUpdatingProject] = useState(false)
 
   // Drag and drop custom project ordering
   const [projectOrder, setProjectOrder] = useState<string[]>([])
@@ -129,17 +144,97 @@ export default function ProjectsPage() {
         name: newProjectName.trim(),
         description: newProjectDescription.trim() || 'Comprehensive project milestones & deliverables',
         color: newProjectColor,
+        icon: newProjectIcon || 'Folder',
         status: newProjectStatus,
         environments: JSON.stringify(selectedEnvs),
         progress: 0,
       })
       setNewProjectName('')
       setNewProjectDescription('')
+      setNewProjectIcon('')
       setSelectedEnvs(['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN'])
       setIsModalOpen(false)
       showToast('Project created with custom environments!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to create project')
+    }
+  }
+
+  const openEditProjectModal = (p: Project) => {
+    setEditingProject(p)
+    setEditProjectName(p.name)
+    setEditProjectDescription(p.description || '')
+    setEditProjectColor(p.color || '#6366F1')
+    setEditProjectIcon(p.icon || '')
+    let envs = ['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN']
+    try {
+      if (p.environments) {
+        envs = JSON.parse(p.environments)
+      }
+    } catch {
+      envs = p.environments ? p.environments.split(',') : ['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN']
+    }
+    setEditProjectEnvs(envs)
+  }
+
+  const toggleEditEnv = (env: string) => {
+    if (env === 'DEV' || env === 'MAIN') return
+    if (editProjectEnvs.includes(env)) {
+      setEditProjectEnvs(editProjectEnvs.filter((e) => e !== env))
+    } else {
+      setEditProjectEnvs([...editProjectEnvs, env])
+    }
+  }
+
+  const handleEditLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image file size must be under 5MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setEditProjectIcon(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleNewLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image file size must be under 5MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setNewProjectIcon(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSaveEditProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProject || !editProjectName.trim() || isUpdatingProject) return
+    try {
+      setIsUpdatingProject(true)
+      await updateProject(editingProject.id, {
+        name: editProjectName.trim(),
+        description: editProjectDescription.trim(),
+        color: editProjectColor,
+        icon: editProjectIcon || 'Folder',
+        environments: JSON.stringify(editProjectEnvs),
+      })
+      if (currentWorkspace?.id) {
+        loadProjects(currentWorkspace.id)
+      }
+      setEditingProject(null)
+      showToast('Project updated successfully!')
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update project')
+    } finally {
+      setIsUpdatingProject(false)
     }
   }
 
@@ -269,6 +364,7 @@ export default function ProjectsPage() {
               key={project.id}
               project={project as any}
               onDeleteProject={handleDelete}
+              onEditProject={openEditProjectModal}
               draggable={true}
               onDragStart={(e) => handleProjDragStart(e, project.id)}
               onDragOver={handleProjDragOver}
@@ -298,6 +394,12 @@ export default function ProjectsPage() {
                   if (p.environments) envList = JSON.parse(p.environments)
                 } catch {}
 
+                const isImageLogo =
+                  p.icon &&
+                  (p.icon.startsWith('data:image') ||
+                    p.icon.startsWith('http') ||
+                    p.icon.startsWith('/'))
+
                 return (
                   <tr
                     key={p.id}
@@ -320,13 +422,21 @@ export default function ProjectsPage() {
                           href={`/app/projects/${p.id}`}
                           className="flex items-center gap-3 block group-hover:translate-x-0.5 transition-transform"
                         >
-                          <div
-                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
-                            style={{
-                              backgroundColor: p.color || '#00638E',
-                              boxShadow: `0 0 10px ${p.color || '#00638E'}60`,
-                            }}
-                          />
+                          {isImageLogo ? (
+                            <img
+                              src={p.icon}
+                              alt={p.name}
+                              className="w-7 h-7 rounded-xl object-cover shrink-0 border border-slate-200 dark:border-[#2B2B2B] shadow-xs"
+                            />
+                          ) : (
+                            <div
+                              className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
+                              style={{
+                                backgroundColor: p.color || '#00638E',
+                                boxShadow: `0 0 10px ${p.color || '#00638E'}60`,
+                              }}
+                            />
+                          )}
                           <div>
                             <p
                               className="font-bold text-sm tracking-tight text-slate-900 dark:text-white group-hover:text-[#00638E] dark:group-hover:text-[#BFD8E3] transition-colors flex items-center gap-1.5"
@@ -383,7 +493,7 @@ export default function ProjectsPage() {
                     </td>
 
                     <td className="p-4 pr-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         <Link
                           href={`/app/projects/${p.id}`}
                           className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#000000]/70 hover:bg-slate-100 dark:hover:bg-[#2B2B2B] border border-slate-200 dark:border-[#2B2B2B] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00638E] dark:hover:text-white transition-all cursor-pointer"
@@ -391,6 +501,15 @@ export default function ProjectsPage() {
                           View Roadmap
                         </Link>
                         <button
+                          type="button"
+                          onClick={() => openEditProjectModal(p as any)}
+                          className="p-1.5 text-slate-400 hover:text-[#00638E] dark:hover:text-[#BFD8E3] hover:bg-[#00638E]/10 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Project"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleDelete(p.id)}
                           className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
                           title="Delete Project"
@@ -425,6 +544,68 @@ export default function ProjectsPage() {
               </div>
 
               <form onSubmit={handleCreateProject} className="space-y-3">
+                {/* Project Image / Logo Upload */}
+                <div className="space-y-1.5 bg-muted/20 p-2.5 rounded-2xl border border-border/60">
+                  <label className="text-[11px] font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-primary" /> Project Image / Logo (Optional)
+                  </label>
+                  <div className="flex items-center gap-3 pt-0.5">
+                    <div className="relative group shrink-0">
+                      {newProjectIcon && (newProjectIcon.startsWith('data:image') || newProjectIcon.startsWith('http') || newProjectIcon.startsWith('/')) ? (
+                        <img
+                          src={newProjectIcon}
+                          alt="Project Logo"
+                          className="w-12 h-12 rounded-xl object-cover shadow-sm border border-primary/30"
+                        />
+                      ) : (
+                        <div
+                          className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-sm"
+                          style={{ backgroundColor: newProjectColor }}
+                        >
+                          {newProjectName ? newProjectName.charAt(0).toUpperCase() : <FolderKanban className="w-5 h-5" />}
+                        </div>
+                      )}
+                      <label
+                        htmlFor="new-project-logo-input"
+                        className="absolute inset-0 bg-black/60 rounded-xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[8px] font-bold"
+                      >
+                        <Camera className="w-3.5 h-3.5 mb-0.5" />
+                        <span>Upload</span>
+                      </label>
+                      <input
+                        id="new-project-logo-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleNewLogoUpload}
+                      />
+                    </div>
+
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor="new-project-logo-input"
+                          className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-[11px] font-semibold hover:bg-muted transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Upload Logo</span>
+                        </label>
+                        {newProjectIcon && (
+                          <button
+                            type="button"
+                            onClick={() => setNewProjectIcon('')}
+                            className="px-2 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-[11px] font-semibold hover:bg-destructive/20 transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">PNG, JPG, SVG, WebP up to 5MB.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-foreground">Project Name</label>
                   <input
@@ -560,6 +741,244 @@ export default function ProjectsPage() {
                     className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95"
                   >
                     Create Project
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl space-y-4 animate-scale-in max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="w-3.5 h-3.5 rounded-full shrink-0"
+                    style={{ backgroundColor: editProjectColor }}
+                  />
+                  <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5">
+                    <span>Edit Project:</span>
+                    <span className="text-primary truncate max-w-[200px]">{editingProject.name}</span>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditProject} className="space-y-4">
+                {/* Project Image / Logo Upload */}
+                <div className="space-y-1.5 bg-muted/20 p-3 rounded-2xl border border-border/60">
+                  <label className="text-[11px] font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-primary" /> Project Image / Logo
+                  </label>
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="relative group shrink-0">
+                      {editProjectIcon && (editProjectIcon.startsWith('data:image') || editProjectIcon.startsWith('http') || editProjectIcon.startsWith('/')) ? (
+                        <img
+                          src={editProjectIcon}
+                          alt="Project Logo"
+                          className="w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-primary/30"
+                        />
+                      ) : (
+                        <div
+                          className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-extrabold text-lg shadow-sm"
+                          style={{ backgroundColor: editProjectColor }}
+                        >
+                          {editProjectName ? editProjectName.charAt(0).toUpperCase() : <FolderKanban className="w-6 h-6" />}
+                        </div>
+                      )}
+                      <label
+                        htmlFor="edit-project-logo-input"
+                        className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
+                      >
+                        <Camera className="w-4 h-4 mb-0.5" />
+                        <span>Change</span>
+                      </label>
+                      <input
+                        id="edit-project-logo-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleEditLogoUpload}
+                      />
+                    </div>
+
+                    <div className="space-y-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">Upload Custom Logo</p>
+                      <p className="text-[11px] text-muted-foreground">PNG, JPG, SVG, WebP up to 5MB.</p>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <label
+                          htmlFor="edit-project-logo-input"
+                          className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-[11px] font-semibold hover:bg-muted transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Upload Logo</span>
+                        </label>
+                        {editProjectIcon && (
+                          <button
+                            type="button"
+                            onClick={() => setEditProjectIcon('')}
+                            className="px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-[11px] font-semibold hover:bg-destructive/20 transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Project Name */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Project Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Core Payment Engine"
+                    value={editProjectName}
+                    onChange={e => setEditProjectName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    required
+                  />
+                </div>
+
+                {/* Project Description */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Project Description</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Short summary of project scope..."
+                    value={editProjectDescription}
+                    onChange={e => setEditProjectDescription(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  />
+                </div>
+
+                {/* Brand Color Picker */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-foreground">Project Brand Color</label>
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold" style={{ color: editProjectColor }}>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: editProjectColor }} />
+                      <span>{editProjectColor}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { name: 'Electric Indigo', hex: '#6366F1' },
+                      { name: 'Neon Violet', hex: '#8B5CF6' },
+                      { name: 'Cyber Rose', hex: '#F43F5E' },
+                      { name: 'Radiant Pink', hex: '#EC4899' },
+                      { name: 'Sunset Orange', hex: '#F97316' },
+                      { name: 'Amber Glow', hex: '#F59E0B' },
+                      { name: 'Emerald Green', hex: '#10B981' },
+                      { name: 'Aqua Cyan', hex: '#06B6D4' },
+                      { name: 'Royal Blue', hex: '#3B82F6' },
+                      { name: 'Magenta Luxe', hex: '#D946EF' },
+                    ].map((c) => (
+                      <button
+                        type="button"
+                        key={c.hex}
+                        onClick={() => setEditProjectColor(c.hex)}
+                        title={c.name}
+                        className={`w-7 h-7 rounded-xl transition-all flex items-center justify-center cursor-pointer ${
+                          editProjectColor === c.hex
+                            ? 'scale-110 ring-2 ring-white ring-offset-1 ring-offset-background shadow-md'
+                            : 'hover:scale-105 opacity-80 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: c.hex,
+                          boxShadow: editProjectColor === c.hex ? `0 0 10px ${c.hex}` : undefined,
+                        }}
+                      >
+                        {editProjectColor === c.hex && <Check className="w-3 h-3 text-white drop-shadow" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Environments Selection */}
+                <div className="space-y-1.5 bg-muted/20 p-2.5 rounded-2xl border border-border/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                      <Server className="w-3.5 h-3.5 text-primary" /> Required Environments
+                    </label>
+                    <span className="text-[10px] text-primary font-bold px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                      {editProjectEnvs.length} selected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {allAvailableEnvs.map((env) => {
+                      const isSelected = editProjectEnvs.includes(env.id)
+
+                      return (
+                        <div
+                          key={env.id}
+                          onClick={() => toggleEditEnv(env.id)}
+                          className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-1.5 select-none ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary/60 text-foreground'
+                              : 'bg-background/70 border-border/70 text-muted-foreground hover:border-border hover:bg-background'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border shrink-0 ${
+                                isSelected
+                                  ? 'bg-primary/20 border-primary/40 text-primary'
+                                  : 'bg-muted border-border/80 text-muted-foreground'
+                              }`}
+                            >
+                              {env.name}
+                            </span>
+                            <span className="text-[11px] font-semibold truncate">{env.title}</span>
+                          </div>
+
+                          <div
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'border-border/80 bg-muted/40'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-2 h-2 stroke-[3]" />}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setEditingProject(null)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProject}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isUpdatingProject ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span>Save Changes</span>
                   </button>
                 </div>
               </form>

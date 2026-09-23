@@ -1,11 +1,12 @@
 import Link from 'next/link'
-import { FolderKanban, Trash2, Layers, ArrowRight, GripVertical } from 'lucide-react'
+import { FolderKanban, Trash2, Layers, ArrowRight, GripVertical, Pencil } from 'lucide-react'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 
 interface ProjectCardProps {
   project: Project
   onDeleteProject: (id: string) => Promise<void>
+  onEditProject?: (project: any) => void
   draggable?: boolean
   onDragStart?: (e: React.DragEvent) => void
   onDragOver?: (e: React.DragEvent) => void
@@ -17,6 +18,7 @@ interface ProjectCardProps {
 export function ProjectCard({
   project,
   onDeleteProject,
+  onEditProject,
   draggable,
   onDragStart,
   onDragOver,
@@ -56,6 +58,12 @@ export function ProjectCard({
 
   const projColor = getProjectColor(project)
 
+  const isImageLogo =
+    project.icon &&
+    (project.icon.startsWith('data:image') ||
+      project.icon.startsWith('http') ||
+      project.icon.startsWith('/'))
+
   const getEnvBadgeStyle = (env: string) => {
     switch (env) {
       case 'DEV':
@@ -90,7 +98,7 @@ export function ProjectCard({
 
       <div className="space-y-3 relative z-10">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {draggable && (
               <div className="text-slate-400 dark:text-slate-500 hover:text-[#00638E] dark:hover:text-[#BFD8E3] cursor-grab active:cursor-grabbing p-0.5 shrink-0 transition-colors" title="Drag to reorder">
                 <GripVertical className="w-4 h-4" />
@@ -98,17 +106,25 @@ export function ProjectCard({
             )}
             <Link
               href={`/app/projects/${project.id}`}
-              className="transition-all block group-hover:translate-x-0.5"
+              className="transition-all block group-hover:translate-x-0.5 min-w-0"
             >
               <h3
-                className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-[#00638E] dark:group-hover:text-[#BFD8E3] transition-colors tracking-tight flex items-center gap-1.5"
+                className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-[#00638E] dark:group-hover:text-[#BFD8E3] transition-colors tracking-tight flex items-center gap-2"
               >
-                <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
-                  style={{ backgroundColor: projColor }}
-                />
-                <span>{project.name}</span>
-                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-[#00638E] dark:text-[#BFD8E3]" />
+                {isImageLogo ? (
+                  <img
+                    src={project.icon}
+                    alt={project.name}
+                    className="w-6 h-6 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-[#2B2B2B] shadow-xs"
+                  />
+                ) : (
+                  <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                    style={{ backgroundColor: projColor }}
+                  />
+                )}
+                <span className="truncate">{project.name}</span>
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-[#00638E] dark:text-[#BFD8E3] shrink-0" />
               </h3>
               {project.description && project.description !== 'Comprehensive project milestones & deliverables' ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
@@ -118,16 +134,32 @@ export function ProjectCard({
             </Link>
           </div>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onDeleteProject(project.id)
-            }}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-            title="Delete Project"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onEditProject && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEditProject(project)
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-[#00638E] dark:hover:text-[#BFD8E3] hover:bg-[#00638E]/10 transition-colors cursor-pointer"
+                title="Edit Project"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeleteProject(project.id)
+              }}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+              title="Delete Project"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <Link href={`/app/projects/${project.id}`} className="block space-y-1.5 cursor-pointer">

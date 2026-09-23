@@ -7,7 +7,7 @@ export interface Project {
   name: string
   slug: string
   description?: string
-  status: 'ACTIVE' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED'
+  status: 'ACTIVE' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | string
   progress: number
   color: string
   icon: string

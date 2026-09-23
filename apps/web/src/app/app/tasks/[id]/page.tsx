@@ -356,9 +356,13 @@ export default function TaskDetailsPage() {
               {project ? (
                 <Link
                   href={`/app/projects/${project.id}`}
-                  className="text-primary font-bold hover:underline flex items-center gap-1"
+                  className="text-primary font-bold hover:underline flex items-center gap-1.5"
                 >
-                  <FolderKanban className="w-3.5 h-3.5" />
+                  {project.icon && (project.icon.startsWith('data:image') || project.icon.startsWith('http') || project.icon.startsWith('/')) ? (
+                    <img src={project.icon} alt={project.name} className="w-3.5 h-3.5 rounded object-cover" />
+                  ) : (
+                    <FolderKanban className="w-3.5 h-3.5" />
+                  )}
                   {project.name}
                 </Link>
               ) : (
