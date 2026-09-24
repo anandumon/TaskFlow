@@ -37,72 +37,97 @@ function mapProject(row: any, counts?: { total: number; completed: number }): Pr
   }
 }
 
+export async function getAllowedProjectIdsForUser(workspaceId: string, userId?: string): Promise<string[] | null> {
+  if (!userId) return null
+
+  try {
+    // Fetch user info (id, auth_user_id, email)
+    const userRow = await queryOne(
+      `SELECT id, auth_user_id, email FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+      [userId]
+    )
+    const dbUserId = userRow?.id || userId
+    const authUserId = userRow?.auth_user_id || userId
+    const userEmail = (userRow?.email || '').toLowerCase().trim()
+
+    // 1. Check if user is the Owner or creator of this workspace or organization
+    const ws = await queryOne(
+      `SELECT w.created_by as ws_creator, o.owner_id as org_owner 
+       FROM workspaces w 
+       LEFT JOIN organizations o ON w.organization_id = o.id 
+       WHERE w.id = $1`,
+      [workspaceId]
+    )
+
+    const isOwner = Boolean(
+      ws && (
+        ws.ws_creator === dbUserId || 
+        ws.ws_creator === authUserId || 
+        ws.org_owner === dbUserId || 
+        ws.org_owner === authUserId
+      )
+    )
+
+    if (isOwner) {
+      return null // Full access to all projects & tasks
+    }
+
+    // 2. Check if user has an accepted workspace-wide or org-wide invitation
+    const wideInvite = await queryOne(
+      `SELECT id FROM invitations 
+       WHERE (invited_user_id = $1 OR invited_user_id = $2 OR ($3 <> '' AND LOWER(email) = $3))
+       AND (workspace_id = $4 OR organization_id = (SELECT organization_id FROM workspaces WHERE id = $4))
+       AND status IN ('ACCEPTED', 'PENDING')
+       AND (scope = 'WORKSPACE' OR scope = 'ORGANIZATION' OR project_id IS NULL)
+       LIMIT 1`,
+      [dbUserId, authUserId, userEmail, workspaceId]
+    )
+
+    if (wideInvite) {
+      return null // Full access
+    }
+
+    // 3. Check for specific project invitation(s)
+    const projectInvites = await query(
+      `SELECT DISTINCT project_id FROM invitations 
+       WHERE (invited_user_id = $1 OR invited_user_id = $2 OR ($3 <> '' AND LOWER(email) = $3))
+       AND workspace_id = $4
+       AND status IN ('ACCEPTED', 'PENDING')
+       AND project_id IS NOT NULL`,
+      [dbUserId, authUserId, userEmail, workspaceId]
+    )
+
+    const set = new Set<string>()
+    projectInvites.forEach((r) => {
+      if (r.project_id) set.add(String(r.project_id))
+    })
+
+    // Also allow any projects where the user is an assignee on tasks or created tasks
+    const assignedTasks = await query(
+      `SELECT DISTINCT project_id FROM tasks 
+       WHERE workspace_id = $1 AND project_id IS NOT NULL 
+       AND (assignee_id = $2 OR assignee_id = $3 OR created_by = $2 OR created_by = $3)`,
+      [workspaceId, dbUserId, authUserId]
+    )
+    assignedTasks.forEach((r) => {
+      if (r.project_id) set.add(String(r.project_id))
+    })
+
+    if (projectInvites.length > 0 || set.size > 0) {
+      return Array.from(set)
+    }
+
+    // Default fallback: if no project restrictions exist, allow full access
+    return null
+  } catch (err) {
+    console.error('[project.service] getAllowedProjectIdsForUser error:', err)
+    return null
+  }
+}
+
 export async function getProjectsByWorkspace(workspaceId: string, userId?: string): Promise<ProjectDto[]> {
   try {
-    let allowedProjectIds: string[] | null = null
-
-    if (userId) {
-      // 1. Check if user is the Owner of this workspace or organization
-      const ws = await queryOne(
-        `SELECT w.owner_id as ws_owner, o.owner_id as org_owner 
-         FROM workspaces w 
-         LEFT JOIN organizations o ON w.organization_id = o.id 
-         WHERE w.id = $1`,
-        [workspaceId]
-      )
-      const isOwner = Boolean(
-        ws && (ws.ws_owner === userId || ws.org_owner === userId)
-      )
-
-      if (!isOwner) {
-        // 2. Fetch user's email
-        const userRow = await queryOne(`SELECT email FROM users WHERE id = $1`, [userId])
-        const userEmail = (userRow?.email || '').toLowerCase().trim()
-
-        // 3. Check if user has an accepted workspace-wide or org-wide invitation
-        const wideInvite = await queryOne(
-          `SELECT id FROM invitations 
-           WHERE (invited_user_id = $1 OR ($2 <> '' AND LOWER(email) = $2))
-           AND (workspace_id = $3 OR organization_id = (SELECT organization_id FROM workspaces WHERE id = $3))
-           AND status = 'ACCEPTED'
-           AND (scope = 'WORKSPACE' OR scope = 'ORGANIZATION' OR project_id IS NULL)
-           LIMIT 1`,
-          [userId, userEmail, workspaceId]
-        )
-
-        // If the user does not have a wide invite, restrict to specific project(s) they were invited to
-        if (!wideInvite) {
-          const projectInvites = await query(
-            `SELECT DISTINCT project_id FROM invitations 
-             WHERE (invited_user_id = $1 OR ($2 <> '' AND LOWER(email) = $2))
-             AND workspace_id = $3
-             AND status = 'ACCEPTED'
-             AND project_id IS NOT NULL`,
-            [userId, userEmail, workspaceId]
-          )
-
-          const set = new Set<string>()
-          projectInvites.forEach((r) => {
-            if (r.project_id) set.add(String(r.project_id))
-          })
-
-          // Also allow any projects where the user is an assignee on tasks or created tasks
-          const assignedTasks = await query(
-            `SELECT DISTINCT project_id FROM tasks 
-             WHERE workspace_id = $1 AND project_id IS NOT NULL 
-             AND (assignee_id = $2 OR created_by = $2)`,
-            [workspaceId, userId]
-          )
-          assignedTasks.forEach((r) => {
-            if (r.project_id) set.add(String(r.project_id))
-          })
-
-          if (projectInvites.length > 0 || set.size > 0) {
-            allowedProjectIds = Array.from(set)
-          }
-        }
-      }
-    }
+    const allowedProjectIds = await getAllowedProjectIdsForUser(workspaceId, userId)
 
     let projectsSql = `SELECT * FROM projects WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`
     const params: any[] = [workspaceId]

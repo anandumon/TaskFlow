@@ -96,14 +96,15 @@ export async function getTasksByWorkspace(workspaceId: string, userId?: string):
     const params: any[] = [workspaceId]
 
     if (userId) {
-      const { getProjectsByWorkspace } = await import('./project.service')
-      const allowedProjects = await getProjectsByWorkspace(workspaceId, userId)
-      const allowedIds = allowedProjects.map((p) => p.id)
-      if (allowedIds.length === 0) {
-        return []
+      const { getAllowedProjectIdsForUser } = await import('./project.service')
+      const allowedIds = await getAllowedProjectIdsForUser(workspaceId, userId)
+      if (allowedIds !== null) {
+        if (allowedIds.length === 0) {
+          return []
+        }
+        projectFilterClause = ` AND project_id = ANY($2)`
+        params.push(allowedIds)
       }
-      projectFilterClause = ` AND (project_id IS NULL OR project_id = ANY($2))`
-      params.push(allowedIds)
     }
 
     const rows = await query(
