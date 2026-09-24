@@ -190,7 +190,11 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
 
   useEffect(() => {
     fetchPendingInvitations()
-    const timer = setInterval(fetchPendingInvitations, 15000)
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchPendingInvitations()
+      }
+    }, 30000)
     return () => clearInterval(timer)
   }, [fetchPendingInvitations])
 

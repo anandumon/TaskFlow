@@ -554,4 +554,76 @@ export async function sendCalendarSyncNotificationEmail(
   }
 }
 
+export async function sendMemberRemovedEmail(
+  recipientEmail: string,
+  recipientName: string,
+  orgName: string,
+  adminName?: string
+): Promise<boolean> {
+  const safeName = escapeHtml(recipientName || 'there')
+  const safeOrg = escapeHtml(orgName || 'Organization')
+  const safeAdmin = escapeHtml(adminName || 'The admin or owner')
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Removal Notice from ${safeOrg} on TaskFlow</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0c0817; color: #f3f4f6; margin: 0; padding: 32px 16px; }
+    .container { max-width: 520px; margin: 0 auto; background: linear-gradient(135deg, #161129 0%, #1a1435 100%); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 20px; padding: 36px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); }
+    .brand-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+    .brand-title { font-size: 22px; font-weight: 800; color: #ffffff; }
+    .badge { display: inline-block; padding: 5px 12px; border-radius: 9999px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+    .title { font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 12px; }
+    .desc { font-size: 14px; color: #9ca3af; line-height: 1.6; margin-bottom: 24px; }
+    .card { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px 20px; margin: 20px 0; }
+    .btn { display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff !important; text-decoration: none; font-size: 13px; font-weight: 700; border-radius: 12px; }
+    .footer { font-size: 11px; color: #6b7280; text-align: center; margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand-header">
+      <span style="font-size: 24px;">⚡</span>
+      <span class="brand-title">TaskFlow</span>
+    </div>
+    <div class="badge">Organization Update</div>
+    <h1 class="title">You have been removed from ${safeOrg}</h1>
+    <p class="desc">
+      Hello ${safeName},<br/><br/>
+      ${safeAdmin} of <strong>${safeOrg}</strong> has removed you from the organization. You will no longer have access to its workspaces, projects, or tasks.
+    </p>
+    <div class="card">
+      <div style="font-size: 12px; color: #9ca3af; line-height: 1.6;">
+        • Any personal organizations or workspaces you created remain safe and accessible under your account.<br/>
+        • If you do not have another active organization, you can sign in to TaskFlow at any time to create your own organization and workspace.
+      </div>
+    </div>
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="https://task-flow-seven-ochre.vercel.app/login" class="btn">Sign In to TaskFlow &rarr;</a>
+    </div>
+    <div class="footer">
+      If you believe this was done in error, please contact the administrator of ${safeOrg}.
+    </div>
+  </div>
+</body>
+</html>`
+
+  try {
+    await transporter.sendMail({
+      from: `"TaskFlow" <${MAIL_USERNAME}>`,
+      to: recipientEmail,
+      subject: `Notice: You have been removed from ${safeOrg} on TaskFlow`,
+      html,
+    })
+    console.log(`✔ [EMAIL] Member removed notification sent to: ${recipientEmail}`)
+    return true
+  } catch (err: any) {
+    console.error(`⚠ [EMAIL] Failed to send member removed email:`, err?.message || err)
+    return false
+  }
+}
+
+
 

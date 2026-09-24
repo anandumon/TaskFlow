@@ -12,6 +12,7 @@ export interface InvitationDto {
   workspaceName?: string
   projectId?: string
   projectName?: string
+  projectIds?: string[]
   inviterName?: string
   scope: string
   role: string
@@ -27,6 +28,7 @@ export async function ensureInvitationsSchema() {
   if (hasEnsuredInvitationsSchema) return
   try {
     await query(`ALTER TABLE invitations ADD COLUMN IF NOT EXISTS referral_code VARCHAR(64);`)
+    await query(`ALTER TABLE invitations ADD COLUMN IF NOT EXISTS project_ids JSONB DEFAULT '[]'::jsonb;`)
     await query(`CREATE INDEX IF NOT EXISTS idx_invitations_referral_code ON invitations(referral_code);`)
     await query(`UPDATE invitations SET referral_code = 'TF-' || UPPER(SUBSTRING(token FROM 1 FOR 4)) || '-' || UPPER(SUBSTRING(token FROM 5 FOR 4)) WHERE referral_code IS NULL AND token IS NOT NULL;`)
   } catch (e) {
@@ -36,6 +38,16 @@ export async function ensureInvitationsSchema() {
 }
 
 function mapInvitation(row: any, inviterName?: string): InvitationDto {
+  let projectIds: string[] | undefined = undefined
+  if (row.project_ids) {
+    try {
+      projectIds = typeof row.project_ids === 'string' ? JSON.parse(row.project_ids) : row.project_ids
+    } catch {}
+  }
+  if (!projectIds && row.project_id) {
+    projectIds = [String(row.project_id)]
+  }
+
   return {
     id: String(row.id),
     email: row.email,
@@ -44,8 +56,9 @@ function mapInvitation(row: any, inviterName?: string): InvitationDto {
     orgName: row.organization_name || 'Organization',
     workspaceId: row.workspace_id ? String(row.workspace_id) : undefined,
     workspaceName: row.workspace_name || 'Workspace',
-    projectId: row.project_id ? String(row.project_id) : undefined,
+    projectId: row.project_id ? String(row.project_id) : (projectIds?.[0]),
     projectName: row.project_name || 'Project',
+    projectIds,
     inviterName: inviterName || row.inviter_name || 'A team member',
     scope: row.scope || 'ORGANIZATION',
     role: row.role || 'MEMBER',
@@ -66,6 +79,7 @@ export async function createInvitation(
     organizationId?: string
     workspaceId?: string
     projectId?: string
+    projectIds?: string[]
   }
 ): Promise<InvitationDto> {
   await ensureInvitationsSchema()
@@ -78,8 +92,21 @@ export async function createInvitation(
   const codeRaw = crypto.randomBytes(4).toString('hex').toUpperCase()
   const referralCode = `TF-${codeRaw.slice(0, 4)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
 
+  const projectIds = input.projectIds && input.projectIds.length > 0 
+    ? input.projectIds 
+    : (input.projectId ? [input.projectId] : [])
+  const primaryProjectId = projectIds[0] || input.projectId || null
+
   let prjName = 'Project'
-  if (input.projectId) {
+  if (projectIds.length > 0) {
+    const pRows = await query(`SELECT id, name, workspace_id FROM projects WHERE id = ANY($1)`, [projectIds])
+    if (pRows.length > 0) {
+      prjName = pRows.map((p) => p.name).join(', ')
+      if (!input.workspaceId && pRows[0].workspace_id) {
+        input.workspaceId = pRows[0].workspace_id
+      }
+    }
+  } else if (input.projectId) {
     const p = await queryOne(`SELECT name, workspace_id FROM projects WHERE id = $1`, [input.projectId])
     if (p) {
       prjName = p.name
@@ -118,9 +145,9 @@ export async function createInvitation(
   const row = await queryOne(
     `INSERT INTO invitations (
       id, email, role, role_id, scope, organization_id, organization_name,
-      workspace_id, workspace_name, project_id, project_name,
+      workspace_id, workspace_name, project_id, project_name, project_ids,
       token, token_hash, referral_code, status, invited_by, expires_at, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'PENDING', $15, $16, $17, $17)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'PENDING', $16, $17, $18, $18)
     RETURNING *`,
     [
       id,
@@ -132,8 +159,9 @@ export async function createInvitation(
       orgName,
       input.workspaceId || null,
       wsName,
-      input.projectId || null,
+      primaryProjectId,
       prjName,
+      JSON.stringify(projectIds),
       token,
       tokenHash,
       referralCode,
@@ -375,26 +403,40 @@ export async function acceptInvitation(
     }
   }
 
-  if (inv.project_id && isUuid(targetUserId)) {
+  // Upsert project memberships for all target projects
+  let targetProjectIds: string[] = []
+  if (inv.project_ids) {
     try {
-      const existingPm = await queryOne(
-        `SELECT id FROM project_memberships WHERE project_id = $1 AND user_id = $2`,
-        [inv.project_id, targetUserId]
-      )
-      if (existingPm) {
-        await query(
-          `UPDATE project_memberships SET role_id = $1, updated_at = $2, status = 'ACTIVE' WHERE id = $3`,
-          [roleId, now, existingPm.id]
+      const parsed = typeof inv.project_ids === 'string' ? JSON.parse(inv.project_ids) : inv.project_ids
+      if (Array.isArray(parsed)) targetProjectIds = parsed
+    } catch {}
+  }
+  if (targetProjectIds.length === 0 && inv.project_id) {
+    targetProjectIds = [inv.project_id]
+  }
+
+  for (const pid of targetProjectIds) {
+    if (pid && isUuid(targetUserId)) {
+      try {
+        const existingPm = await queryOne(
+          `SELECT id FROM project_memberships WHERE project_id = $1 AND user_id = $2`,
+          [pid, targetUserId]
         )
-      } else {
-        await query(
-          `INSERT INTO project_memberships (id, project_id, user_id, role_id, joined_at, created_at, updated_at, status)
-           VALUES ($1, $2, $3, $4, $5, $5, $5, 'ACTIVE')`,
-          [crypto.randomUUID(), inv.project_id, targetUserId, roleId, now]
-        )
+        if (existingPm) {
+          await query(
+            `UPDATE project_memberships SET role_id = $1, updated_at = $2, status = 'ACTIVE' WHERE id = $3`,
+            [roleId, now, existingPm.id]
+          )
+        } else {
+          await query(
+            `INSERT INTO project_memberships (id, project_id, user_id, role_id, joined_at, created_at, updated_at, status)
+             VALUES ($1, $2, $3, $4, $5, $5, $5, 'ACTIVE')`,
+            [crypto.randomUUID(), pid, targetUserId, roleId, now]
+          )
+        }
+      } catch (pmErr) {
+        console.warn('[invitation.service] project_memberships upsert warning:', pmErr)
       }
-    } catch (pmErr) {
-      console.warn('[invitation.service] project_memberships upsert warning:', pmErr)
     }
   }
 

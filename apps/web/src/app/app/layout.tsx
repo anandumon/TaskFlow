@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
@@ -22,15 +22,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [authChecked, setAuthChecked] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
 
+  const hasPrefetchedRef = useRef(false)
+
   useEffect(() => {
     if (!user || !user.id) return
+
+    // If user has zero organizations, ALWAYS show onboarding create card!
+    if (initialLoaded && organizations.length === 0) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`taskflow_onboarding_completed_${user.id}`)
+        localStorage.removeItem('taskflow_onboarding_completed')
+      }
+      setShowOnboarding(true)
+      return
+    }
 
     const completed =
       localStorage.getItem(`taskflow_onboarding_completed_${user.id}`) ||
       localStorage.getItem('taskflow_onboarding_completed')
     const hasInviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
 
-    // If user has an active invite token and has not completed onboarding, always show referral prompt!
+    // If user has an active invite token and has not completed onboarding, show referral prompt!
     if (hasInviteToken && !completed) {
       setShowOnboarding(true)
       return
@@ -45,10 +57,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         return
       }
     }
-    setShowOnboarding(false)
-  }, [user])
+
+    if (organizations.length > 0) {
+      setShowOnboarding(false)
+    }
+  }, [user, organizations.length, initialLoaded])
 
   useEffect(() => {
+    if (hasPrefetchedRef.current) return
+    hasPrefetchedRef.current = true
+
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
     if (!token) {
       setAuthChecked(true)
@@ -61,7 +79,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       loadUser(),
       fetchOrganizations(),
     ])
-      .then(([_, orgs]) => {
+      .then(([userData, orgs]) => {
         setAuthChecked(true)
         const activeOrgs = orgs || []
         if (activeOrgs.length > 0) {
@@ -69,6 +87,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             setInitialLoaded(true)
           })
         } else {
+          // User has no organizations: clean stale completion flags and show create card
+          if (typeof window !== 'undefined') {
+            const uid = (userData as any)?.id || ''
+            if (uid) localStorage.removeItem(`taskflow_onboarding_completed_${uid}`)
+            localStorage.removeItem('taskflow_onboarding_completed')
+          }
           setShowOnboarding(true)
           setInitialLoaded(true)
         }
@@ -78,7 +102,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setAuthChecked(true)
         setInitialLoaded(true)
       })
-  }, [loadUser, fetchOrganizations, fetchWorkspaces, router, user?.isNewUser])
+  }, [loadUser, fetchOrganizations, fetchWorkspaces, router])
 
   useEffect(() => {
     if (!authChecked || isLoading) return
@@ -110,7 +134,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // If new user with no organizations or onboarding is needed, render ONLY the onboarding wizard directly!
   // Prevents any flashing of the main dashboard, sidebar, or header.
-  if (showOnboarding || (!currentOrg && organizations.length === 0)) {
+  if (showOnboarding || organizations.length === 0) {
     return (
       <div className="fixed inset-0 z-[100] h-screen w-screen bg-[#07080b] flex items-center justify-center p-4 sm:p-6 overflow-hidden animate-fade-in">
         <OnboardingWizardModal

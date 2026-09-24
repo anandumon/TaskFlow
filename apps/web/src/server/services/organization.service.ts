@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db/postgres'
 import crypto from 'crypto'
+import { sendMemberRemovedEmail } from './email.service'
 
 export interface OrganizationDto {
   id: string
@@ -243,8 +244,77 @@ export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
   }
 }
 
-export async function removeOrgMember(orgId: string, memberId: string): Promise<void> {
-  await query(`DELETE FROM organization_members WHERE organization_id = $1 AND id = $2`, [orgId, memberId])
+export async function removeOrgMember(orgId: string, memberId: string, removerUserId?: string): Promise<void> {
+  // 1. Query target member details, org name, and user email
+  const memberRow = await queryOne(
+    `SELECT om.id, om.organization_id, om.user_id, 
+            COALESCE(u.email, au.email) as email,
+            COALESCE(u.display_name, TRIM(CONCAT(u.first_name, ' ', u.last_name))) as display_name,
+            o.name as org_name
+     FROM organization_members om
+     LEFT JOIN users u ON om.user_id = u.id
+     LEFT JOIN auth.users au ON om.user_id = au.id
+     LEFT JOIN organizations o ON om.organization_id = o.id
+     WHERE om.organization_id = $1 AND (om.id = $2 OR om.user_id = $2)
+     LIMIT 1`,
+    [orgId, memberId]
+  )
+
+  const targetUserId = memberRow?.user_id
+  const targetEmail = memberRow?.email
+  const targetName = memberRow?.display_name || targetEmail || 'Team Member'
+  const orgName = memberRow?.org_name || 'Organization'
+
+  // 2. Fetch admin / remover name if available
+  let adminName = 'The admin or owner'
+  if (removerUserId) {
+    const adminRow = await queryOne(
+      `SELECT display_name, first_name, last_name, email FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+      [removerUserId]
+    )
+    if (adminRow) {
+      adminName = adminRow.display_name || `${adminRow.first_name || ''} ${adminRow.last_name || ''}`.trim() || 'The organization administrator'
+    }
+  }
+
+  // 3. Delete from organization_members
+  await query(
+    `DELETE FROM organization_members WHERE organization_id = $1 AND (id = $2 OR user_id = $2)`,
+    [orgId, memberId]
+  )
+
+  // 4. Cascade delete user from all workspace_members and project_memberships in this organization
+  if (targetUserId) {
+    try {
+      await query(
+        `DELETE FROM workspace_members 
+         WHERE user_id = $1 AND workspace_id IN (SELECT id FROM workspaces WHERE organization_id = $2)`,
+        [targetUserId, orgId]
+      )
+      await query(
+        `DELETE FROM project_memberships 
+         WHERE user_id = $1 AND project_id IN (
+           SELECT p.id FROM projects p 
+           JOIN workspaces w ON p.workspace_id = w.id 
+           WHERE w.organization_id = $2
+         )`,
+        [targetUserId, orgId]
+      )
+      await query(
+        `UPDATE invitations SET status = 'CANCELLED' WHERE organization_id = $1 AND (email = $2 OR invited_user_id = $3)`,
+        [orgId, targetEmail || '', targetUserId]
+      )
+    } catch (cleanErr) {
+      console.warn('[org.service] cleanup member workspaces/projects warning:', cleanErr)
+    }
+  }
+
+  // 5. Send notification email to the removed member
+  if (targetEmail) {
+    sendMemberRemovedEmail(targetEmail, targetName, orgName, adminName).catch((err) => {
+      console.warn('[org.service] removal email error:', err)
+    })
+  }
 }
 
 export async function updateOrganization(

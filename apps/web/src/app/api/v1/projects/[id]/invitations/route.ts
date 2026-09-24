@@ -25,6 +25,7 @@ export async function POST(
     const inv = await createInvitation(user?.id || 'system', {
       ...body,
       projectId: params.id,
+      projectIds: body.projectIds && body.projectIds.length > 0 ? body.projectIds : [params.id],
       scope: 'PROJECT',
     })
     return apiSuccess(inv, 201)

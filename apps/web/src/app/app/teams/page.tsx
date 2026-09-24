@@ -58,8 +58,8 @@ export default function TeamsPage() {
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<MemberItem['role']>('Admin')
-  const [inviteName, setInviteName] = useState('')
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([])
   const [selectedFilterProjectId, setSelectedFilterProjectId] = useState<string>('ALL')
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -77,6 +77,25 @@ export default function TeamsPage() {
   const [pendingForMe, setPendingForMe] = useState<any[]>([])
 
   // Ensure organization and workspace are loaded if user enters page directly
+  useEffect(() => {
+    if (projects.length > 0 && selectedProjectIds.length === 0) {
+      setSelectedProjectIds(projects.map((p) => p.id))
+    }
+  }, [projects])
+
+  const handleToggleProject = (id: string) => {
+    setSelectedProjectIds((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    )
+  }
+
+  const handleToggleAllProjects = () => {
+    if (selectedProjectIds.length === projects.length) {
+      setSelectedProjectIds([])
+    } else {
+      setSelectedProjectIds(projects.map((p) => p.id))
+    }
+  }
   useEffect(() => {
     if (!currentOrg) {
       fetchOrganizations().then((orgs) => {
@@ -302,24 +321,23 @@ export default function TeamsPage() {
     setIsSubmitting(true)
     const cleanEmail = inviteEmail.trim().toLowerCase()
     const targetEmail = cleanEmail
-    const invitedName = inviteName.trim()
     const selectedRole = inviteRole
 
     // Close the modal card immediately upon clicking Send Invitation
     setIsModalOpen(false)
     setInviteEmail('')
-    setInviteName('')
     setToastMessage(`✉️ Sending invitation to ${targetEmail}...`)
     setIsSubmitting(true)
 
     try {
       // Always guarantee a valid project ID target
-      let targetProjectId = selectedProjectId
-      if (!targetProjectId && projects.length > 0) {
-        targetProjectId = projects[0].id
-      }
+      const targetProjectIds = selectedProjectIds.length > 0 
+        ? selectedProjectIds 
+        : (projects.length > 0 ? [projects[0].id] : [])
+      let targetProjectId = targetProjectIds[0] || ''
       if (!targetProjectId && currentWorkspace?.id) {
         targetProjectId = (await ensureDefaultProject(currentWorkspace.id)) || ''
+        if (targetProjectId) targetProjectIds.push(targetProjectId)
       }
 
       if (!targetProjectId) {
@@ -328,11 +346,11 @@ export default function TeamsPage() {
 
       const res = await apiClient.post<any>(`/api/v1/projects/${targetProjectId}/invitations`, {
         email: targetEmail,
-        name: invitedName || undefined,
         role: selectedRole.toUpperCase(),
         roleName: selectedRole,
         organizationId: currentOrg?.id,
         workspaceId: currentWorkspace?.id,
+        projectIds: targetProjectIds,
       })
 
       const targetProj = projects.find((p) => p.id === targetProjectId)
@@ -342,7 +360,7 @@ export default function TeamsPage() {
       setMembersList((prev) => [
         {
           id: newInv?.id || `inv-${Date.now()}`,
-          name: invitedName || targetEmail.split('@')[0],
+          name: targetEmail.split('@')[0],
           email: targetEmail,
           role: selectedRole,
           status: 'Pending Invitation',
@@ -363,7 +381,7 @@ export default function TeamsPage() {
       await loadData()
     } catch (err: any) {
       setToastMessage(err?.response?.data?.message || err?.message || 'Failed to send invitation')
-      setTimeout(() => setToastMessage(null), 4500)
+      setTimeout(() => setToastMessage(null), 3500)
     } finally {
       setIsSubmitting(false)
     }
@@ -1027,22 +1045,11 @@ export default function TeamsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Full Name (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Jordan Miller"
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground">Role Permission</label>
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                   >
                     <option value="Admin">Admin (Full Access — Manage projects, tasks, sprints &amp; settings)</option>
                     <option value="Manager">Manager (Manage projects &amp; sprints)</option>
@@ -1051,24 +1058,54 @@ export default function TeamsPage() {
                   </select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <FolderKanban className="w-3.5 h-3.5 text-primary" /> Assign to Project
-                  </label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <FolderKanban className="w-3.5 h-3.5 text-primary" /> Assign to Project(s)
+                    </label>
+                    {projects.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={handleToggleAllProjects}
+                        className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                      >
+                        {selectedProjectIds.length === projects.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    )}
+                  </div>
+
                   {projects.length > 0 ? (
-                    <select
-                      value={selectedProjectId || projects[0]?.id}
-                      onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-background/50 divide-y divide-border/40 p-1 space-y-0.5">
+                      {projects.map((p) => {
+                        const isChecked = selectedProjectIds.includes(p.id)
+                        return (
+                          <label
+                            key={p.id}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-primary/15 text-foreground font-semibold'
+                                : 'hover:bg-muted/50 text-muted-foreground'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleProject(p.id)}
+                              className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                            />
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                                style={{ backgroundColor: p.color || '#6366f1' }}
+                              />
+                              <span className="text-xs truncate">{p.name}</span>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
                       <FolderKanban className="w-3.5 h-3.5 shrink-0" />
                       <span>General Project (will be auto-created in workspace)</span>
                     </div>
