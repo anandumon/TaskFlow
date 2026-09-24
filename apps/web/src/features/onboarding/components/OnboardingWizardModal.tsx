@@ -64,9 +64,13 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
       try {
         setIsLoadingPending(true)
         const storedToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
-        if (storedToken) {
-          setReferralCode(storedToken)
+        const storedReferralCode = typeof window !== 'undefined' ? localStorage.getItem('tf_referral_code') : null
+        if (storedReferralCode || storedToken) {
           setMode('invite')
+          const codeCandidate = storedReferralCode || storedToken
+          if (codeCandidate && (codeCandidate.startsWith('TF-') || codeCandidate.length <= 16)) {
+            setReferralCode(codeCandidate)
+          }
         }
 
         const res = await apiClient.get<any[]>('/api/v1/invitations/pending-for-me')
@@ -142,6 +146,8 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
       localStorage.setItem('taskflow_onboarding_completed', 'true')
       if (typeof window !== 'undefined') {
         localStorage.removeItem('tf_invite_token')
+        localStorage.removeItem('tf_referral_code')
+        localStorage.removeItem('taskflow_is_new_user')
       }
 
       setInviteSuccessMessage(`Success! Joined ${inv.projectName || inv.workspaceName || 'Workspace'}! Redirecting...`)

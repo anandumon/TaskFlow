@@ -63,18 +63,48 @@ export async function createWorkspace(
   orgId: string,
   input: { name: string; description?: string; color?: string; icon?: string }
 ): Promise<WorkspaceDto> {
+  const wsName = (input.name || '').trim()
+  if (!wsName) {
+    const error: any = new Error('Workspace name is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  // Pre-check workspace name uniqueness (case-insensitive)
+  const existingWs = await queryOne(
+    `SELECT id, name FROM workspaces 
+     WHERE LOWER(TRIM(name)) = LOWER($1) 
+       AND (deleted = false OR deleted IS NULL) 
+     LIMIT 1`,
+    [wsName]
+  )
+  if (existingWs) {
+    const error: any = new Error(`A workspace named "${wsName}" already exists. Please choose a unique workspace name.`)
+    error.statusCode = 409
+    throw error
+  }
+
   const id = crypto.randomUUID()
-  const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
+  const slug = wsName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
-  const row = await queryOne(
-    `INSERT INTO workspaces (id, organization_id, name, slug, description, color, icon, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, false, 0, $8, $8)
-     RETURNING *`,
-    [id, orgId, input.name, slug, input.description || '', input.color || '#3b82f6', input.icon || 'Folder', now]
-  )
+  try {
+    const row = await queryOne(
+      `INSERT INTO workspaces (id, organization_id, name, slug, description, color, icon, deleted, version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, false, 0, $8, $8)
+       RETURNING *`,
+      [id, orgId, wsName, slug, input.description || '', input.color || '#3b82f6', input.icon || 'Folder', now]
+    )
 
-  return mapWorkspace(row)
+    return mapWorkspace(row)
+  } catch (err: any) {
+    if (err.code === '23505' || err.message?.includes('workspaces_unique_name')) {
+      const error: any = new Error(`A workspace named "${wsName}" already exists. Please choose a unique workspace name.`)
+      error.statusCode = 409
+      throw error
+    }
+    throw err
+  }
 }
 
 export async function updateWorkspace(
@@ -84,18 +114,52 @@ export async function updateWorkspace(
   const existing = await queryOne(`SELECT * FROM workspaces WHERE id = $1`, [workspaceId])
   if (!existing) throw new Error('Workspace not found')
 
-  const name = input.name !== undefined ? input.name : existing.name
+  let name = existing.name
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim()
+    if (!trimmed) {
+      const error: any = new Error('Workspace name cannot be empty')
+      error.statusCode = 400
+      throw error
+    }
+    if (trimmed.toLowerCase() !== existing.name.trim().toLowerCase()) {
+      const dup = await queryOne(
+        `SELECT id FROM workspaces 
+         WHERE LOWER(TRIM(name)) = LOWER($1) 
+           AND id != $2 
+           AND (deleted = false OR deleted IS NULL) 
+         LIMIT 1`,
+        [trimmed, workspaceId]
+      )
+      if (dup) {
+        const error: any = new Error(`A workspace named "${trimmed}" already exists. Please choose a unique workspace name.`)
+        error.statusCode = 409
+        throw error
+      }
+    }
+    name = trimmed
+  }
+
   const description = input.description !== undefined ? input.description : existing.description
   const color = input.color !== undefined ? input.color : existing.color
   const icon = input.icon !== undefined ? input.icon : existing.icon
 
-  const row = await queryOne(
-    `UPDATE workspaces SET name = $1, description = $2, color = $3, icon = $4, updated_at = $5
-     WHERE id = $6 RETURNING *`,
-    [name, description, color, icon, new Date(), workspaceId]
-  )
+  try {
+    const row = await queryOne(
+      `UPDATE workspaces SET name = $1, description = $2, color = $3, icon = $4, updated_at = $5
+       WHERE id = $6 RETURNING *`,
+      [name, description, color, icon, new Date(), workspaceId]
+    )
 
-  return mapWorkspace(row)
+    return mapWorkspace(row)
+  } catch (err: any) {
+    if (err.code === '23505' || err.message?.includes('workspaces_unique_name')) {
+      const error: any = new Error(`A workspace named "${name}" already exists. Please choose a unique workspace name.`)
+      error.statusCode = 409
+      throw error
+    }
+    throw err
+  }
 }
 
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberDto[]> {

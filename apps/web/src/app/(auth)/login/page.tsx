@@ -101,18 +101,9 @@ function LoginContent() {
         password,
       })
 
-      // Check if there is an active invite token to accept immediately
-      if (activeInviteToken) {
-        try {
-          const res = await apiClient.post<any>(`/api/v1/invitations/${activeInviteToken}/accept`, {})
-          if (typeof window !== 'undefined') localStorage.removeItem('tf_invite_token')
-          if (res.data?.projectId) {
-            router.push(`/app/projects/${res.data.projectId}`)
-            return
-          }
-        } catch (invErr) {
-          console.warn('Auto-accept invite on login error:', invErr)
-        }
+      // Store active invite token in localStorage so in-app onboarding wizard asks for referral code
+      if (activeInviteToken && typeof window !== 'undefined') {
+        localStorage.setItem('tf_invite_token', activeInviteToken)
       }
 
       // 3. Valid credentials -> take inside

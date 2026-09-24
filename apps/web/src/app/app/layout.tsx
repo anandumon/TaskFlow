@@ -23,10 +23,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
-    // Only show onboarding modal for newly registered users (isNewUser === true)
-    // If a user exists in DB and logs in, NEVER show the organization/workspace creation modal!
-    if (user && user.id && user.isNewUser === true) {
-      const completed = localStorage.getItem(`taskflow_onboarding_completed_${user.id}`)
+    if (!user || !user.id) return
+
+    const completed =
+      localStorage.getItem(`taskflow_onboarding_completed_${user.id}`) ||
+      localStorage.getItem('taskflow_onboarding_completed')
+    const hasInviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
+
+    // If user has an active invite token and has not completed onboarding, always show referral prompt!
+    if (hasInviteToken && !completed) {
+      setShowOnboarding(true)
+      return
+    }
+
+    if (
+      user.isNewUser === true ||
+      (typeof window !== 'undefined' && localStorage.getItem('taskflow_is_new_user') === 'true')
+    ) {
       if (!completed) {
         setShowOnboarding(true)
         return

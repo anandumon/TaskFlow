@@ -40,7 +40,7 @@ export async function PATCH(
     return apiSuccess(updated)
   } catch (err: any) {
     console.error('[API /organizations/:id] Error:', err)
-    return apiError(err.message || 'Failed to update organization', 500)
+    return apiError(err.message || 'Failed to update organization', err.statusCode || 400)
   }
 }
 

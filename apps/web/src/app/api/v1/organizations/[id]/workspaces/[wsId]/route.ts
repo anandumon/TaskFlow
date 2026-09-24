@@ -12,7 +12,7 @@ export async function PUT(
     const workspace = await updateWorkspace(params.wsId, body)
     return apiSuccess(workspace)
   } catch (err: any) {
-    return apiError(err.message || 'Failed to update workspace', 500)
+    return apiError(err.message || 'Failed to update workspace', err.statusCode || 400)
   }
 }
 

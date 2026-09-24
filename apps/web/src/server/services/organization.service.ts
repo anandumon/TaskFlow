@@ -113,49 +113,104 @@ export async function createOrganization(
   userId: string,
   input: { name: string; slug?: string; workspaceName?: string; workspaceColor?: string }
 ): Promise<OrganizationDto> {
+  const orgName = (input.name || '').trim()
+  if (!orgName) {
+    const error: any = new Error('Organization name is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  // Pre-check organization name uniqueness (case-insensitive)
+  const existingOrg = await queryOne(
+    `SELECT id, name FROM organizations 
+     WHERE LOWER(TRIM(name)) = LOWER($1) 
+       AND (deleted = false OR deleted IS NULL) 
+     LIMIT 1`,
+    [orgName]
+  )
+  if (existingOrg) {
+    const error: any = new Error(`An organization named "${orgName}" already exists. Please choose a unique organization name.`)
+    error.statusCode = 409
+    throw error
+  }
+
+  const wsName = (input.workspaceName || 'Main Workspace').trim()
+  if (!wsName) {
+    const error: any = new Error('Workspace name is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  // Pre-check primary workspace name uniqueness (case-insensitive)
+  const existingWs = await queryOne(
+    `SELECT id, name FROM workspaces 
+     WHERE LOWER(TRIM(name)) = LOWER($1) 
+       AND (deleted = false OR deleted IS NULL) 
+     LIMIT 1`,
+    [wsName]
+  )
+  if (existingWs) {
+    const error: any = new Error(`A workspace named "${wsName}" already exists. Please choose a unique workspace name.`)
+    error.statusCode = 409
+    throw error
+  }
+
   const id = crypto.randomUUID()
   const validOwnerId = await resolveValidOwnerId(userId)
   if (!validOwnerId) {
     throw new Error('User not authenticated')
   }
-  const slug = (input.slug || input.name).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
+  const slug = (input.slug || orgName).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
-  const row = await queryOne(
-    `INSERT INTO organizations (id, name, slug, plan, owner_id, settings, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, $3, 'PRO', $4, '{}', false, 0, $5, $5)
-     RETURNING *`,
-    [id, input.name, slug, validOwnerId, now]
-  )
-
-  // Add user as OWNER in organization_members
-  await query(
-    `INSERT INTO organization_members (id, organization_id, user_id, role_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $5)`,
-    [crypto.randomUUID(), id, validOwnerId, OWNER_ROLE_ID, now]
-  )
-
-  // Create primary workspace for this organization
-  const wsName = (input.workspaceName || 'Main Workspace').trim()
-  const wsColor = input.workspaceColor || '#3b82f6'
-  const defaultWsId = crypto.randomUUID()
-  await query(
-    `INSERT INTO workspaces (id, organization_id, name, slug, description, color, icon, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'Primary workspace', $5, 'Folder', false, 0, $6, $6)`,
-    [defaultWsId, id, wsName, `main-${id.slice(0, 8)}`, wsColor, now]
-  )
-
   try {
-    await query(
-      `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
-       VALUES ($1, $2, $3, 'OWNER', $4, $4)`,
-      [crypto.randomUUID(), defaultWsId, validOwnerId, now]
+    const row = await queryOne(
+      `INSERT INTO organizations (id, name, slug, plan, owner_id, settings, deleted, version, created_at, updated_at)
+       VALUES ($1, $2, $3, 'PRO', $4, '{}', false, 0, $5, $5)
+       RETURNING *`,
+      [id, orgName, slug, validOwnerId, now]
     )
-  } catch (wmErr) {
-    console.debug('[org.service] non-fatal workspace_members insert:', wmErr)
-  }
 
-  return mapOrg(row)
+    // Add user as OWNER in organization_members
+    await query(
+      `INSERT INTO organization_members (id, organization_id, user_id, role_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)`,
+      [crypto.randomUUID(), id, validOwnerId, OWNER_ROLE_ID, now]
+    )
+
+    // Create primary workspace for this organization
+    const wsColor = input.workspaceColor || '#3b82f6'
+    const defaultWsId = crypto.randomUUID()
+    await query(
+      `INSERT INTO workspaces (id, organization_id, name, slug, description, color, icon, deleted, version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'Primary workspace', $5, 'Folder', false, 0, $6, $6)`,
+      [defaultWsId, id, wsName, `main-${id.slice(0, 8)}`, wsColor, now]
+    )
+
+    try {
+      await query(
+        `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+         VALUES ($1, $2, $3, 'OWNER', $4, $4)`,
+        [crypto.randomUUID(), defaultWsId, validOwnerId, now]
+      )
+    } catch (wmErr) {
+      console.debug('[org.service] non-fatal workspace_members insert:', wmErr)
+    }
+
+    return mapOrg(row)
+  } catch (err: any) {
+    if (err.code === '23505' || err.message?.includes('organizations_unique_name')) {
+      const error: any = new Error(`An organization named "${orgName}" already exists. Please choose a unique organization name.`)
+      error.statusCode = 409
+      throw error
+    }
+    if (err.code === '23505' || err.message?.includes('workspaces_unique_name')) {
+      const error: any = new Error(`A workspace named "${wsName}" already exists. Please choose a unique workspace name.`)
+      error.statusCode = 409
+      throw error
+    }
+    throw err
+  }
 }
 
 export async function listOrgMembers(orgId: string): Promise<OrgMemberDto[]> {
@@ -199,22 +254,56 @@ export async function updateOrganization(
   const existing = await queryOne(`SELECT * FROM organizations WHERE id = $1`, [orgId])
   if (!existing) return null
 
-  const name = input.name !== undefined ? input.name : existing.name
+  let name = existing.name
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim()
+    if (!trimmed) {
+      const error: any = new Error('Organization name cannot be empty')
+      error.statusCode = 400
+      throw error
+    }
+    if (trimmed.toLowerCase() !== existing.name.trim().toLowerCase()) {
+      const dup = await queryOne(
+        `SELECT id FROM organizations 
+         WHERE LOWER(TRIM(name)) = LOWER($1) 
+           AND id != $2 
+           AND (deleted = false OR deleted IS NULL) 
+         LIMIT 1`,
+        [trimmed, orgId]
+      )
+      if (dup) {
+        const error: any = new Error(`An organization named "${trimmed}" already exists. Please choose a unique organization name.`)
+        error.statusCode = 409
+        throw error
+      }
+    }
+    name = trimmed
+  }
+
   const logoUrl = input.logoUrl !== undefined ? (input.logoUrl === '' || input.logoUrl === null ? null : input.logoUrl) : existing.logo_url
   const plan = input.plan !== undefined ? input.plan : existing.plan
 
-  const row = await queryOne(
-    `UPDATE organizations
-     SET name = $1,
-         logo_url = $2,
-         plan = $3,
-         updated_at = NOW()
-     WHERE id = $4
-     RETURNING *`,
-    [name, logoUrl, plan, orgId]
-  )
-  if (!row) return null
-  return mapOrg(row)
+  try {
+    const row = await queryOne(
+      `UPDATE organizations
+       SET name = $1,
+           logo_url = $2,
+           plan = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [name, logoUrl, plan, orgId]
+    )
+    if (!row) return null
+    return mapOrg(row)
+  } catch (err: any) {
+    if (err.code === '23505' || err.message?.includes('organizations_unique_name')) {
+      const error: any = new Error(`An organization named "${name}" already exists. Please choose a unique organization name.`)
+      error.statusCode = 409
+      throw error
+    }
+    throw err
+  }
 }
 
 export async function deleteOrganization(orgId: string, requestingUserId?: string): Promise<boolean> {

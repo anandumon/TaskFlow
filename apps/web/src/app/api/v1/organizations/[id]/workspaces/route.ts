@@ -23,6 +23,6 @@ export async function POST(
     const workspace = await createWorkspace(params.id, body)
     return apiSuccess(workspace, 201)
   } catch (err: any) {
-    return apiError(err.message || 'Failed to create workspace', 500)
+    return apiError(err.message || 'Failed to create workspace', err.statusCode || 400)
   }
 }

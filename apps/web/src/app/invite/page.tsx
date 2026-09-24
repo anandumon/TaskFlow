@@ -36,6 +36,7 @@ interface InvitationData {
   status: string
   role: string
   token: string
+  referralCode?: string
   expiresAt: string
 }
 
@@ -343,15 +344,23 @@ function InviteContent() {
           email: authEmail.trim().toLowerCase(),
           password,
         })
-        // Attempt automatic login after registration
-        try {
-          await login(authEmail.trim().toLowerCase(), password)
-        } catch {
-          // Continue to accept
+
+        // Store invite token and referral code in localStorage so the user can enter/redeem it after OTP verification & login
+        if (typeof window !== 'undefined') {
+          if (token) localStorage.setItem('tf_invite_token', token)
+          if (invitation?.referralCode) localStorage.setItem('tf_referral_code', invitation.referralCode)
+          localStorage.setItem('taskflow_is_new_user', 'true')
         }
+
+        setSuccessMessage('Account created! Please check your email for the 6-digit OTP verification code.')
+        setTimeout(() => {
+          const invParam = token ? `&invite_token=${encodeURIComponent(token)}` : ''
+          router.push(`/verify-email?email=${encodeURIComponent(authEmail.trim().toLowerCase())}${invParam}`)
+        }, 800)
+        return
       }
 
-      // Once authenticated, accept invitation immediately
+      // Once authenticated (existing login mode), accept invitation immediately
       if (token) {
         const res = await apiClient.post<any>(`/api/v1/invitations/${token}/accept`, {})
         const acceptData = res.data

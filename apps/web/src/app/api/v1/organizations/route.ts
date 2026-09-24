@@ -22,6 +22,6 @@ export async function POST(req: NextRequest) {
     const org = await createOrganization(user?.id || 'anonymous', body)
     return apiSuccess(org, 201)
   } catch (err: any) {
-    return apiError(err.message || 'Failed to create organization', 500)
+    return apiError(err.message || 'Failed to create organization', err.statusCode || 400)
   }
 }

@@ -20,6 +20,7 @@ function VerifyEmailContent() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
   const tokenParam = searchParams.get('token') || searchParams.get('token_hash') || ''
+  const inviteTokenParam = searchParams.get('invite_token') || ''
 
   const { verifyEmail, resendVerification, error, clearError } = useAuth()
 
@@ -41,7 +42,8 @@ function VerifyEmailContent() {
       verifyEmail({ email: emailParam, token: tokenParam })
         .then(() => {
           setIsSuccess(true)
-          setTimeout(() => router.push(`/login?email=${encodeURIComponent(emailParam)}&verified=true`), 1000)
+          const invParam = inviteTokenParam ? `&invite_token=${encodeURIComponent(inviteTokenParam)}` : ''
+          setTimeout(() => router.push(`/login?email=${encodeURIComponent(emailParam)}&verified=true${invParam}`), 1000)
         })
         .catch((err) => {
           setLocalError(err.message || 'Confirmation link is invalid or expired.')
@@ -138,8 +140,9 @@ function VerifyEmailContent() {
         token: otpCode,
       })
       setIsSuccess(true)
+      const invParam = inviteTokenParam ? `&invite_token=${encodeURIComponent(inviteTokenParam)}` : ''
       setTimeout(() => {
-        router.push(`/login?email=${encodeURIComponent(emailParam)}&verified=true`)
+        router.push(`/login?email=${encodeURIComponent(emailParam)}&verified=true${invParam}`)
       }, 1000)
     } catch (err: any) {
       setLocalError(err.message || 'That verification code is incorrect.')
