@@ -16,9 +16,23 @@ export interface InvitationDto {
   scope: string
   role: string
   token: string
+  referralCode?: string
   status: string
   expiresAt: string
   createdAt: string
+}
+
+let hasEnsuredInvitationsSchema = false
+export async function ensureInvitationsSchema() {
+  if (hasEnsuredInvitationsSchema) return
+  try {
+    await query(`ALTER TABLE invitations ADD COLUMN IF NOT EXISTS referral_code VARCHAR(64);`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_invitations_referral_code ON invitations(referral_code);`)
+    await query(`UPDATE invitations SET referral_code = 'TF-' || UPPER(SUBSTRING(token FROM 1 FOR 4)) || '-' || UPPER(SUBSTRING(token FROM 5 FOR 4)) WHERE referral_code IS NULL AND token IS NOT NULL;`)
+  } catch (e) {
+    console.warn('[invitation.service] ensureInvitationsSchema warning:', e)
+  }
+  hasEnsuredInvitationsSchema = true
 }
 
 function mapInvitation(row: any, inviterName?: string): InvitationDto {
@@ -36,6 +50,7 @@ function mapInvitation(row: any, inviterName?: string): InvitationDto {
     scope: row.scope || 'ORGANIZATION',
     role: row.role || 'MEMBER',
     token: row.token,
+    referralCode: row.referral_code || undefined,
     status: row.status || 'PENDING',
     expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : new Date().toISOString(),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
@@ -53,10 +68,15 @@ export async function createInvitation(
     projectId?: string
   }
 ): Promise<InvitationDto> {
+  await ensureInvitationsSchema()
   const id = crypto.randomUUID()
   const token = crypto.randomBytes(24).toString('hex')
   const now = new Date()
   const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000)
+
+  // Generate unique high-entropy referral code (e.g. TF-8K3N-7P2X)
+  const codeRaw = crypto.randomBytes(4).toString('hex').toUpperCase()
+  const referralCode = `TF-${codeRaw.slice(0, 4)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
 
   let prjName = 'Project'
   if (input.projectId) {
@@ -99,8 +119,8 @@ export async function createInvitation(
     `INSERT INTO invitations (
       id, email, role, role_id, scope, organization_id, organization_name,
       workspace_id, workspace_name, project_id, project_name,
-      token, token_hash, status, invited_by, expires_at, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'PENDING', $14, $15, $16, $16)
+      token, token_hash, referral_code, status, invited_by, expires_at, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'PENDING', $15, $16, $17, $17)
     RETURNING *`,
     [
       id,
@@ -116,6 +136,7 @@ export async function createInvitation(
       prjName,
       token,
       tokenHash,
+      referralCode,
       creatorId,
       expiresAt,
       now,
@@ -136,7 +157,8 @@ export async function createInvitation(
       orgName,
       wsName,
       prjName,
-      inviteUrl
+      inviteUrl,
+      referralCode
     )
   } catch (err: any) {
     console.error('[invitation.service] Failed to send invitation email:', err?.message || err)
@@ -148,8 +170,9 @@ export async function createInvitation(
 export async function getPendingInvitationsForUser(email: string): Promise<InvitationDto[]> {
   if (!email) return []
   try {
+    await ensureInvitationsSchema()
     const rows = await query(
-      `SELECT * FROM invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING'`,
+      `SELECT * FROM invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING' ORDER BY created_at DESC`,
       [email.trim()]
     )
     return rows.map((r) => mapInvitation(r))
@@ -159,8 +182,10 @@ export async function getPendingInvitationsForUser(email: string): Promise<Invit
   }
 }
 
-export async function getInvitationByToken(token: string): Promise<InvitationDto | null> {
-  const isId = token.length === 36 && token.includes('-')
+export async function getInvitationByToken(tokenOrCode: string): Promise<InvitationDto | null> {
+  await ensureInvitationsSchema()
+  const cleaned = (tokenOrCode || '').trim()
+  const isId = cleaned.length === 36 && cleaned.includes('-')
   const row = await queryOne(
     `SELECT i.*, 
             u.display_name as inviter_display_name, 
@@ -169,8 +194,16 @@ export async function getInvitationByToken(token: string): Promise<InvitationDto
             u.email as inviter_email
      FROM invitations i
      LEFT JOIN users u ON i.invited_by = u.id
-     WHERE ${isId ? 'i.id = $1' : 'i.token = $1 OR i.token_hash = $1'}`,
-    [token]
+     WHERE ${
+       isId
+         ? 'i.id = $1'
+         : `i.token = $1 
+            OR i.token_hash = $1 
+            OR UPPER(i.referral_code) = UPPER($1) 
+            OR UPPER(i.referral_code) = UPPER('TF-' || $1) 
+            OR UPPER(REPLACE(i.referral_code, '-', '')) = UPPER(REPLACE($1, '-', ''))`
+     }`,
+    [cleaned]
   )
   if (!row) return null
 
@@ -188,6 +221,7 @@ export async function getInvitationsForResource(
   resourceId: string
 ): Promise<InvitationDto[]> {
   try {
+    await ensureInvitationsSchema()
     let sql = `SELECT * FROM invitations WHERE status = 'PENDING'`
     const params = [resourceId]
 
@@ -213,19 +247,48 @@ export async function getInvitationsForResource(
 
 export async function acceptInvitation(
   userId: string,
-  tokenOrId: string
+  tokenOrCode: string
 ): Promise<InvitationDto> {
-  const isId = tokenOrId.length === 36 && tokenOrId.includes('-')
+  await ensureInvitationsSchema()
+  const cleaned = (tokenOrCode || '').trim()
+  const isId = cleaned.length === 36 && cleaned.includes('-')
   const inv = await queryOne(
-    `SELECT * FROM invitations WHERE ${isId ? 'id = $1' : 'token = $1 OR token_hash = $1'}`,
-    [tokenOrId]
+    `SELECT * FROM invitations WHERE ${
+      isId
+        ? 'id = $1'
+        : `token = $1 
+           OR token_hash = $1 
+           OR UPPER(referral_code) = UPPER($1) 
+           OR UPPER(referral_code) = UPPER('TF-' || $1) 
+           OR UPPER(REPLACE(referral_code, '-', '')) = UPPER(REPLACE($1, '-', ''))`
+    }`,
+    [cleaned]
   )
 
-  if (!inv) throw new Error('Invitation not found or expired')
+  if (!inv) throw new Error('Invitation or referral code not found or invalid.')
 
-  // Resolve target user id if not provided or anonymous
+  // Resolve target user id and perform email verification to prevent misuse
   const isUuid = (val?: string | null) => val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
   let targetUserId = userId
+  let currentUserEmail = ''
+
+  if (userId && userId !== 'anonymous') {
+    const u = await queryOne(`SELECT id, email FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`, [userId])
+    if (u?.id) {
+      targetUserId = u.id
+      currentUserEmail = (u.email || '').toLowerCase().trim()
+    }
+  }
+
+  // Anti-misuse check 1: Target email verification
+  if (currentUserEmail && inv.email) {
+    const invitedEmail = (inv.email || '').toLowerCase().trim()
+    if (invitedEmail && currentUserEmail !== invitedEmail) {
+      throw new Error(`This referral code was issued specifically for ${invitedEmail}. Please log in with that account to redeem it.`)
+    }
+  }
+
+  // If anonymous or user id not found, fallback to invited email user record
   if (!targetUserId || targetUserId === 'anonymous' || !isUuid(targetUserId)) {
     if (inv.email) {
       const u = await queryOne(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email])
@@ -236,6 +299,19 @@ export async function acceptInvitation(
         if (au?.id) targetUserId = au.id
       }
     }
+  }
+
+  // Anti-misuse check 2: Status and expiry check
+  if (inv.status === 'ACCEPTED') {
+    // If already accepted by THIS user, return it safely without failing
+    if (targetUserId && inv.invited_user_id === targetUserId) {
+      return mapInvitation(inv)
+    }
+    throw new Error('This invitation code has already been redeemed.')
+  }
+
+  if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
+    throw new Error('This invitation code has expired. Please request a new invitation.')
   }
 
   const now = new Date()
@@ -296,6 +372,29 @@ export async function acceptInvitation(
       }
     } catch (omErr) {
       console.warn('[invitation.service] organization_members upsert warning:', omErr)
+    }
+  }
+
+  if (inv.project_id && isUuid(targetUserId)) {
+    try {
+      const existingPm = await queryOne(
+        `SELECT id FROM project_memberships WHERE project_id = $1 AND user_id = $2`,
+        [inv.project_id, targetUserId]
+      )
+      if (existingPm) {
+        await query(
+          `UPDATE project_memberships SET role_id = $1, updated_at = $2, status = 'ACTIVE' WHERE id = $3`,
+          [roleId, now, existingPm.id]
+        )
+      } else {
+        await query(
+          `INSERT INTO project_memberships (id, project_id, user_id, role_id, joined_at, created_at, updated_at, status)
+           VALUES ($1, $2, $3, $4, $5, $5, $5, 'ACTIVE')`,
+          [crypto.randomUUID(), inv.project_id, targetUserId, roleId, now]
+        )
+      }
+    } catch (pmErr) {
+      console.warn('[invitation.service] project_memberships upsert warning:', pmErr)
     }
   }
 

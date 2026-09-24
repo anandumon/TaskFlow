@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { apiClient } from '@/lib/api-client'
 import {
   Zap,
   Building2,
@@ -17,6 +18,9 @@ import {
   Layers,
   FolderKanban,
   CheckCircle2,
+  Ticket,
+  KeyRound,
+  Users,
 } from 'lucide-react'
 
 interface OnboardingWizardModalProps {
@@ -38,12 +42,50 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   const { createOrganization, setCurrentOrg } = useOrgStore()
   const { fetchWorkspaces, setCurrentWorkspace } = useWorkspaceStore()
 
+  // Navigation mode: 'invite' (enter code or accept pending) | 'create' (create new org & workspace)
+  const [mode, setMode] = useState<'invite' | 'create'>('create')
+  const [referralCode, setReferralCode] = useState('')
+  const [isRedeemingCode, setIsRedeemingCode] = useState(false)
+  const [pendingInvites, setPendingInvites] = useState<any[]>([])
+  const [isLoadingPending, setIsLoadingPending] = useState(false)
+  const [inviteSuccessMessage, setInviteSuccessMessage] = useState<string | null>(null)
+
   const [step, setStep] = useState<1 | 2>(1)
   const [orgName, setOrgName] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
   const [workspaceColor, setWorkspaceColor] = useState('#6366F1')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 1. Fetch pending invites for user's email & pre-fill stored invite token if any
+  useEffect(() => {
+    let isMounted = true
+    const checkPendingInvites = async () => {
+      try {
+        setIsLoadingPending(true)
+        const storedToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
+        if (storedToken) {
+          setReferralCode(storedToken)
+          setMode('invite')
+        }
+
+        const res = await apiClient.get<any[]>('/api/v1/invitations/pending-for-me')
+        if (isMounted && res.data && res.data.length > 0) {
+          setPendingInvites(res.data)
+          // Default to invite mode if there is an active pending invite for this user
+          setMode('invite')
+        }
+      } catch (err) {
+        // Silently catch in background
+      } finally {
+        if (isMounted) setIsLoadingPending(false)
+      }
+    }
+    checkPendingInvites()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   // Pre-fill sensible defaults based on user's identity
   useEffect(() => {
@@ -56,6 +98,69 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
       setWorkspaceName('Main Workspace')
     }
   }, [user])
+
+  const handleRedeemCode = async (codeToRedeem?: string) => {
+    const targetCode = (codeToRedeem || referralCode).trim()
+    if (!targetCode) {
+      setError('Please enter a referral or invitation code.')
+      return
+    }
+
+    setIsRedeemingCode(true)
+    setError(null)
+
+    try {
+      const res = await apiClient.post<any>(`/api/v1/invitations/${encodeURIComponent(targetCode)}/accept`, {})
+      const inv = res.data
+
+      if (inv.organizationId) {
+        setCurrentOrg({
+          id: inv.organizationId,
+          name: inv.organizationName || inv.orgName || 'Organization',
+          slug: '',
+          plan: 'PRO',
+          ownerId: '',
+          createdAt: new Date().toISOString(),
+        } as any)
+      }
+
+      if (inv.workspaceId) {
+        setCurrentWorkspace({
+          id: inv.workspaceId,
+          organizationId: inv.organizationId,
+          name: inv.workspaceName || 'Workspace',
+          slug: '',
+          color: '#6366F1',
+          icon: 'folder',
+          createdAt: new Date().toISOString(),
+        } as any)
+      }
+
+      if (user?.id) {
+        localStorage.setItem(`taskflow_onboarding_completed_${user.id}`, 'true')
+      }
+      localStorage.setItem('taskflow_onboarding_completed', 'true')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('tf_invite_token')
+      }
+
+      setInviteSuccessMessage(`Success! Joined ${inv.projectName || inv.workspaceName || 'Workspace'}! Redirecting...`)
+
+      setTimeout(() => {
+        if (inv.projectId) {
+          window.location.href = `/app/projects/${inv.projectId}`
+        } else {
+          window.location.href = '/app/home'
+        }
+      }, 700)
+    } catch (err: any) {
+      console.error('Redeem invite error:', err)
+      const msg = err?.response?.data?.message || err?.message || 'Invalid or expired invitation code.'
+      setError(msg)
+    } finally {
+      setIsRedeemingCode(false)
+    }
+  }
 
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault()
@@ -130,33 +235,216 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
               <span className="text-base font-black tracking-tight text-white">TaskFlow</span>
             </div>
 
-            {/* Stepper Pill Indicator */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-medium text-white/70">
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full transition-all ${step === 1 ? 'bg-primary ring-2 ring-primary/30' : 'bg-emerald-500'}`} />
-                <span className="text-white font-semibold">{step}</span> of 2
-              </span>
-              <span className="text-white/30">•</span>
-              <span className="text-primary font-semibold">
-                {step === 1 ? 'Organization' : 'Workspace'}
-              </span>
-            </div>
+            {/* Stepper Pill Indicator (Only shown in create mode) */}
+            {mode === 'create' ? (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-medium text-white/70">
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full transition-all ${step === 1 ? 'bg-primary ring-2 ring-primary/30' : 'bg-emerald-500'}`} />
+                  <span className="text-white font-semibold">{step}</span> of 2
+                </span>
+                <span className="text-white/30">•</span>
+                <span className="text-primary font-semibold">
+                  {step === 1 ? 'Organization' : 'Workspace'}
+                </span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/25 text-[11px] font-semibold text-primary">
+                <Ticket className="w-3.5 h-3.5" />
+                <span>Join Existing Team</span>
+              </div>
+            )}
           </div>
 
-          {/* Stepper Progress Line */}
-          <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-primary to-indigo-500 transition-all duration-300 ease-out"
-              style={{ width: step === 1 ? '50%' : '100%' }}
-            />
+          {/* Mode Switcher Tabs: Enter Code vs Create Organization */}
+          <div className="grid grid-cols-2 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('invite')
+                setError(null)
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                mode === 'invite'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+                  : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
+              }`}
+            >
+              <Ticket className="w-3.5 h-3.5" />
+              <span>Invitation Code</span>
+              {pendingInvites.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('create')
+                setError(null)
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                mode === 'create'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+                  : 'text-white/60 hover:text-white hover:bg-white/[0.04]'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Create New Org</span>
+            </button>
           </div>
+
+          {/* Stepper Progress Line for Create Mode */}
+          {mode === 'create' && (
+            <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-primary to-indigo-500 transition-all duration-300 ease-out"
+                style={{ width: step === 1 ? '50%' : '100%' }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Modal Body */}
         <div className="p-6 sm:p-7 z-10">
-          
+
+          {/* INVITATION / REFERRAL CODE MODE */}
+          {mode === 'invite' && (
+            <div className="space-y-5 animate-scale-in">
+              <div className="space-y-1.5">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  Enter your Invitation Code
+                </h1>
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Enter the unique referral or invitation code sent to your email to automatically join your team's workspace and project.
+                </p>
+              </div>
+
+              {/* Pending Invites Auto-Detection Card */}
+              {pendingInvites.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Invitations Found for Your Email</span>
+                  </div>
+                  {pendingInvites.map((inv) => (
+                    <div
+                      key={inv.id}
+                      className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-3 shadow-lg shadow-emerald-950/20"
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                          <FolderKanban className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">{inv.projectName || 'Project'}</span>
+                        </div>
+                        <div className="text-[11px] text-white/60 flex items-center gap-1.5 truncate">
+                          <span>{inv.workspaceName || 'Workspace'}</span>
+                          <span>•</span>
+                          <span className="font-mono text-emerald-300/80">{inv.referralCode || 'Invite'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRedeemCode(inv.referralCode || inv.token || inv.id)}
+                        disabled={isRedeemingCode}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shrink-0 transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                      >
+                        {isRedeemingCode ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <span>Accept &amp; Join</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Code Input Form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  handleRedeemCode()
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1.5">
+                  <label htmlFor="refCode" className="text-xs font-semibold text-white/90 flex items-center justify-between">
+                    <span>Referral / Invitation Code</span>
+                    <span className="text-[10px] text-white/40 font-mono">e.g. TF-XXXX-XXXX</span>
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                    <input
+                      id="refCode"
+                      type="text"
+                      value={referralCode}
+                      onChange={(e) => {
+                        setReferralCode(e.target.value.toUpperCase())
+                        setError(null)
+                      }}
+                      placeholder="TF-XXXX-XXXX"
+                      className="w-full h-11 rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/20 pl-10 pr-3.5 text-xs font-mono font-bold text-white placeholder:text-white/20 tracking-wider transition-all outline-none"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {inviteSuccessMessage && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-2 animate-fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{inviteSuccessMessage}</span>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium animate-fade-in">
+                    {error}
+                  </div>
+                )}
+
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={isRedeemingCode || !referralCode.trim()}
+                    className="w-full h-11 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    {isRedeemingCode ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Validating Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Validate &amp; Join Team</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Helper footnote */}
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('create')
+                    setError(null)
+                  }}
+                  className="text-xs text-white/50 hover:text-white transition-colors cursor-pointer"
+                >
+                  Don't have an invitation code? <span className="text-primary font-semibold underline underline-offset-2">Create a new Organization</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* STEP 1: CREATE ORGANIZATION */}
-          {step === 1 && (
+          {mode === 'create' && step === 1 && (
             <form onSubmit={handleNextStep} className="space-y-5 animate-scale-in">
               <div className="space-y-1.5">
                 <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
@@ -229,7 +517,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
           )}
 
           {/* STEP 2: CREATE WORKSPACE */}
-          {step === 2 && (
+          {mode === 'create' && step === 2 && (
             <form onSubmit={handleFinish} className="space-y-5 animate-scale-in">
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-medium border border-primary/20 mb-1">

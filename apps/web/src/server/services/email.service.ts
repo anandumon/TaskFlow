@@ -232,12 +232,22 @@ export async function sendProjectInvitationEmail(
   orgName: string,
   workspaceName: string,
   projectName: string,
-  inviteUrl: string
+  inviteUrl: string,
+  referralCode?: string
 ): Promise<boolean> {
   const safeInviter = escapeHtml(inviterName || 'A team member')
   const safeOrg = escapeHtml(orgName || 'Organization')
   const safeWorkspace = escapeHtml(workspaceName || 'Workspace')
   const safeProject = escapeHtml(projectName || 'Project')
+  const safeCode = escapeHtml(referralCode || '')
+
+  const codeBoxHtml = safeCode
+    ? `<div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 14px; padding: 18px 20px; text-align: center; margin: 24px 0;">
+         <div style="font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #a5b4fc; margin-bottom: 6px;">Your Unique Invitation / Referral Code</div>
+         <div style="font-family: monospace; font-size: 26px; font-weight: 800; letter-spacing: 4px; color: #818cf8;">${safeCode}</div>
+         <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">You can click the button below or enter this code in TaskFlow to join directly.</div>
+       </div>`
+    : ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -262,6 +272,7 @@ export async function sendProjectInvitationEmail(
     <p style="font-size: 14px; color: #9ca3af; line-height: 1.6;">
       <strong>${safeInviter}</strong> has invited you to collaborate on <strong>${safeProject}</strong> in workspace <strong>${safeWorkspace}</strong> (${safeOrg}).
     </p>
+    ${codeBoxHtml}
     <div style="text-align: center; margin: 28px 0;">
       <a href="${inviteUrl}" class="btn">Join Project &amp; Get Started &rarr;</a>
     </div>

@@ -42,7 +42,7 @@ interface InvitationData {
 function InviteContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const token = searchParams.get('token')
+  const token = searchParams.get('token') || searchParams.get('code') || searchParams.get('referral_code')
   const autoAccept = searchParams.get('auto_accept') === 'true'
 
   const { user, isAuthenticated, login, register } = useAuthStore()
