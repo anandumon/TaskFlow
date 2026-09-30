@@ -431,6 +431,36 @@ export async function deleteMessageForEveryone(
 ): Promise<boolean> {
   await ensureChatSchema()
   try {
+    // If message contains or references a document, delete that document from database too
+    const msg = await queryOne(`SELECT * FROM chat_messages WHERE id = $1`, [messageId])
+    if (msg) {
+      const attachments = parseJsonArray(msg.attachments)
+      for (const a of attachments) {
+        if (a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))) {
+          const docId = a.docId || a.title
+          if (docId) {
+            try {
+              const { deleteWorkspaceDoc } = await import('./doc.service')
+              await deleteWorkspaceDoc(workspaceId, String(docId))
+            } catch (docErr) {
+              console.error('[chat.service] failed to delete attached doc from db:', docErr)
+            }
+          }
+        }
+      }
+      if (typeof msg.content === 'string') {
+        const docMatch = msg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+        if (docMatch && docMatch[1]) {
+          try {
+            const { deleteWorkspaceDoc } = await import('./doc.service')
+            await deleteWorkspaceDoc(workspaceId, docMatch[1].trim())
+          } catch (docErr) {
+            console.error('[chat.service] failed to delete matched doc from db:', docErr)
+          }
+        }
+      }
+    }
+
     // Delete from DB completely with no trace
     await query(
       `DELETE FROM chat_messages WHERE id = $1 AND workspace_id = $2`,

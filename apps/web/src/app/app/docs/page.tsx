@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   FileText,
   Plus,
@@ -16,19 +16,20 @@ import {
   Star,
   Link as LinkIcon,
   Users,
-  FolderKanban,
   Check,
-  Calendar,
   FilePlus,
 } from 'lucide-react'
 import { useDocStore, DocItem } from '@/stores/doc-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useWorkspaceStore } from '@/stores/workspace-store'
 import { DocViewerModal } from '@/features/docs/components/DocViewerModal'
 
 export default function DocsPage() {
   const { docs, loadDocs, createDoc, deleteDoc, updateDoc } = useDocStore()
   const { user } = useAuthStore()
+  const { currentWorkspace } = useWorkspaceStore()
 
+  const [isMounted, setIsMounted] = useState(false)
   const [promptQuery, setPromptQuery] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
@@ -37,8 +38,16 @@ export default function DocsPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    loadDocs()
-  }, [loadDocs])
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (currentWorkspace?.id) {
+      loadDocs(currentWorkspace.id)
+    } else {
+      loadDocs()
+    }
+  }, [loadDocs, currentWorkspace?.id])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -46,7 +55,7 @@ export default function DocsPage() {
   }
 
   const handleCreatePromptDoc = (customTitle?: string, customContent?: string) => {
-    const titleToUse = customTitle || promptQuery.trim() || 'Untitled Doc'
+    const titleToUse = (customTitle || promptQuery || '').trim() || 'Untitled Doc'
     const author = user?.displayName || user?.firstName || 'anandu'
     const newDoc = createDoc(titleToUse, customContent || '', author, 'Team Space')
     setPromptQuery('')
@@ -62,7 +71,7 @@ export default function DocsPage() {
 
   const handleDeleteDoc = (e: React.MouseEvent, docId: string, docTitle: string) => {
     e.stopPropagation()
-    deleteDoc(docId)
+    deleteDoc(docId, currentWorkspace?.id)
     showToast(`Deleted "${docTitle}"`)
   }
 
@@ -79,13 +88,21 @@ export default function DocsPage() {
     }
   }
 
-  // Filter docs based on search
-  const filteredDocs = docs
-    .filter((d) => d.title.toLowerCase().includes(searchFilter.toLowerCase()))
-    .sort((a, b) => {
-      if (activeSort === 'name') return a.title.localeCompare(b.title)
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    })
+  // Safe filter docs based on search and sort
+  const filteredDocs = useMemo(() => {
+    return (docs || [])
+      .filter((d) => {
+        if (!d || typeof d !== 'object' || !d.id || typeof d.title !== 'string') return false
+        if (!searchFilter.trim()) return true
+        return d.title.toLowerCase().includes(searchFilter.trim().toLowerCase())
+      })
+      .sort((a, b) => {
+        if (activeSort === 'name') return (a.title || '').localeCompare(b.title || '')
+        const bTime = b?.updatedAt ? new Date(b.updatedAt).getTime() : 0
+        const aTime = a?.updatedAt ? new Date(a.updatedAt).getTime() : 0
+        return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime)
+      })
+  }, [docs, searchFilter, activeSort])
 
   const templates = [
     {
@@ -110,20 +127,30 @@ export default function DocsPage() {
     },
   ]
 
-  const formatDocDate = (dateStr: string) => {
+  const formatDocDate = (dateStr?: string) => {
+    if (!dateStr) return 'Recently'
     try {
       const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return 'Recently'
+      if (!isMounted) {
+        return 'Today'
+      }
       const now = new Date()
       const isToday = date.toDateString() === now.toDateString()
       if (isToday) {
-        return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        let hours = date.getHours()
+        const minutes = date.getMinutes().toString().padStart(2, '0')
+        const ampm = hours >= 12 ? 'PM' : 'AM'
+        hours = hours % 12
+        hours = hours ? hours : 12
+        return `Today at ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`
       }
       const yesterday = new Date()
       yesterday.setDate(now.getDate() - 1)
       if (date.toDateString() === yesterday.toDateString()) {
         return 'Yesterday'
       }
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     } catch {
       return 'Recently'
     }
@@ -369,11 +396,11 @@ export default function DocsPage() {
                         {doc.tags && doc.tags.length > 0 ? doc.tags.join(', ') : '—'}
                       </td>
 
-                      <td className="py-3 px-4 text-zinc-400 font-medium">
+                      <td className="py-3 px-4 text-zinc-400 font-medium" suppressHydrationWarning>
                         {formatDocDate(doc.updatedAt)}
                       </td>
 
-                      <td className="py-3 px-4 text-zinc-400 font-medium">
+                      <td className="py-3 px-4 text-zinc-400 font-medium" suppressHydrationWarning>
                         {doc.viewedAt ? formatDocDate(doc.viewedAt) : '12:02 pm'}
                       </td>
                     </tr>

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import { useDocStore, DocItem, SubPageItem } from '@/stores/doc-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore } from '@/stores/task-store'
 
 interface DocViewerModalProps {
@@ -66,6 +67,7 @@ export function DocViewerModal({
     loadDocs,
   } = useDocStore()
   const { user } = useAuthStore()
+  const { currentWorkspace } = useWorkspaceStore()
   const { tasks } = useTaskStore()
 
   const [currentDoc, setCurrentDoc] = useState<DocItem | null>(null)
@@ -113,15 +115,18 @@ export function DocViewerModal({
 
     let doc = getDoc(docId)
     if (!doc && docTitle) {
-      const found = docs.find((d) => d.id === docId || d.title.toLowerCase() === docTitle.toLowerCase())
+      const cleanTitle = (docTitle || '').trim().toLowerCase()
+      const found = (docs || []).find(
+        (d) => d && (d.id === docId || (typeof d.title === 'string' && d.title.trim().toLowerCase() === cleanTitle))
+      )
       if (found) {
         doc = found
       } else {
         const author = user?.displayName || user?.firstName || 'anandu'
-        doc = createDoc(docTitle, '', author)
+        doc = createDoc(docTitle, '', author, 'Team Space', { docId })
       }
     } else if (!doc && !docTitle) {
-      const found = docs.find((d) => d.id === docId)
+      const found = (docs || []).find((d) => d && d.id === docId)
       if (found) {
         doc = found
       }
@@ -229,7 +234,7 @@ export function DocViewerModal({
       setIsConfirmingDelete(false)
       showToast('Subpage deleted')
     } else {
-      deleteDoc(currentDoc.id)
+      deleteDoc(currentDoc.id, currentWorkspace?.id)
       setIsConfirmingDelete(false)
       showToast(`Document "${title}" deleted successfully`)
       setTimeout(() => {
@@ -525,7 +530,7 @@ export function DocViewerModal({
               {currentDoc?.authorName || user?.displayName || user?.firstName || 'anandu'}
             </span>
             <span className="text-zinc-600">•</span>
-            <span>
+            <span suppressHydrationWarning>
               Last updated Today at{' '}
               {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>

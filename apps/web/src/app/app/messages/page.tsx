@@ -274,6 +274,27 @@ export default function MessagesPage() {
   const handleConfirmDeleteMessage = async () => {
     if (!deletingMessage || !currentWorkspace?.id) return
 
+    const docAtt = deletingMessage.attachments?.find(
+      (a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))
+    )
+    const wbAtt = deletingMessage.attachments?.find(
+      (a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId))
+    )
+    if (docAtt && (docAtt.docId || docAtt.title)) {
+      deleteDoc(docAtt.docId || docAtt.title, currentWorkspace.id)
+    }
+    if (typeof deletingMessage.content === 'string') {
+      const docMatch = deletingMessage.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+      if (docMatch && docMatch[1]) {
+        deleteDoc(docMatch[1].trim(), currentWorkspace.id)
+      }
+    }
+    if (wbAtt && wbAtt.boardId) {
+      try {
+        localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
+      } catch {}
+    }
+
     await deleteMessage(currentWorkspace.id, deletingMessage.id, deleteMode)
     setToastMessage(
       deleteMode === 'everyone'
@@ -378,10 +399,16 @@ export default function MessagesPage() {
     for (const msgId of idsToDelete) {
       const msg = messages.find((m) => m.id === msgId)
       if (msg) {
-        const docAtt = msg.attachments?.find((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))
-        const wbAtt = msg.attachments?.find((a: any) => a.type === 'whiteboard' || Boolean(a.boardId))
+        const docAtt = msg.attachments?.find((a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)))
+        const wbAtt = msg.attachments?.find((a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId)))
         if (docAtt && (docAtt.docId || docAtt.title)) {
-          deleteDoc(docAtt.docId || docAtt.title)
+          deleteDoc(docAtt.docId || docAtt.title, currentWorkspace.id)
+        }
+        if (typeof msg.content === 'string') {
+          const docMatch = msg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+          if (docMatch && docMatch[1]) {
+            deleteDoc(docMatch[1].trim(), currentWorkspace.id)
+          }
         }
         if (wbAtt && wbAtt.boardId) {
           try {
