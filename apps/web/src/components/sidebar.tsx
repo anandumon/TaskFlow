@@ -53,12 +53,13 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, logout } = useAuthStore()
-  const { currentOrg, organizations, setCurrentOrg } = useOrgStore()
+  const { currentOrg, organizations, setCurrentOrg, switchOrganization } = useOrgStore()
   const { currentWorkspace, workspaces, setCurrentWorkspace } = useWorkspaceStore()
   const { channels, fetchChannels, createChannel, setActiveChannel, setActiveDMUser } = useChatStore()
   const { isUserOnline } = usePresenceStore()
   const { theme, toggleTheme } = useUserTheme()
 
+  const [isSwitchingOrg, setIsSwitchingOrg] = useState(false)
   const [orgDropdownOpen, setOrgDropdownOpen] = useState(false)
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false)
   const [guideModalOpen, setGuideModalOpen] = useState(false)
@@ -265,7 +266,12 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
 
   const renderContent = () => (
     <aside
-      onClick={() => {
+      ref={sidebarContainerRef}
+      onClick={(e) => {
+        const target = e.target as HTMLElement
+        if (target.closest('button, a, input, select, textarea, [role="button"], [data-no-expand="true"]')) {
+          return
+        }
         if (!isLockedExpanded) {
           setIsLockedExpanded(true)
         }
@@ -301,6 +307,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           {/* Org Switcher Card */}
           <div ref={orgContainerRef} onMouseMove={resetOrgTimer} className="relative">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 setOrgDropdownOpen(!orgDropdownOpen)
@@ -345,16 +352,20 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                     return (
                       <button
                         key={org.id}
-                        onClick={async () => {
-                          setCurrentOrg(org)
+                        type="button"
+                        disabled={isSwitchingOrg}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (currentOrg?.id === org.id) {
+                            setOrgDropdownOpen(false)
+                            return
+                          }
+                          setIsSwitchingOrg(true)
                           setOrgDropdownOpen(false)
                           try {
-                            const wss = await useWorkspaceStore.getState().fetchWorkspaces(org.id)
-                            if (wss && wss.length > 0) {
-                              setCurrentWorkspace(wss[0])
-                            }
-                          } catch (err) {
-                            console.error('Failed to load workspaces for org:', err)
+                            await switchOrganization(org)
+                          } finally {
+                            setIsSwitchingOrg(false)
                           }
                         }}
                         className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
@@ -502,9 +513,17 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                       return (
                         <button
                           key={ws.id}
-                          onClick={() => {
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
                             setCurrentWorkspace(ws)
                             setWsDropdownOpen(false)
+                            import('@/stores/project-store').then(({ useProjectStore }) => {
+                              useProjectStore.getState().loadProjects(ws.id).catch(() => {})
+                            })
+                            import('@/stores/task-store').then(({ useTaskStore }) => {
+                              useTaskStore.getState().loadTasks(ws.id).catch(() => {})
+                            })
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${isSelected
                               ? 'bg-primary/15 text-primary font-bold shadow-xs'
@@ -530,7 +549,9 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                   {/* Create New Workspace Button */}
                   <div className="pt-1.5 border-t border-border/60">
                     <button
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setWsDropdownOpen(false)
                         setCreateWsModalOpen(true)
                       }}
@@ -547,6 +568,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         ) : (
           <div className="py-2 flex flex-col items-center">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 setIsLockedExpanded(true)
@@ -576,7 +598,10 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 prefetch={true}
-                onClick={onCloseMobile}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (onCloseMobile) onCloseMobile()
+                }}
                 title={item.label}
                 className={`flex items-center rounded-xl text-xs font-semibold transition-all ${
                   isExpanded
@@ -866,7 +891,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
             </div>
 
             <button
-              onClick={toggleTheme}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleTheme()
+              }}
               className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               title="Toggle theme"
             >
@@ -875,7 +904,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           </div>
 
           <button
-            onClick={() => logout()}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              logout()
+            }}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -886,7 +919,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         <div className="py-2.5 px-2 border-t border-border/50 space-y-2 shrink-0 bg-sidebar flex flex-col items-center">
           {/* User Guide Compact */}
           <button
-            onClick={() => setGuideModalOpen(true)}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setGuideModalOpen(true)
+            }}
             className="w-10 h-10 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 flex items-center justify-center text-primary transition-all cursor-pointer group"
             title="Workspace Guide"
           >
@@ -913,7 +950,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
 
           {/* Theme Toggle Compact */}
           <button
-            onClick={toggleTheme}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleTheme()
+            }}
             className="w-10 h-10 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
             title="Toggle theme"
           >
@@ -922,7 +963,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
 
           {/* Sign Out Compact */}
           <button
-            onClick={() => logout()}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              logout()
+            }}
             className="w-10 h-10 rounded-xl text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors cursor-pointer"
             title="Sign out"
           >

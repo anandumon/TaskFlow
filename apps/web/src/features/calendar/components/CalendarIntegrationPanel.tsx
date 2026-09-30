@@ -130,9 +130,11 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
   }
 
   const handleConnectGoogle = async () => {
+    if (isConnectingGoogle) return
     try {
       setIsConnectingGoogle(true)
       await connectWithPopup('google', currentWorkspace?.id)
+      setTimeout(() => setIsConnectingGoogle(false), 8000)
     } catch (err: any) {
       notify(`Connection error: ${err.message || 'Error'}`)
       setIsConnectingGoogle(false)
@@ -190,10 +192,17 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
   }
 
   const handleManualSync = async (conn: CalendarConnection) => {
+    if (syncingId === conn.id) return
     setSyncingId(conn.id)
     try {
       const res = await triggerSync(conn.id)
-      notify(`Sync completed: ${res.eventsCreated} created, ${res.eventsUpdated} updated`)
+      const countNotice =
+        res.eventsSynced !== undefined
+          ? `Synced ${res.eventsSynced} events and exported ${res.tasksExported || 0} tasks.`
+          : res.eventsCreated !== undefined
+          ? `${res.eventsCreated} created, ${res.eventsUpdated || 0} updated.`
+          : 'Sync completed.'
+      notify(res.message || `Calendar sync successful! ${countNotice}`)
     } catch (err: any) {
       notify(`Sync failed: ${err.message || 'Error'}`)
     } finally {
@@ -302,20 +311,20 @@ export function CalendarIntegrationPanel({ onSuccess, compact = false }: Calenda
           {showVerificationHelp && (
             <div className="mt-2 p-3 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground space-y-2 animate-fade-in leading-relaxed">
               <p className="font-semibold text-foreground">
-                How to allow other team members to connect Google Calendar:
+                How to resolve &quot;Error 403: access_denied&quot; when connecting Google Calendar:
               </p>
               <p>
-                In Google Cloud Console, any app requesting calendar scopes starts in <strong>&quot;Testing&quot;</strong> status. Under Google security rules, only developer-approved accounts can log in until published.
+                In Google Cloud Console, any unverified OAuth application requesting calendar access starts in <strong>&quot;Testing&quot;</strong> mode. Google strictly blocks any account that is not listed in your Google Cloud <strong>Test users</strong>.
               </p>
               <div className="space-y-1.5 pl-2 border-l-2 border-primary/40">
                 <p>
-                  <strong>Option 1 (Add team members):</strong> Go to Google Cloud Console &rarr; <em>APIs &amp; Services</em> &rarr; <em>OAuth consent screen</em> &rarr; <em>Test users</em> &rarr; click <strong>+ ADD USERS</strong> and enter <code className="text-primary font-mono text-[10px] bg-primary/10 px-1 py-0.5 rounded">mohamedakthar260@gmail.com</code>.
+                  <strong>Fix (Add Test User in Google Cloud Console):</strong> Go to Google Cloud Console &rarr; <em>APIs &amp; Services</em> &rarr; <em>OAuth consent screen</em> &rarr; <em>Audience / Test users</em> &rarr; click <strong>+ ADD USERS</strong> and enter <code className="text-primary font-mono text-[10px] bg-primary/10 px-1 py-0.5 rounded font-bold">{user?.email || 'ananduanandu21@gmail.com'}</code>, then click <strong>SAVE</strong>.
                 </p>
                 <p>
-                  <strong>Option 2 (Publish App for everyone):</strong> Click <strong>&quot;PUBLISH APP&quot;</strong> on the OAuth consent screen to make it accessible to all Google users.
+                  <strong>Alternative (Publish App):</strong> On the same OAuth consent screen in Google Cloud Console, click <strong>&quot;PUBLISH APP&quot;</strong> to allow any Google user to authenticate.
                 </p>
                 <p>
-                  <strong>Option 3 (Instant zero-config sync):</strong> Use the <strong>&quot;Subscribe in Google Calendar&quot;</strong> button above! It uses the standard live iCal calendar feed which works 100% reliably for everyone without requiring any OAuth scopes or verification.
+                  <strong>Instant Live Sync (No OAuth verification needed):</strong> Use the <strong>&quot;Subscribe in Google Calendar&quot;</strong> button above! It uses the live iCal calendar feed which works instantly for all team members without needing any OAuth permissions or verification.
                 </p>
               </div>
             </div>

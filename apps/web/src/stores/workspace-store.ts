@@ -42,6 +42,7 @@ interface WorkspaceState {
   error: string | null
 
   fetchWorkspaces: (orgId: string) => Promise<Workspace[]>
+  setWorkspaces: (workspaces: Workspace[]) => void
   setCurrentWorkspace: (workspace: Workspace | null) => void
   createWorkspace: (orgId: string, data: { name: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
   updateWorkspace: (orgId: string, workspaceId: string, data: { name?: string; description?: string; color?: string; icon?: string }) => Promise<Workspace>
@@ -58,6 +59,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   teams: [],
   isLoading: false,
   error: null,
+
+  setWorkspaces: (workspaces) => set({ workspaces }),
 
   fetchWorkspaces: async (orgId: string) => {
     if (!orgId) {

@@ -77,6 +77,7 @@ interface OrgState {
   fetchOrganizations: () => Promise<Organization[]>
   fetchUserResources: () => Promise<UserResourceTree | null>
   setCurrentOrg: (org: Organization | null) => void
+  switchOrganization: (org: Organization) => Promise<void>
   createOrganization: (name: string, workspaceName?: string, workspaceColor?: string) => Promise<Organization>
   fetchMembers: (orgId: string) => Promise<OrgMember[]>
   addMember: (orgId: string, userId: string, roleId?: string) => Promise<OrgMember>
@@ -127,6 +128,64 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   },
 
   setCurrentOrg: (org) => set({ currentOrg: org }),
+
+  switchOrganization: async (org: Organization) => {
+    if (!org) return
+    set({ currentOrg: org })
+
+    const wsStore = useWorkspaceStore.getState()
+    const tree = get().resourceTree
+    const orgResource = tree?.organizations?.find((o) => o.id === org.id)
+    const cachedWorkspaces = orgResource?.workspaces?.map((w) => ({
+      id: w.id,
+      name: w.name,
+      slug: w.slug,
+      color: w.color || '#00638E',
+      icon: w.icon || 'Folder',
+      role: w.role || 'MEMBER',
+      organizationId: org.id,
+      createdAt: new Date().toISOString(),
+    })) || []
+
+    // 1. Instant optimistic hydration for 0ms transition
+    if (cachedWorkspaces.length > 0) {
+      wsStore.setWorkspaces(cachedWorkspaces)
+      wsStore.setCurrentWorkspace(cachedWorkspaces[0])
+
+      // Fast parallel pre-fetch for the workspace projects, tasks, and members
+      import('./project-store').then(({ useProjectStore }) => {
+        useProjectStore.getState().loadProjects(cachedWorkspaces[0].id).catch(() => {})
+      })
+      import('./task-store').then(({ useTaskStore }) => {
+        useTaskStore.getState().loadTasks(cachedWorkspaces[0].id).catch(() => {})
+      })
+      wsStore.fetchMembers(cachedWorkspaces[0].id).catch(() => {})
+    }
+
+    // 2. Parallel background revalidation
+    try {
+      const [wss] = await Promise.all([
+        wsStore.fetchWorkspaces(org.id),
+        get().fetchMembers(org.id).catch(() => []),
+      ])
+
+      if (wss && wss.length > 0) {
+        const curWs = wsStore.currentWorkspace
+        if (!curWs || curWs.organizationId !== org.id || !wss.some((w) => w.id === curWs.id)) {
+          wsStore.setCurrentWorkspace(wss[0])
+          import('./project-store').then(({ useProjectStore }) => {
+            useProjectStore.getState().loadProjects(wss[0].id).catch(() => {})
+          })
+          import('./task-store').then(({ useTaskStore }) => {
+            useTaskStore.getState().loadTasks(wss[0].id).catch(() => {})
+          })
+          wsStore.fetchMembers(wss[0].id).catch(() => {})
+        }
+      }
+    } catch (err) {
+      console.warn('Background workspace refresh error:', err)
+    }
+  },
 
   createOrganization: async (name: string, workspaceName?: string, workspaceColor?: string) => {
     set({ isLoading: true, error: null })

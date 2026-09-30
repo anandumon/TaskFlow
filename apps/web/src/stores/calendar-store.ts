@@ -61,13 +61,18 @@ export interface CalendarUnifiedEvent {
 }
 
 export interface CalendarSyncResult {
-  success: boolean
+  success?: boolean
   connectionId: string
   externalCalendarId?: string
-  eventsCreated: number
-  eventsUpdated: number
-  eventsDeleted: number
-  errors: string[]
+  eventsSynced?: number
+  tasksExported?: number
+  eventsCreated?: number
+  eventsUpdated?: number
+  eventsDeleted?: number
+  status?: string
+  message?: string
+  timestamp?: string
+  errors?: string[]
 }
 
 interface CalendarState {
