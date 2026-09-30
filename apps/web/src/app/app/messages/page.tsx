@@ -2026,6 +2026,7 @@ export default function MessagesPage() {
             <ChatInputBar
               targetName={activeChannel ? activeChannel.name : activeDMUser?.name || 'team member'}
               targetType={activeChannel ? 'channel' : 'dm'}
+              activeChannel={activeChannel}
               activeDMUser={activeDMUser}
               members={displayedMembers}
               tasks={tasks}

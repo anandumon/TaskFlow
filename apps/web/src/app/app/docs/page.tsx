@@ -36,6 +36,7 @@ export default function DocsPage() {
   const [isViewerOpen, setIsViewerOpen] = useState(false)
   const [activeSort, setActiveSort] = useState<'updated' | 'name'>('updated')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [docToDelete, setDocToDelete] = useState<{ id: string; title: string } | null>(null)
 
   useEffect(() => {
     setIsMounted(true)
@@ -69,10 +70,16 @@ export default function DocsPage() {
     setIsViewerOpen(true)
   }
 
-  const handleDeleteDoc = (e: React.MouseEvent, docId: string, docTitle: string) => {
+  const handleRequestDeleteDoc = (e: React.MouseEvent, docId: string, docTitle: string) => {
     e.stopPropagation()
-    deleteDoc(docId, currentWorkspace?.id)
-    showToast(`Deleted "${docTitle}"`)
+    setDocToDelete({ id: docId, title: docTitle })
+  }
+
+  const handleConfirmDeleteDoc = () => {
+    if (!docToDelete) return
+    deleteDoc(docToDelete.id, currentWorkspace?.id)
+    showToast(`Deleted "${docToDelete.title}"`)
+    setDocToDelete(null)
   }
 
   const handleToggleStar = (e: React.MouseEvent, doc: DocItem) => {
@@ -375,7 +382,7 @@ export default function DocsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteDoc(e, doc.id, doc.title)}
+                              onClick={(e) => handleRequestDeleteDoc(e, doc.id, doc.title)}
                               className="p-1 rounded hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400"
                               title="Delete document"
                             >
@@ -421,6 +428,51 @@ export default function DocsPage() {
           </table>
         </div>
       </div>
+
+      {/* Delete Permission Confirmation Modal */}
+      {docToDelete && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setDocToDelete(null)}
+        >
+          <div
+            className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in select-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Delete Document</h3>
+                <p className="text-xs text-zinc-400">Confirmation & Permission</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to delete <strong className="text-white">"{docToDelete.title}"</strong>? This will permanently remove the document from your workspace and database. This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDoc}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Document</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FULL DOCUMENT VIEWER / MODAL */}
       {isViewerOpen && selectedDocId && (

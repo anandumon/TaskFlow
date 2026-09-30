@@ -42,6 +42,8 @@ import { ResourceMentionPalette } from './ResourceMentionPalette'
 interface ChatInputBarProps {
   targetName: string
   targetType: 'channel' | 'dm'
+  activeChannel?: any
+  activeDMUser?: DMContact | null
   members: DMContact[]
   tasks?: Array<{
     id: string
@@ -55,7 +57,6 @@ interface ChatInputBarProps {
     assignees?: string
     tag?: string
   }>
-  activeDMUser?: DMContact | null
   isSending: boolean
   onSendMessage: (content: string, attachments?: any[]) => void
 }
@@ -63,9 +64,10 @@ interface ChatInputBarProps {
 export function ChatInputBar({
   targetName,
   targetType,
+  activeChannel,
+  activeDMUser,
   members,
   tasks = [],
-  activeDMUser,
   isSending,
   onSendMessage,
 }: ChatInputBarProps) {
@@ -178,8 +180,8 @@ export function ChatInputBar({
         targetType === 'channel'
           ? activeChannel?.name
             ? `#${activeChannel.name}`
-            : '#General'
-          : `DM with ${activeDMUser?.name || 'User'}`
+            : `#${targetName || 'General'}`
+          : `DM with ${activeDMUser?.name || targetName || 'User'}`
 
       const created = useDocStore.getState().createDoc(finalDocTitle, '', authorName, location, {
         channelId: targetType === 'channel' ? activeChannel?.id : undefined,
@@ -199,7 +201,7 @@ export function ChatInputBar({
       if (docMessageText.trim()) {
         content = docMessageText.trim()
       } else if (!content) {
-        content = ''
+        content = `/Create Doc ${finalDocTitle}`
       }
       setIsDocMode(false)
       setDocName('')
@@ -207,7 +209,11 @@ export function ChatInputBar({
       setDocMessageText('')
     }
 
-    onSendMessage(content, finalAttachments.length > 0 ? finalAttachments : undefined)
+    try {
+      onSendMessage(content, finalAttachments.length > 0 ? finalAttachments : undefined)
+    } catch (err) {
+      console.error('[ChatInputBar] failed to send message:', err)
+    }
     setInputText('')
     setStagedAttachments([])
     setIsSlashOpen(false)
