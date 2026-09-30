@@ -44,12 +44,36 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   loadProjects: async (workspaceId: string) => {
     if (!workspaceId) return
-    if (get().projects.length === 0) {
-      set({ isLoading: true, error: null })
+    const currentProjs = get().projects
+    if (currentProjs.length === 0) {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(`taskflow_cached_projects_${workspaceId}`)
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              set({ projects: parsed, isLoading: false })
+            } else {
+              set({ isLoading: true, error: null })
+            }
+          } catch {
+            set({ isLoading: true, error: null })
+          }
+        } else {
+          set({ isLoading: true, error: null })
+        }
+      } else {
+        set({ isLoading: true, error: null })
+      }
     }
+
     try {
       const res = await apiClient.get<Project[]>(`/api/v1/workspaces/${workspaceId}/projects`)
-      set({ projects: res.data || [], isLoading: false })
+      const list = res.data || []
+      set({ projects: list, isLoading: false })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`taskflow_cached_projects_${workspaceId}`, JSON.stringify(list))
+      }
     } catch (err: any) {
       set({ error: err?.message || 'Failed to load projects', isLoading: false })
     }

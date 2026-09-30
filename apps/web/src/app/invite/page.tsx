@@ -734,6 +734,7 @@ function InviteContent() {
         onClose={() => setIsGoogleModalOpen(false)}
         onDirectGoogleLogin={handleDirectGoogleLogin}
         initialEmail={invitation?.email || authEmail}
+        mode={authMode === 'login' ? 'signin' : 'signup'}
       />
     </div>
   )

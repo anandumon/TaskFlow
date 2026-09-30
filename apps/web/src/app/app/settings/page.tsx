@@ -711,23 +711,23 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
+    <div className="h-full flex flex-col min-h-0 max-w-6xl mx-auto w-full animate-fade-in overflow-hidden">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Settings & Preferences</h1>
-        <p className="text-xs text-muted-foreground mt-1">
+      <div className="shrink-0 mb-3">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Settings & Preferences</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
           Manage your personal account, organization policies, workspace branding, and security credentials.
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border/80 gap-6 overflow-x-auto">
+      <div className="shrink-0 flex border-b border-border/80 gap-6 overflow-x-auto mb-4">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -735,7 +735,7 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${isActive
+              className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${isActive
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
@@ -747,27 +747,30 @@ export default function SettingsPage() {
         })}
       </div>
 
+      {/* Active Tab Panel */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+
       {/* Profile Tab */}
       {activeTab === 'profile' && (
-        <form onSubmit={handleSaveProfile} className="space-y-6 max-w-2xl bg-card border border-border/80 p-6 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="relative group">
+        <form onSubmit={handleSaveProfile} className="space-y-4 max-w-4xl bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-4 pb-3 border-b border-border/60">
+            <div className="relative group shrink-0">
               {avatarPreview ? (
                 <img
                   src={avatarPreview}
                   alt="Avatar"
-                  className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-primary/30"
+                  className="w-14 h-14 rounded-xl object-cover shadow-sm border border-primary/30"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center text-xl font-bold shadow-md">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center text-lg font-bold shadow-sm">
                   {firstName.charAt(0) || 'A'}
                 </div>
               )}
               <label
                 htmlFor="avatar-upload-input"
-                className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
+                className="absolute inset-0 bg-black/60 rounded-xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
               >
-                <Camera className="w-4 h-4 mb-0.5" />
+                <Camera className="w-3.5 h-3.5 mb-0.5" />
                 <span>Change</span>
               </label>
               <input
@@ -780,13 +783,13 @@ export default function SettingsPage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">Profile Avatar & Bio</h3>
-              <p className="text-xs text-muted-foreground">Personalize your identity across boards, sprint calendar, and member views.</p>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
+              <p className="text-[11px] text-muted-foreground">Personalize your identity across boards, sprint calendar, and member views.</p>
+              <div className="flex flex-wrap items-center gap-2 mt-1.5">
                 <label
                   htmlFor="avatar-upload-input"
-                  className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-xs font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                  className="px-2.5 py-0.5 rounded-lg bg-card border border-border text-foreground text-[10px] font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
                 >
-                  {isUploadingAvatar ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                  {isUploadingAvatar ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Upload className="w-2.5 h-2.5" />}
                   <span>Upload Photo</span>
                 </label>
                 {avatarPreview && (
@@ -794,129 +797,135 @@ export default function SettingsPage() {
                     type="button"
                     onClick={handleRemoveAvatar}
                     disabled={isUploadingAvatar}
-                    className="px-2.5 py-1 rounded-lg bg-card border border-rose-500/30 text-rose-400 text-xs font-semibold hover:bg-rose-500/10 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                    className="px-2 py-0.5 rounded-lg bg-card border border-rose-500/30 text-rose-400 text-[10px] font-semibold hover:bg-rose-500/10 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-2.5 h-2.5" />
                     <span>Remove</span>
                   </button>
                 )}
-                <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-md border border-border/40">
+                <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md border border-border/40">
                   Max 5MB (JPG, PNG, WebP)
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                First Name
-              </label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Last Name
-              </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-              />
-            </div>
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <span>Unique Username</span>
-                {username && <span className="text-primary font-bold lowercase">(@{username})</span>}
-              </label>
-              {isCheckingUsername && (
-                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" /> Checking availability...
-                </span>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                type="text"
-                value={username}
-                placeholder="e.g. anandu, sam_dev"
-                onChange={e => setUsername(e.target.value)}
-                className={`w-full px-3 py-2 rounded-xl border text-xs focus:ring-2 focus:outline-none transition-colors pr-9 ${
-                  usernameStatus
-                    ? usernameStatus.available
-                      ? 'border-emerald-500/60 focus:ring-emerald-500 bg-emerald-500/5'
-                      : 'border-destructive/60 focus:ring-destructive bg-destructive/5'
-                    : 'border-input bg-background focus:ring-primary'
-                }`}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {isCheckingUsername ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                ) : usernameStatus ? (
-                  usernameStatus.available ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-destructive" />
-                  )
-                ) : null}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <span>Unique Username</span>
+                    {username && <span className="text-primary font-bold lowercase">(@{username})</span>}
+                  </label>
+                  {isCheckingUsername && (
+                    <span className="text-[9px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-2 h-2 animate-spin text-primary" /> Checking...
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={username}
+                    placeholder="e.g. anandu, sam_dev"
+                    onChange={e => setUsername(e.target.value)}
+                    className={`w-full px-3 py-1.5 rounded-xl border text-xs focus:ring-2 focus:outline-none transition-colors pr-8 ${
+                      usernameStatus
+                        ? usernameStatus.available
+                          ? 'border-emerald-500/60 focus:ring-emerald-500 bg-emerald-500/5'
+                          : 'border-destructive/60 focus:ring-destructive bg-destructive/5'
+                        : 'border-input bg-background/80 focus:ring-primary'
+                    }`}
+                  />
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                    {isCheckingUsername ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    ) : usernameStatus ? (
+                      usernameStatus.available ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
+                      )
+                    ) : null}
+                  </div>
+                </div>
+                {usernameStatus && (
+                  <p
+                    className={`text-[10px] font-medium flex items-center gap-1 ${
+                      usernameStatus.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                    }`}
+                  >
+                    {usernameStatus.available ? (
+                      <>
+                        <Check className="w-3 h-3" /> {usernameStatus.message}
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3" /> {usernameStatus.message}
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
-            {usernameStatus && (
-              <p
-                className={`text-[11px] font-medium flex items-center gap-1 ${
-                  usernameStatus.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
-                }`}
-              >
-                {usernameStatus.available ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" /> {usernameStatus.message}
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="w-3.5 h-3.5" /> {usernameStatus.message}
-                  </>
-                )}
-              </p>
-            )}
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Job Title
+                </label>
+                <input
+                  type="text"
+                  value={jobTitle}
+                  onChange={e => setJobTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  disabled
+                  value={user?.email || 'admin@taskflow.dev'}
+                  className="w-full px-3 py-1.5 rounded-xl border border-input bg-muted/60 text-muted-foreground text-xs cursor-not-allowed"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Job Title
-            </label>
-            <input
-              type="text"
-              value={jobTitle}
-              onChange={e => setJobTitle(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-input bg-background text-xs focus:ring-2 focus:ring-primary focus:outline-none"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Email Address
-            </label>
-            <input
-              type="email"
-              disabled
-              value={user?.email || 'admin@taskflow.dev'}
-              className="w-full px-3 py-2 rounded-xl border border-input bg-muted text-muted-foreground text-xs cursor-not-allowed"
-            />
-          </div>
-
-          <div className="pt-4 flex justify-end border-t border-border">
+          <div className="pt-2 flex justify-end border-t border-border/60">
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-sm shadow-primary/20 active:scale-95"
+              className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm shadow-primary/20 active:scale-95 cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" /> Save Changes
             </button>
@@ -926,7 +935,7 @@ export default function SettingsPage() {
 
       {/* Appearance & Theme Tab */}
       {activeTab === 'appearance' && (
-        <ThemeSettingsView onShowToast={showToast} />
+        <ThemeSettingsView />
       )}
 
       {/* Organization Tab - Mandatory Creation if No Orgs Exist */}
@@ -1006,287 +1015,337 @@ export default function SettingsPage() {
 
       {/* Organization Tab - Existing Organizations */}
       {activeTab === 'organization' && visibleOrganizations.length > 0 && (
-        <form onSubmit={handleSaveOrg} className="space-y-6 max-w-2xl bg-card/70 backdrop-blur-xl border border-border/80 p-7 rounded-3xl shadow-xl animate-fade-in">
-          <div className="flex items-center justify-between gap-4 pb-5 border-b border-border/60">
-            <div className="flex items-center gap-3.5">
-              <div className="relative group shrink-0">
-                {orgLogoPreview ? (
-                  <img
-                    src={orgLogoPreview}
-                    alt="Org Logo"
-                    className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-primary/30"
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-md shadow-primary/25 font-bold text-lg">
-                    {currentOrg?.name?.charAt(0)?.toUpperCase() || <Building2 className="w-6 h-6" />}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full animate-fade-in">
+          {/* Left Column (Col 7): Organization Profile & Details + Danger Zone */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            <form onSubmit={handleSaveOrg} className="bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-2xl shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-3 pb-3 border-b border-border/60">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative group shrink-0">
+                    {orgLogoPreview ? (
+                      <img
+                        src={orgLogoPreview}
+                        alt="Org Logo"
+                        className="w-12 h-12 rounded-xl object-cover shadow-sm border border-primary/30"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center shadow-sm font-bold text-base">
+                        {currentOrg?.name?.charAt(0)?.toUpperCase() || <Building2 className="w-5 h-5" />}
+                      </div>
+                    )}
+                    <label
+                      htmlFor="org-logo-upload-input"
+                      className="absolute inset-0 bg-black/60 rounded-xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
+                    >
+                      <Camera className="w-3.5 h-3.5 mb-0.5" />
+                      <span>Change</span>
+                    </label>
+                    <input
+                      id="org-logo-upload-input"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleOrgLogoFileChange}
+                    />
                   </div>
-                )}
-                <label
-                  htmlFor="org-logo-upload-input"
-                  className="absolute inset-0 bg-black/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[9px] font-bold"
-                >
-                  <Camera className="w-4 h-4 mb-0.5" />
-                  <span>Change</span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-foreground tracking-tight">Organization Profile & Brand</h3>
+                    <p className="text-[11px] text-muted-foreground truncate">Upload organization logo and manage organization profile.</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <label
+                        htmlFor="org-logo-upload-input"
+                        className="px-2.5 py-0.5 rounded-lg bg-card border border-border text-foreground text-[10px] font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                      >
+                        {isUploadingOrgLogo ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Upload className="w-2.5 h-2.5" />}
+                        <span>Upload Logo</span>
+                      </label>
+                      {orgLogoPreview && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveOrgLogo}
+                          disabled={isUploadingOrgLogo}
+                          className="px-2 py-0.5 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-[10px] font-semibold hover:bg-destructive/20 transition-all cursor-pointer inline-flex items-center gap-1"
+                          title="Remove organization logo"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-primary/10 text-primary border border-primary/20 shrink-0">
+                  {currentOrg?.plan || 'Free'} Plan
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Organization Name
                 </label>
                 <input
-                  id="org-logo-upload-input"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleOrgLogoFileChange}
+                  type="text"
+                  value={orgName}
+                  onChange={e => setOrgName(e.target.value)}
+                  placeholder="Acme Corporation"
+                  className="w-full px-3 py-2 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
                 />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-foreground tracking-tight">Organization Profile & Brand</h3>
-                <p className="text-xs text-muted-foreground">Upload organization logo, manage billing plan, and workspace scope.</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <label
-                    htmlFor="org-logo-upload-input"
-                    className="px-2.5 py-1 rounded-lg bg-card border border-border text-foreground text-[11px] font-semibold hover:bg-muted/80 transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm shadow-primary/20 active:scale-98 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Organization</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Danger Zone */}
+            {isOrgAdminOrOwner && (
+              <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-2">
+                <div className="flex items-center gap-1.5 text-rose-500 font-bold text-[11px] uppercase tracking-wider">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Danger Zone</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-foreground">Delete Organization</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Permanently delete '{currentOrg?.name || 'this organization'}', including all workspaces, projects, teams, and tasks.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteOrgConfirmText('')
+                      setIsDeleteOrgModalOpen(true)
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shrink-0 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95 flex items-center gap-1.5"
                   >
-                    {isUploadingOrgLogo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                    <span>Upload Logo</span>
-                  </label>
-                  {orgLogoPreview && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveOrgLogo}
-                      disabled={isUploadingOrgLogo}
-                      className="px-2.5 py-1 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-[11px] font-semibold hover:bg-destructive/20 transition-all cursor-pointer inline-flex items-center gap-1"
-                      title="Remove organization logo"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Remove Logo</span>
-                    </button>
-                  )}
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete Organization</span>
+                  </button>
                 </div>
               </div>
-            </div>
-            <span className="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20 shrink-0">
-              {currentOrg?.plan || 'Free'} Plan
-            </span>
+            )}
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Organization Name
-            </label>
-            <input
-              type="text"
-              value={orgName}
-              onChange={e => setOrgName(e.target.value)}
-              placeholder="Acme Corporation"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
-            />
-          </div>
-
-          <div className="pt-4 flex justify-end border-t border-border/60">
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-md shadow-primary/20 active:scale-98 cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Organization</span>
-            </button>
-          </div>
-
-          {/* Organizations Directory & Switcher */}
-          <div className="space-y-3 pt-6 border-t border-border/60">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Organizations</h4>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Switch between organizations or review your accounts.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateOrgModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>New Organization</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {visibleOrganizations.map((org) => {
-                const isCurrent = org.id === currentOrg?.id
-                return (
-                  <div
-                    key={org.id}
-                    onClick={() => !isCurrent && setCurrentOrg(org)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
-                      isCurrent
-                        ? 'bg-primary/5 border-primary/40 shadow-sm'
-                        : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {org.logoUrl ? (
-                        <img src={org.logoUrl} alt={org.name} className="w-8 h-8 rounded-xl object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                          {org.name?.charAt(0)?.toUpperCase() || 'O'}
-                        </div>
-                      )}
-                      <div className="truncate">
-                        <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-primary/10 text-primary border border-primary/20">
-                            {org.ownerId === user?.id || (org as any).isOwner ? 'Creator' : 'Admin'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isCurrent ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
-                        Switch
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Danger Zone: Delete Organization (Only visible if creator or admin) */}
-          {isOrgAdminOrOwner && (
-            <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
-              <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
-                <AlertTriangle className="w-4 h-4" />
-                <span>Danger Zone</span>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Right Column (Col 5): Organizations Directory & Switcher */}
+          <div className="lg:col-span-5 flex flex-col">
+            <div className="bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-2xl shadow-sm flex flex-col h-full">
+              <div className="flex items-center justify-between pb-3 border-b border-border/60">
                 <div>
-                  <p className="text-xs font-bold text-foreground">Delete Organization</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Permanently delete '{currentOrg?.name || 'this organization'}', including all its workspaces, projects, teams, tasks, and data.
-                  </p>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Organizations</h4>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Switch between organizations or accounts.</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setDeleteOrgConfirmText('')
-                    setIsDeleteOrgModalOpen(true)
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shrink-0 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95 flex items-center gap-1.5"
+                  onClick={() => setIsCreateOrgModalOpen(true)}
+                  className="px-2.5 py-1 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Organization</span>
+                  <Plus className="w-3 h-3" />
+                  <span>New</span>
                 </button>
               </div>
+
+              <div className="space-y-2 mt-3 overflow-y-auto max-h-[360px] pr-1">
+                {visibleOrganizations.map((org) => {
+                  const isCurrent = org.id === currentOrg?.id
+                  return (
+                    <div
+                      key={org.id}
+                      onClick={() => !isCurrent && setCurrentOrg(org)}
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
+                        isCurrent
+                          ? 'bg-primary/5 border-primary/40 shadow-xs'
+                          : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {org.logoUrl ? (
+                          <img src={org.logoUrl} alt={org.name} className="w-7 h-7 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-primary to-indigo-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            {org.name?.charAt(0)?.toUpperCase() || 'O'}
+                          </div>
+                        )}
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-foreground truncate">{org.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-[10px] text-muted-foreground capitalize">{org.plan || 'Free'} Plan</p>
+                            <span className="text-[9px] font-bold px-1 py-0.2 rounded-md bg-primary/10 text-primary border border-primary/20">
+                              {org.ownerId === user?.id || (org as any).isOwner ? 'Creator' : 'Admin'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-primary font-semibold hover:underline shrink-0">
+                          Switch
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          )}
-        </form>
+          </div>
+        </div>
       )}
 
       {/* Workspace Tab */}
       {activeTab === 'workspace' && (
-        <form onSubmit={handleSaveWorkspace} className="space-y-6 max-w-2xl bg-card/70 backdrop-blur-xl border border-border/80 p-7 rounded-3xl shadow-xl animate-fade-in">
-          <div className="flex items-center justify-between gap-4 pb-5 border-b border-border/60">
-            <div className="flex items-center gap-3.5">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md transition-all shrink-0"
-                style={{
-                  backgroundColor: wsColor,
-                  boxShadow: `0 4px 14px ${wsColor}50`,
-                }}
-              >
-                <Briefcase className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-foreground tracking-tight">Workspace Configuration</h3>
-                <p className="text-xs text-muted-foreground">Customise active environment branding, workflows, and theme color.</p>
-              </div>
-            </div>
-            <div
-              className="px-3 py-1 rounded-full text-[11px] font-semibold text-foreground border border-border flex items-center gap-1.5 shrink-0"
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: wsColor }} />
-              <span>{wsColor}</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Workspace Name
-            </label>
-            <input
-              type="text"
-              value={wsName}
-              onChange={e => setWsName(e.target.value)}
-              placeholder="e.g. Engineering, Marketing, Core"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
-            />
-          </div>
-
-          <div className="space-y-2.5">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Workspace Brand Accent Color
-            </label>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              {['#6366F1', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4', '#3B82F6'].map((c) => {
-                const isActive = wsColor.toLowerCase() === c.toLowerCase()
-                return (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setWsColor(c)}
-                    className={`w-9 h-9 rounded-2xl transition-all duration-200 flex items-center justify-center cursor-pointer ${
-                      isActive ? 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-background shadow-lg' : 'hover:scale-105 opacity-80 hover:opacity-100'
-                    }`}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full animate-fade-in">
+          {/* Left Column (Col 7): Workspace Configuration & Danger Zone */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            <form onSubmit={handleSaveWorkspace} className="bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-2xl shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-3 pb-3 border-b border-border/60">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm transition-all shrink-0"
                     style={{
-                      backgroundColor: c,
-                      boxShadow: isActive ? `0 4px 12px ${c}60` : undefined,
+                      backgroundColor: wsColor,
+                      boxShadow: `0 4px 12px ${wsColor}40`,
                     }}
-                    title={c}
                   >
-                    {isActive && <Check className="w-4 h-4 text-white drop-shadow-sm" />}
-                  </button>
-                )
-              })}
+                    <Briefcase className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground tracking-tight">Workspace Configuration</h3>
+                    <p className="text-[11px] text-muted-foreground">Customise active environment branding, workflows, and theme color.</p>
+                  </div>
+                </div>
+                <div
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold text-foreground border border-border flex items-center gap-1.5 shrink-0"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: wsColor }} />
+                  <span>{wsColor}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Workspace Name
+                </label>
+                <input
+                  type="text"
+                  value={wsName}
+                  onChange={e => setWsName(e.target.value)}
+                  placeholder="e.g. Engineering, Marketing, Core"
+                  className="w-full px-3 py-2 rounded-xl border border-input bg-background/80 text-xs text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all shadow-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Workspace Brand Accent Color
+                </label>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  {['#6366F1', '#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#06B6D4', '#3B82F6'].map((c) => {
+                    const isActive = wsColor.toLowerCase() === c.toLowerCase()
+                    return (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setWsColor(c)}
+                        className={`w-7 h-7 rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                          isActive ? 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-background shadow-md' : 'hover:scale-105 opacity-80 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: c,
+                          boxShadow: isActive ? `0 4px 10px ${c}50` : undefined,
+                        }}
+                        title={c}
+                      >
+                        {isActive && <Check className="w-3.5 h-3.5 text-white drop-shadow-sm" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm shadow-primary/20 active:scale-98 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Workspace</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Danger Zone: Delete Workspace */}
+            <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-2">
+              <div className="flex items-center gap-1.5 text-rose-500 font-bold text-[11px] uppercase tracking-wider">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Danger Zone</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Delete Workspace</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Permanently remove '{currentWorkspace?.name || 'this workspace'}' along with its projects, tasks, and teams.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={workspaces.length <= 1}
+                  onClick={() => setIsDeleteWsModalOpen(true)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                    workspaces.length <= 1
+                      ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
+                      : 'bg-rose-600 text-white hover:bg-rose-700 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95'
+                  }`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Delete Workspace</span>
+                </button>
+              </div>
+              {workspaces.length <= 1 && (
+                <p className="text-[10px] text-amber-500 font-medium">
+                  Note: You cannot delete the only workspace in this organization.
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="pt-4 flex justify-end border-t border-border/60">
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-md shadow-primary/20 active:scale-98 cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Workspace</span>
-            </button>
-          </div>
-
-          {/* Workspaces Directory in this Org */}
-          {workspaces.length > 0 && (
-            <div className="space-y-3 pt-6 border-t border-border/60">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Workspaces in {currentOrg?.name || 'Organization'}</h4>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Switch active workspace or manage your team environments.</p>
+          {/* Right Column (Col 5): Workspaces in Organization */}
+          <div className="lg:col-span-5 flex flex-col">
+            <div className="bg-card/70 backdrop-blur-xl border border-border/80 p-5 rounded-2xl shadow-sm flex flex-col h-full">
+              <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Workspaces</h4>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">In {currentOrg?.name || 'Organization'}</p>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div className="space-y-2 mt-3 overflow-y-auto max-h-[360px] pr-1">
                 {workspaces.map((ws) => {
                   const isCurrent = ws.id === currentWorkspace?.id
                   return (
                     <div
                       key={ws.id}
                       onClick={() => !isCurrent && setCurrentWorkspace(ws)}
-                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
                         isCurrent
-                          ? 'bg-primary/5 border-primary/40 shadow-sm'
+                          ? 'bg-primary/5 border-primary/40 shadow-xs'
                           : 'bg-card/60 border-border/70 hover:border-primary/30 cursor-pointer'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <div
-                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs"
                           style={{ backgroundColor: ws.color || '#6366F1' }}
                         >
-                          <Briefcase className="w-4 h-4" />
+                          <Briefcase className="w-3.5 h-3.5" />
                         </div>
                         <div className="truncate">
                           <p className="text-xs font-bold text-foreground truncate">{ws.name}</p>
@@ -1298,7 +1357,7 @@ export default function SettingsPage() {
                           Active
                         </span>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground font-semibold hover:text-foreground shrink-0">
+                        <span className="text-[10px] text-primary font-semibold hover:underline shrink-0">
                           Switch
                         </span>
                       )}
@@ -1307,42 +1366,8 @@ export default function SettingsPage() {
                 })}
               </div>
             </div>
-          )}
-
-          {/* Danger Zone: Delete Workspace */}
-          <div className="p-5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-3 pt-5 mt-6">
-            <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Danger Zone</span>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-foreground">Delete Workspace</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Permanently remove '{currentWorkspace?.name || 'this workspace'}' along with its projects, tasks, and team assignments.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={workspaces.length <= 1}
-                onClick={() => setIsDeleteWsModalOpen(true)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                  workspaces.length <= 1
-                    ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
-                    : 'bg-rose-600 text-white hover:bg-rose-700 cursor-pointer shadow-sm shadow-rose-600/20 active:scale-95'
-                }`}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Workspace</span>
-              </button>
-            </div>
-            {workspaces.length <= 1 && (
-              <p className="text-[11px] text-amber-500 font-medium">
-                Note: You cannot delete the only workspace in this organization. Create another workspace first.
-              </p>
-            )}
           </div>
-        </form>
+        </div>
       )}
 
       {/* Calendar Tab */}
@@ -1351,6 +1376,7 @@ export default function SettingsPage() {
           <CalendarIntegrationPanel onSuccess={showToast} />
         </div>
       )}
+      </div>
 
 
 

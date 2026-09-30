@@ -62,6 +62,7 @@ import { TaskAttachment, TaskComment } from '@/types'
 import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore, CustomStatus } from '@/stores/status-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { usePermissions } from '@/hooks/usePermissions'
 import { Portal } from '@/components/ui/portal'
 import { TaskListSkeleton } from '@/components/loading'
 import { UserGuideModal } from '@/components/user-guide-modal'
@@ -363,6 +364,7 @@ export default function TasksPage() {
   const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, moveTask, deleteTask, toggleSubtask, isLoading: tasksLoading } = useTaskStore()
   const { projects, loadProjects } = useProjectStore()
   const { user } = useAuthStore()
+  const { canDeleteTask, isAdmin } = usePermissions()
 
   const todayStr = new Date().toISOString().split('T')[0] // 'YYYY-MM-DD'
   const currentUserName = getFirstName(user?.firstName || user?.displayName || user?.email?.split('@')[0] || 'You')
@@ -457,6 +459,8 @@ export default function TasksPage() {
   const [editSubtaskDesc, setEditSubtaskDesc] = useState('')
   const [editSubtaskDue, setEditSubtaskDue] = useState(todayStr)
   const [editSubtaskAttachments, setEditSubtaskAttachments] = useState<TaskAttachment[]>([])
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const initialSnapshotRef = React.useRef<string | null>(null)
 
   // Attachment & Progress Helpers
   const formatFileSize = (bytes: number) => {
@@ -972,7 +976,89 @@ export default function TasksPage() {
     setEditSubtaskDesc('')
     setEditSubtaskDue(todayStr)
     setEditSubtaskAttachments([])
+    initialSnapshotRef.current = `${task.id}_${task.title || ''}_${task.projectId || ''}_${task.tag || ''}_${task.assigneeName || ''}_${task.reviewerName || ''}_${task.dueDate || ''}_${task.priority || ''}_${task.status || ''}_${task.description || ''}_${task.progress || 0}`
+    setAutoSaveStatus('idle')
   }
+
+  // Real-time Automatic Saving for Tasks (auto-saves on field changes with debounce)
+  useEffect(() => {
+    if (!editingTask) {
+      initialSnapshotRef.current = null
+      setAutoSaveStatus('idle')
+      return
+    }
+
+    const currentSnapshot = `${editingTask.id}_${editTitle}_${editProjectId}_${editTag}_${editAssignee}_${editAssignedBy}_${editDue}_${editPriority}_${editStatus}_${editDescription}_${editProgress}_${editSubtasks.length}_${editAttachments.length}_${editComments.length}`
+
+    if (!initialSnapshotRef.current) {
+      initialSnapshotRef.current = currentSnapshot
+      return
+    }
+
+    if (initialSnapshotRef.current === currentSnapshot) {
+      return
+    }
+
+    if (!canEditTask(editingTask) || !editTitle.trim()) {
+      return
+    }
+
+    setAutoSaveStatus('saving')
+    const timer = setTimeout(async () => {
+      try {
+        let finalProgress = editProgress
+        if (editSubtasks.length > 0) {
+          const done = editSubtasks.filter((s: any) => s.completed).length
+          finalProgress = Math.round((done / editSubtasks.length) * 100)
+        } else if (editStatus === 'done') {
+          finalProgress = 100
+        }
+
+        await updateTask(editingTask.id, {
+          projectId: editProjectId || undefined,
+          title: editTitle.trim(),
+          description: editDescription.trim(),
+          tag: editTag,
+          assigneeName: getFirstName(editAssignee === 'You' ? currentUserName : (editAssignee || currentUserName)),
+          reviewerName: getFirstName(editAssignedBy === 'You' ? currentUserName : (editAssignedBy || currentUserName)),
+          dueDate: editDue,
+          priority: editPriority,
+          status: editStatus,
+          progress: finalProgress,
+          subtasks: JSON.stringify(editSubtasks),
+          filesChanged: JSON.stringify(editAttachments),
+          historyLogs: JSON.stringify(editComments),
+          environment: getEnvForStatus(editStatus, editingTask.environment) as TaskEnvironment,
+        })
+        initialSnapshotRef.current = currentSnapshot
+        setAutoSaveStatus('saved')
+        setTimeout(() => setAutoSaveStatus('idle'), 2500)
+      } catch (err) {
+        console.error('Task auto-save error', err)
+        setAutoSaveStatus('idle')
+      }
+    }, 700)
+
+    return () => clearTimeout(timer)
+  }, [
+    editingTask,
+    editTitle,
+    editProjectId,
+    editTag,
+    editAssignee,
+    editAssignedBy,
+    editDue,
+    editPriority,
+    editStatus,
+    editDescription,
+    editProgress,
+    editSubtasks,
+    editAttachments,
+    editComments,
+    canEditTask,
+    currentUserName,
+    updateTask,
+  ])
 
   // Save Edit Handler
   const handleSaveEdit = async (e?: React.FormEvent) => {
@@ -1059,6 +1145,10 @@ export default function TasksPage() {
 
   const confirmDeleteTask = async () => {
     if (!taskToDelete || isConfirmingDelete) return
+    if (!canDeleteTask) {
+      showToast('Only administrators have permission to delete tasks.')
+      return
+    }
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
       setIsConfirmingDelete(true)
@@ -1075,11 +1165,11 @@ export default function TasksPage() {
   }
 
   const handleDelete = (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId)
-    if (task && !canEditTask(task)) {
-      showToast('You can only delete tasks assigned to you.')
+    if (!canDeleteTask) {
+      showToast('Only administrators have permission to delete tasks.')
       return
     }
+    const task = tasks.find((t) => t.id === taskId)
     if (task) {
       setTaskToDelete(task)
     }
@@ -1238,7 +1328,7 @@ export default function TasksPage() {
 
       <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
         {toastMessage && (
-          <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
             <CheckCircle2 className="w-4 h-4" />
             <span>{toastMessage}</span>
           </div>
@@ -1888,13 +1978,13 @@ export default function TasksPage() {
                             )}
                           </button>
 
-                          {/* Delete button (only if editable) */}
-                          {canEditTask(task) && (
+                          {/* Delete button (Admin only) */}
+                          {canDeleteTask && (
                             <button
                               type="button"
                               disabled={deletingTaskId === task.id}
                               onClick={() => handleDelete(task.id)}
-                              title="Delete Task"
+                              title="Delete Task (Admin Only)"
                               className="p-2 rounded-xl bg-slate-100 dark:bg-[#000000]/70 hover:bg-rose-500/15 border border-slate-200 dark:border-[#2B2B2B] hover:border-rose-500/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {deletingTaskId === task.id ? (
@@ -2437,12 +2527,12 @@ export default function TasksPage() {
                                 <Eye className="w-3.5 h-3.5 text-[#00638E] dark:text-[#8CB9CC]" />
                               )}
                             </button>
-                            {canEditTask(t) && (
+                            {canDeleteTask && (
                               <button
                                 disabled={deletingTaskId === t.id}
                                 onClick={() => handleDelete(t.id)}
                                 className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Delete task"
+                                title="Delete task (Admin only)"
                               >
                                 {deletingTaskId === t.id ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
@@ -3140,657 +3230,692 @@ export default function TasksPage() {
 
           return (
             <Portal>
-              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-                <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-5 animate-scale-in backdrop-blur-xl max-h-[92vh] overflow-y-auto custom-scrollbar">
-                  {/* Top Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-border">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-2 rounded-xl ${isReadOnly ? 'bg-amber-500/15 text-amber-500' : 'bg-primary/15 text-primary'}`}>
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 overflow-hidden animate-fade-in">
+                <div className="bg-card border border-border/80 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl animate-scale-in backdrop-blur-xl flex flex-col max-h-[min(92vh,740px)] overflow-hidden">
+                  {/* Top Header - Fixed & Compact */}
+                  <div className="shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 border-b border-border/70 flex items-center justify-between bg-card/95 backdrop-blur-sm">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`p-2 rounded-xl shrink-0 ${isReadOnly ? 'bg-amber-500/15 text-amber-500' : 'bg-primary/15 text-primary'}`}>
                         {isReadOnly ? <Lock className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
                       </div>
-                      <div>
-                        <h3 className="text-base font-bold text-foreground">
-                          {isReadOnly ? 'Task Deliverable Details' : 'Edit Task Deliverable'}
-                        </h3>
-                        <p className="text-[11px] text-muted-foreground">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm sm:text-base font-bold text-foreground truncate">
+                            {isReadOnly ? 'Task Deliverable Details' : 'Edit Task Deliverable'}
+                          </h3>
+                          {autoSaveStatus === 'saving' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 text-[10px] font-semibold animate-pulse shrink-0">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Saving...
+                            </span>
+                          )}
+                          {autoSaveStatus === 'saved' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] font-semibold shrink-0">
+                              <Check className="w-2.5 h-2.5" /> Auto-saved
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
                           {proj ? `${proj.name} • ` : ''}{editingTask.id}
                         </p>
                       </div>
                     </div>
                     <button
                       onClick={() => setEditingTask(null)}
-                      className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                      className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
+                      aria-label="Close modal"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
                   {isReadOnly && (
-                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2 text-xs text-amber-500 font-semibold">
+                    <div className="mx-4 sm:mx-6 mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2 text-xs text-amber-500 font-semibold shrink-0">
                       <Lock className="w-3.5 h-3.5 shrink-0" />
                       <span>View-Only Mode: You can view files, comments, and subtasks, but cannot modify task properties.</span>
                     </div>
                   )}
 
-                  {/* Tab Navigation */}
-                  <div className="grid grid-cols-4 gap-1.5 p-1 bg-muted/50 rounded-2xl border border-border/50 text-xs font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setEditingTaskTab('overview')}
-                      className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        editingTaskTab === 'overview'
-                          ? 'bg-background text-primary shadow-sm border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Overview</span>
-                    </button>
+                  {/* Tab Navigation - Fixed & Compact */}
+                  <div className="shrink-0 px-4 sm:px-6 py-2 bg-muted/20 border-b border-border/40">
+                    <div className="grid grid-cols-4 gap-1.5 p-1 bg-muted/50 rounded-xl border border-border/50 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTaskTab('overview')}
+                        className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editingTaskTab === 'overview'
+                            ? 'bg-background text-primary shadow-xs border border-border/60'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Overview</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setEditingTaskTab('attachments')}
-                      className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        editingTaskTab === 'attachments'
-                          ? 'bg-background text-primary shadow-sm border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Paperclip className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Files ({editAttachments.length})</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTaskTab('attachments')}
+                        className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editingTaskTab === 'attachments'
+                            ? 'bg-background text-primary shadow-xs border border-border/60'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Files ({editAttachments.length})</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setEditingTaskTab('subtasks')}
-                      className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        editingTaskTab === 'subtasks'
-                          ? 'bg-background text-primary shadow-sm border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Layers className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Subtasks ({editSubtasks.length})</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTaskTab('subtasks')}
+                        className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editingTaskTab === 'subtasks'
+                            ? 'bg-background text-primary shadow-xs border border-border/60'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Layers className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Subtasks ({editSubtasks.length})</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setEditingTaskTab('comments')}
-                      className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        editingTaskTab === 'comments'
-                          ? 'bg-background text-primary shadow-sm border border-border/60'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Comments ({editComments.length})</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTaskTab('comments')}
+                        className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          editingTaskTab === 'comments'
+                            ? 'bg-background text-primary shadow-xs border border-border/60'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Comments ({editComments.length})</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {/* TAB 1: OVERVIEW & STATUS */}
-                  {editingTaskTab === 'overview' && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">Task Title</label>
-                        <input
-                          type="text"
-                          disabled={isReadOnly}
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                          required
-                        />
-                      </div>
-
-                      {/* Project Selection */}
-                      {projects.length > 0 && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-foreground">Project</label>
-                          <select
-                            value={editProjectId}
-                            disabled={isReadOnly}
-                            onChange={(e) => setEditProjectId(e.target.value)}
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {projects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Assigned To and Assigned By */}
-                      <div className="grid grid-cols-2 gap-3">
-                        {isReadOnly ? (
-                          <>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-semibold text-foreground">Assigned To</label>
-                              <input
-                                type="text"
-                                disabled
-                                value={editAssignee || 'Unassigned'}
-                                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-semibold text-foreground">Assigned By</label>
-                              <input
-                                type="text"
-                                disabled
-                                value={editAssignedBy || 'Unassigned'}
-                                className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                              />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <UserSelect
-                              label="Assigned To"
-                              icon={User}
-                              value={editAssignee}
-                              onChange={setEditAssignee}
-                              users={availableUsers}
-                              placeholder="Select assignee..."
+                  {/* Scrollable Modal Content Body - Fits all screen sizes without window scroll */}
+                  <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-3 sm:py-3.5 space-y-3 custom-scrollbar">
+                    {/* TAB 1: OVERVIEW & STATUS */}
+                    {editingTaskTab === 'overview' && (
+                      <div className="space-y-2.5 animate-fade-in">
+                        {/* Task Title & Project in 2-Column Responsive Layout */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground">Task Title</label>
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                              required
                             />
-                            <UserSelect
-                              label="Assigned By"
-                              icon={UserCheck}
-                              value={editAssignedBy}
-                              onChange={setEditAssignedBy}
-                              users={availableUsers}
-                              placeholder="Select assigner..."
+                          </div>
+
+                          {projects.length > 0 && (
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-muted-foreground">Project</label>
+                              <select
+                                value={editProjectId}
+                                disabled={isReadOnly}
+                                onChange={(e) => setEditProjectId(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                              >
+                                {projects.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Assigned To and Assigned By */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {isReadOnly ? (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-semibold text-muted-foreground">Assigned To</label>
+                                <input
+                                  type="text"
+                                  disabled
+                                  value={editAssignee || 'Unassigned'}
+                                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-semibold text-muted-foreground">Assigned By</label>
+                                <input
+                                  type="text"
+                                  disabled
+                                  value={editAssignedBy || 'Unassigned'}
+                                  className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <UserSelect
+                                label="Assigned To"
+                                icon={User}
+                                value={editAssignee}
+                                onChange={setEditAssignee}
+                                users={availableUsers}
+                                placeholder="Select assignee..."
+                              />
+                              <UserSelect
+                                label="Assigned By"
+                                icon={UserCheck}
+                                value={editAssignedBy}
+                                onChange={setEditAssignedBy}
+                                users={availableUsers}
+                                placeholder="Select assigner..."
+                              />
+                            </>
+                          )}
+                        </div>
+
+                        {/* Status & Priority */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground">Status</label>
+                            <select
+                              value={editStatus}
+                              disabled={isReadOnly}
+                              onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
+                              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                            >
+                              {workspaceStatuses.map((st) => (
+                                <option key={st.id} value={st.id}>
+                                  {st.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground">Priority</label>
+                            <select
+                              value={editPriority}
+                              disabled={isReadOnly}
+                              onChange={(e) => setEditPriority(e.target.value as any)}
+                              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                            >
+                              <option value="low">Low</option>
+                              <option value="medium">Medium</option>
+                              <option value="high">High</option>
+                              <option value="urgent">Urgent</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Tag & Due Date */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground">Tag</label>
+                            <select
+                              value={editTag}
+                              disabled={isReadOnly}
+                              onChange={(e) => setEditTag(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed font-medium"
+                            >
+                              <option value="Frontend">Frontend</option>
+                              <option value="Backend">Backend</option>
+                              <option value="Design">Design</option>
+                              <option value="DevOps">DevOps</option>
+                              <option value="Architecture">Architecture</option>
+                              <option value="Bug Fix">Bug Fix</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-primary" /> Due Date
+                            </label>
+                            <StylishDatePicker
+                              value={editDue}
+                              onChange={setEditDue}
+                              minDate={todayStr}
                             />
-                          </>
-                        )}
-                      </div>
-
-                      {/* Status & Priority */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-foreground">Status</label>
-                          <select
-                            value={editStatus}
-                            disabled={isReadOnly}
-                            onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {workspaceStatuses.map((st) => (
-                              <option key={st.id} value={st.id}>
-                                {st.name}
-                              </option>
-                            ))}
-                          </select>
+                          </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-foreground">Priority</label>
-                          <select
-                            value={editPriority}
+                        {/* Task Description */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-muted-foreground">Description</label>
+                          <textarea
+                            rows={2}
                             disabled={isReadOnly}
-                            onChange={(e) => setEditPriority(e.target.value as any)}
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Tag & Due Date */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-foreground">Tag</label>
-                          <select
-                            value={editTag}
-                            disabled={isReadOnly}
-                            onChange={(e) => setEditTag(e.target.value)}
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            <option value="Frontend">Frontend</option>
-                            <option value="Backend">Backend</option>
-                            <option value="Design">Design</option>
-                            <option value="DevOps">DevOps</option>
-                            <option value="Architecture">Architecture</option>
-                            <option value="Bug Fix">Bug Fix</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-primary" /> Due Date
-                          </label>
-                          <StylishDatePicker
-                            value={editDue}
-                            onChange={setEditDue}
-                            minDate={todayStr}
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            placeholder="Task specifications, documentation links, or notes..."
+                            className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed custom-scrollbar resize-y"
                           />
                         </div>
-                      </div>
 
-                      {/* Task Description */}
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">Description</label>
-                        <textarea
-                          rows={3}
-                          disabled={isReadOnly}
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          placeholder="Task specifications, documentation links, or notes..."
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed custom-scrollbar resize-y"
-                        />
-                      </div>
+                        {/* Task Completion Progress Slider - SINGLE ANIMATED INTERACTIVE SLIDER (No dual sliders) */}
+                        <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <SlidersHorizontal className="w-3.5 h-3.5 text-primary" /> Task Progress Percentage
+                            </span>
+                            <span className="font-bold text-primary px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs shadow-xs">
+                              {calculatedSubtaskProgress}%
+                            </span>
+                          </div>
 
-                      {/* Task Completion Progress Slider */}
-                      <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-foreground flex items-center gap-1.5">
-                            <SlidersHorizontal className="w-3.5 h-3.5 text-primary" /> Task Progress Percentage
-                          </span>
-                          <span className="font-bold text-primary px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
-                            {calculatedSubtaskProgress}%
-                          </span>
-                        </div>
-                        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-primary to-indigo-500 transition-all duration-300 rounded-full"
-                            style={{ width: `${calculatedSubtaskProgress}%` }}
-                          />
-                        </div>
-                        {editSubtasks.length === 0 ? (
-                          <div className="flex items-center gap-3 pt-1">
+                          {/* Single interactive animated slider */}
+                          <div className="relative w-full h-7 flex items-center select-none group">
+                            {/* Animated track with gradient */}
+                            <div className="absolute inset-x-0 h-3 rounded-full bg-muted/80 overflow-hidden border border-border/70 shadow-inner">
+                              <div
+                                className="h-full bg-gradient-to-r from-emerald-500 via-primary to-indigo-500 rounded-full transition-all duration-200 ease-out relative"
+                                style={{ width: `${calculatedSubtaskProgress}%` }}
+                              >
+                                {/* Shimmer light effect */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-shimmer" />
+                              </div>
+                            </div>
+
+                            {/* Native range slider input overlay */}
                             <input
                               type="range"
                               min="0"
                               max="100"
                               disabled={isReadOnly}
-                              value={editProgress}
-                              onChange={(e) => setEditProgress(parseInt(e.target.value, 10))}
-                              className="w-full accent-primary cursor-pointer disabled:cursor-not-allowed"
+                              value={calculatedSubtaskProgress}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10)
+                                setEditProgress(val)
+                              }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-20"
+                              aria-label="Task progress percentage"
                             />
+
+                            {/* Glowing custom thumb indicator */}
+                            <div
+                              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-background border-2 border-primary shadow-md shadow-primary/50 flex items-center justify-center pointer-events-none transition-all duration-150 group-hover:scale-125 group-active:scale-110 z-10"
+                              style={{ left: `${Math.min(Math.max(calculatedSubtaskProgress, 2), 98)}%` }}
+                            >
+                              <div className="w-2 h-2 rounded-full bg-primary animate-ping opacity-75" />
+                              <div className="absolute w-2 h-2 rounded-full bg-primary" />
+                            </div>
+                          </div>
+
+                          {editSubtasks.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground flex items-center justify-between">
+                              <span>Computed from subtasks ({editSubtasks.filter((s: any) => s.completed).length}/{editSubtasks.length} done).</span>
+                              <span className="text-primary/80">Drag slider to override</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TAB 2: DOCUMENTS & SCREENSHOTS */}
+                    {editingTaskTab === 'attachments' && (
+                      <div className="space-y-3 animate-fade-in">
+                        {!isReadOnly && (
+                          <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-border/80 hover:border-primary/60 rounded-2xl bg-card/50 hover:bg-card/80 transition-all cursor-pointer group">
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.env,.txt,.json,.yml,.yaml,.xml"
+                              onChange={async (e) => {
+                                const newFiles = await readFilesAsAttachments(e.target.files)
+                                setEditAttachments((prev) => [...prev, ...newFiles])
+                                e.target.value = ''
+                              }}
+                              className="hidden"
+                            />
+                            <div className="p-2 rounded-full bg-primary/10 text-primary group-hover:scale-110 transition-transform mb-1">
+                              <UploadCloud className="w-4 h-4" />
+                            </div>
+                            <p className="text-xs font-bold text-foreground">Upload Screenshots & Documents</p>
+                            <p className="text-[10px] text-muted-foreground text-center">
+                              Supports PNG, JPG, WEBP, PDF, Word, Excel, CSV, ENV, TXT, JSON
+                            </p>
+                          </label>
+                        )}
+
+                        {/* Uploaded Files Grid with 1-Click Downloads */}
+                        {editAttachments.length === 0 ? (
+                          <div className="p-6 rounded-2xl border border-dashed border-border/70 text-center space-y-1.5">
+                            <Paperclip className="w-6 h-6 text-muted-foreground mx-auto opacity-50" />
+                            <p className="text-xs font-semibold text-foreground">No documents attached yet</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              Upload screenshots, designs, env templates, or specs to share with your team.
+                            </p>
                           </div>
                         ) : (
-                          <p className="text-[10px] text-muted-foreground">
-                            Progress is automatically computed from completed subtasks ({editSubtasks.filter((s: any) => s.completed).length}/{editSubtasks.length} done).
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 2: DOCUMENTS & SCREENSHOTS */}
-                  {editingTaskTab === 'attachments' && (
-                    <div className="space-y-4 animate-fade-in">
-                      {!isReadOnly && (
-                        <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-border/80 hover:border-primary/60 rounded-2xl bg-card/50 hover:bg-card/80 transition-all cursor-pointer group">
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.env,.txt,.json,.yml,.yaml,.xml"
-                            onChange={async (e) => {
-                              const newFiles = await readFilesAsAttachments(e.target.files)
-                              setEditAttachments((prev) => [...prev, ...newFiles])
-                              e.target.value = ''
-                            }}
-                            className="hidden"
-                          />
-                          <div className="p-2.5 rounded-full bg-primary/10 text-primary group-hover:scale-110 transition-transform mb-1.5">
-                            <UploadCloud className="w-5 h-5" />
-                          </div>
-                          <p className="text-xs font-bold text-foreground">Upload Screenshots & Documents</p>
-                          <p className="text-[10px] text-muted-foreground text-center">
-                            Supports PNG, JPG, WEBP, GIF, SVG, BMP, PDF, Word, Excel, CSV, ENV, TXT, JSON
-                          </p>
-                        </label>
-                      )}
-
-                      {/* Uploaded Files Grid with 1-Click Downloads */}
-                      {editAttachments.length === 0 ? (
-                        <div className="p-8 rounded-2xl border border-dashed border-border/70 text-center space-y-2">
-                          <Paperclip className="w-8 h-8 text-muted-foreground mx-auto opacity-50" />
-                          <p className="text-xs font-semibold text-foreground">No documents attached yet</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Upload screenshots, designs, env templates, or specs to share with your team.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-96 overflow-y-auto custom-scrollbar p-1">
-                          {editAttachments.map((att) => {
-                            const isImg = att.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(att.name)
-                            return (
-                              <div
-                                key={att.id}
-                                className="flex flex-col justify-between p-3 rounded-2xl border border-border/80 bg-background/80 hover:bg-background transition-all shadow-xs space-y-2.5 group"
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {isImg ? (
-                                    <img
-                                      src={att.dataUrl}
-                                      alt={att.name}
-                                      className="w-12 h-12 rounded-xl object-cover border border-border/60 shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center shrink-0 border border-border/50">
-                                      {getFileIcon(att.type, att.name)}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto custom-scrollbar p-0.5">
+                            {editAttachments.map((att) => {
+                              const isImg = att.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(att.name)
+                              return (
+                                <div
+                                  key={att.id}
+                                  className="flex flex-col justify-between p-2.5 rounded-2xl border border-border/80 bg-background/80 hover:bg-background transition-all shadow-xs space-y-2 group"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {isImg ? (
+                                      <img
+                                        src={att.dataUrl}
+                                        alt={att.name}
+                                        className="w-10 h-10 rounded-xl object-cover border border-border/60 shrink-0"
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 border border-border/50">
+                                        {getFileIcon(att.type, att.name)}
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-foreground truncate">{att.name}</p>
+                                      <p className="text-[10px] text-muted-foreground">{formatFileSize(att.size)}</p>
+                                      <p className="text-[9px] text-muted-foreground">
+                                        {new Date(att.uploadedAt).toLocaleDateString()}
+                                      </p>
                                     </div>
-                                  )}
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-bold text-foreground truncate">{att.name}</p>
-                                    <p className="text-[10px] text-muted-foreground">{formatFileSize(att.size)}</p>
-                                    <p className="text-[9px] text-muted-foreground">
-                                      {new Date(att.uploadedAt).toLocaleDateString()}
-                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadAttachment(att)}
+                                      className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      <span>Download</span>
+                                    </button>
+
+                                    {!isReadOnly && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                                        title="Delete attachment"
+                                        className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                                <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                                  {/* 1-Click Download Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => downloadAttachment(att)}
-                                    className="px-3 py-1.5 rounded-xl bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span>Download</span>
-                                  </button>
+                    {/* TAB 3: SUBTASKS & PROGRESS */}
+                    {editingTaskTab === 'subtasks' && (
+                      <div className="space-y-3 animate-fade-in">
+                        {/* Subtasks Summary Bar */}
+                        <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-primary" /> Subtasks Completion
+                            </span>
+                            <span className="font-bold text-primary">
+                              {editSubtasks.length > 0
+                                ? `${editSubtasks.filter((s: any) => s.completed).length}/${editSubtasks.length} done (${calculatedSubtaskProgress}%)`
+                                : '0 Subtasks'}
+                            </span>
+                          </div>
+                          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-300 rounded-full"
+                              style={{ width: `${calculatedSubtaskProgress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Add Subtask Form */}
+                        {!isReadOnly && (
+                          <div className="p-3 rounded-2xl bg-card/60 border border-border/70 space-y-2">
+                            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                              <Plus className="w-3.5 h-3.5 text-primary" /> Add New Subtask
+                            </h4>
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                placeholder="Subtask title..."
+                                value={editSubtaskTitle}
+                                onChange={(e) => setEditSubtaskTitle(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Subtask description..."
+                                  value={editSubtaskDesc}
+                                  onChange={(e) => setEditSubtaskDesc(e.target.value)}
+                                  className="px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                                <input
+                                  type="date"
+                                  value={editSubtaskDue}
+                                  onChange={(e) => setEditSubtaskDue(e.target.value)}
+                                  className="px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2 pt-0.5">
+                                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-border/70 bg-background hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                                  <Paperclip className="w-3 h-3 text-primary" />
+                                  <span>Attach ({editSubtaskAttachments.length})</span>
+                                  <input
+                                    type="file"
+                                    multiple
+                                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.env,.txt,.json,.yml,.yaml,.xml"
+                                    onChange={async (e) => {
+                                      const files = await readFilesAsAttachments(e.target.files)
+                                      setEditSubtaskAttachments((prev) => [...prev, ...files])
+                                      e.target.value = ''
+                                    }}
+                                    className="hidden"
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  disabled={!editSubtaskTitle.trim()}
+                                  onClick={() => {
+                                    if (!editSubtaskTitle.trim()) return
+                                    const subtaskObj = {
+                                      id: 'st_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                                      title: editSubtaskTitle.trim(),
+                                      description: editSubtaskDesc.trim(),
+                                      dueDate: editSubtaskDue,
+                                      completed: false,
+                                      attachments: editSubtaskAttachments,
+                                    }
+                                    setEditSubtasks((prev) => [...prev, subtaskObj])
+                                    setEditSubtaskTitle('')
+                                    setEditSubtaskDesc('')
+                                    setEditSubtaskAttachments([])
+                                  }}
+                                  className="px-3 py-1 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add Subtask</span>
+                                </button>
+                              </div>
+
+                              {editSubtaskAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {editSubtaskAttachments.map((att) => (
+                                    <span
+                                      key={att.id}
+                                      className="inline-flex items-center gap-1 text-[10px] bg-background border border-border px-2 py-0.5 rounded-lg text-foreground"
+                                    >
+                                      {getFileIcon(att.type, att.name)}
+                                      <span className="truncate max-w-[120px]">{att.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditSubtaskAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                                        className="text-muted-foreground hover:text-destructive ml-1"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Subtasks List */}
+                        {editSubtasks.length === 0 ? (
+                          <div className="p-5 rounded-2xl border border-dashed border-border/70 text-center text-xs text-muted-foreground">
+                            No subtasks currently registered. Add subtasks to track granular progress.
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar p-0.5">
+                            {editSubtasks.map((st, idx) => (
+                              <div
+                                key={st.id}
+                                className="p-2.5 rounded-2xl border border-border/80 bg-background/80 hover:bg-background transition-all space-y-1.5 shadow-xs"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={st.completed}
+                                      onChange={() => {
+                                        setEditSubtasks((prev) =>
+                                          prev.map((s, i) => (i === idx ? { ...s, completed: !s.completed } : s))
+                                        )
+                                      }}
+                                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                                    />
+                                    <span className={`text-xs font-semibold ${st.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                                      {st.title}
+                                    </span>
+                                  </label>
 
                                   {!isReadOnly && (
                                     <button
                                       type="button"
-                                      onClick={() => setEditAttachments((prev) => prev.filter((a) => a.id !== att.id))}
-                                      title="Delete attachment"
-                                      className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                      onClick={() => setEditSubtasks((prev) => prev.filter((_, i) => i !== idx))}
+                                      className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   )}
                                 </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* TAB 3: SUBTASKS & PROGRESS */}
-                  {editingTaskTab === 'subtasks' && (
-                    <div className="space-y-4 animate-fade-in">
-                      {/* Subtasks Summary Bar */}
-                      <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-foreground flex items-center gap-1.5">
-                            <Layers className="w-4 h-4 text-primary" /> Subtasks Completion
-                          </span>
-                          <span className="font-bold text-primary">
-                            {editSubtasks.length > 0
-                              ? `${editSubtasks.filter((s: any) => s.completed).length}/${editSubtasks.length} done (${calculatedSubtaskProgress}%)`
-                              : '0 Subtasks'}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-300 rounded-full"
-                            style={{ width: `${calculatedSubtaskProgress}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Add Subtask Form (if editable) */}
-                      {!isReadOnly && (
-                        <div className="p-3.5 rounded-2xl bg-card/60 border border-border/70 space-y-3">
-                          <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
-                            <Plus className="w-3.5 h-3.5 text-primary" /> Add New Subtask
-                          </h4>
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              placeholder="Subtask title..."
-                              value={editSubtaskTitle}
-                              onChange={(e) => setEditSubtaskTitle(e.target.value)}
-                              className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <input
-                                type="text"
-                                placeholder="Subtask description..."
-                                value={editSubtaskDesc}
-                                onChange={(e) => setEditSubtaskDesc(e.target.value)}
-                                className="px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                              <input
-                                type="date"
-                                value={editSubtaskDue}
-                                onChange={(e) => setEditSubtaskDue(e.target.value)}
-                                className="px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                            </div>
-
-                            <div className="flex items-center justify-between gap-2 pt-1">
-                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/70 bg-background hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                                <Paperclip className="w-3.5 h-3.5 text-primary" />
-                                <span>Attach ({editSubtaskAttachments.length})</span>
-                                <input
-                                  type="file"
-                                  multiple
-                                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.env,.txt,.json,.yml,.yaml,.xml"
-                                  onChange={async (e) => {
-                                    const files = await readFilesAsAttachments(e.target.files)
-                                    setEditSubtaskAttachments((prev) => [...prev, ...files])
-                                    e.target.value = ''
-                                  }}
-                                  className="hidden"
-                                />
-                              </label>
-
-                              <button
-                                type="button"
-                                disabled={!editSubtaskTitle.trim()}
-                                onClick={() => {
-                                  if (!editSubtaskTitle.trim()) return
-                                  const subtaskObj = {
-                                    id: 'st_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-                                    title: editSubtaskTitle.trim(),
-                                    description: editSubtaskDesc.trim(),
-                                    dueDate: editSubtaskDue,
-                                    completed: false,
-                                    attachments: editSubtaskAttachments,
-                                  }
-                                  setEditSubtasks((prev) => [...prev, subtaskObj])
-                                  setEditSubtaskTitle('')
-                                  setEditSubtaskDesc('')
-                                  setEditSubtaskAttachments([])
-                                }}
-                                className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add Subtask</span>
-                              </button>
-                            </div>
-
-                            {editSubtaskAttachments.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                {editSubtaskAttachments.map((att) => (
-                                  <span
-                                    key={att.id}
-                                    className="inline-flex items-center gap-1 text-[10px] bg-background border border-border px-2 py-0.5 rounded-lg text-foreground"
-                                  >
-                                    {getFileIcon(att.type, att.name)}
-                                    <span className="truncate max-w-[120px]">{att.name}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditSubtaskAttachments((prev) => prev.filter((a) => a.id !== att.id))}
-                                      className="text-muted-foreground hover:text-destructive ml-1"
-                                    >
-                                      &times;
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Subtasks List */}
-                      {editSubtasks.length === 0 ? (
-                        <div className="p-6 rounded-2xl border border-dashed border-border/70 text-center text-xs text-muted-foreground">
-                          No subtasks currently registered. Add subtasks to track granular progress.
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5 max-h-72 overflow-y-auto custom-scrollbar p-1">
-                          {editSubtasks.map((st, idx) => (
-                            <div
-                              key={st.id}
-                              className="p-3 rounded-2xl border border-border/80 bg-background/80 hover:bg-background transition-all space-y-2 shadow-xs"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <label className="flex items-center gap-2.5 cursor-pointer min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={st.completed}
-                                    onChange={() => {
-                                      setEditSubtasks((prev) =>
-                                        prev.map((s, i) => (i === idx ? { ...s, completed: !s.completed } : s))
-                                      )
-                                    }}
-                                    className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
-                                  />
-                                  <span className={`text-xs font-semibold ${st.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                                    {st.title}
-                                  </span>
-                                </label>
-
-                                {!isReadOnly && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditSubtasks((prev) => prev.filter((_, i) => i !== idx))}
-                                    className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-
-                              {(st.description || st.dueDate || (st.attachments && st.attachments.length > 0)) && (
-                                <div className="pl-6 space-y-1.5 text-[11px] text-muted-foreground">
-                                  {st.description && <p>{st.description}</p>}
-                                  {st.dueDate && (
-                                    <div className="flex items-center gap-1 text-[10px]">
-                                      <Calendar className="w-3 h-3 text-primary" /> Due: {st.dueDate}
-                                    </div>
-                                  )}
-                                  {/* Subtask Attachments with 1-Click Downloads */}
-                                  {st.attachments && st.attachments.length > 0 && (
-                                    <div className="space-y-1 pt-1">
-                                      <span className="text-[10px] font-semibold text-foreground flex items-center gap-1">
-                                        <Paperclip className="w-3 h-3 text-primary" /> Subtask Documents ({st.attachments.length}):
-                                      </span>
-                                      <div className="flex flex-wrap gap-1.5">
+                                {(st.description || st.dueDate || (st.attachments && st.attachments.length > 0)) && (
+                                  <div className="pl-6 space-y-1 text-[11px] text-muted-foreground">
+                                    {st.description && <p>{st.description}</p>}
+                                    {st.dueDate && (
+                                      <div className="flex items-center gap-1 text-[10px]">
+                                        <Calendar className="w-3 h-3 text-primary" /> Due: {st.dueDate}
+                                      </div>
+                                    )}
+                                    {st.attachments && st.attachments.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 pt-0.5">
                                         {st.attachments.map((att: TaskAttachment) => (
                                           <button
                                             key={att.id}
                                             type="button"
                                             onClick={() => downloadAttachment(att)}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/60 text-[10px] text-foreground hover:text-primary transition-all cursor-pointer shadow-xs"
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-card border border-border/60 text-[10px] text-foreground hover:text-primary transition-all cursor-pointer shadow-xs"
                                             title="Download subtask attachment"
                                           >
                                             {getFileIcon(att.type, att.name)}
-                                            <span className="truncate max-w-[130px] font-medium">{att.name}</span>
-                                            <Download className="w-3 h-3 text-primary ml-1" />
+                                            <span className="truncate max-w-[120px] font-medium">{att.name}</span>
+                                            <Download className="w-2.5 h-2.5 text-primary ml-1" />
                                           </button>
                                         ))}
                                       </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* TAB 4: COMMENTS & ACTIVITY */}
-                  {editingTaskTab === 'comments' && (
-                    <div className="space-y-4 animate-fade-in">
-                      {/* Post Comment Input */}
-                      <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 space-y-2.5">
-                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                          <span>Leave a Comment</span>
-                        </label>
-                        <div className="flex items-start gap-2">
-                          <textarea
-                            rows={2}
-                            placeholder="Write an update, note or question for the team..."
-                            value={newCommentText}
-                            onChange={(e) => setNewCommentText(e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary custom-scrollbar resize-y"
-                          />
-                          <button
-                            type="button"
-                            disabled={!newCommentText.trim()}
-                            onClick={handleAddComment}
-                            className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
-                            title="Send Comment"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Comment History List */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                          <span>Comment & Discussion History ({editComments.length})</span>
-                        </div>
-
-                        {editComments.length === 0 ? (
-                          <div className="p-8 rounded-2xl border border-dashed border-border/70 text-center space-y-1.5">
-                            <MessageSquare className="w-7 h-7 text-muted-foreground mx-auto opacity-40" />
-                            <p className="text-xs font-semibold text-foreground">No comments yet</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              Be the first to leave a comment on this task.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar p-1">
-                            {editComments.map((c) => (
-                              <div
-                                key={c.id}
-                                className="flex items-start gap-3 p-3.5 rounded-2xl border border-border/70 bg-background/80 hover:bg-background transition-all shadow-xs"
-                              >
-                                <div className="w-7 h-7 rounded-full bg-primary/15 border border-primary/30 text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                                  {(c.authorName || 'U').charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0 flex-1 space-y-1">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs font-bold text-foreground truncate">{c.authorName}</span>
-                                    <span className="text-[10px] text-muted-foreground shrink-0">
-                                      {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(c.createdAt).toLocaleDateString()}
-                                    </span>
+                                    )}
                                   </div>
-                                  <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                                    {c.content}
-                                  </p>
-                                </div>
+                                )}
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Modal Footer */}
-                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    {/* TAB 4: COMMENTS & ACTIVITY */}
+                    {editingTaskTab === 'comments' && (
+                      <div className="space-y-3 animate-fade-in">
+                        {/* Post Comment Input */}
+                        <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
+                          <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                            <span>Leave a Comment</span>
+                          </label>
+                          <div className="flex items-start gap-2">
+                            <textarea
+                              rows={2}
+                              placeholder="Write an update, note or question for the team..."
+                              value={newCommentText}
+                              onChange={(e) => setNewCommentText(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary custom-scrollbar resize-y"
+                            />
+                            <button
+                              type="button"
+                              disabled={!newCommentText.trim()}
+                              onClick={handleAddComment}
+                              className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                              title="Send Comment"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Comment History List */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                            <span>Comment & Discussion History ({editComments.length})</span>
+                          </div>
+
+                          {editComments.length === 0 ? (
+                            <div className="p-6 rounded-2xl border border-dashed border-border/70 text-center space-y-1">
+                              <MessageSquare className="w-6 h-6 text-muted-foreground mx-auto opacity-40" />
+                              <p className="text-xs font-semibold text-foreground">No comments yet</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Be the first to leave a comment on this task.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar p-0.5">
+                              {editComments.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className="flex items-start gap-2.5 p-3 rounded-2xl border border-border/70 bg-background/80 hover:bg-background transition-all shadow-xs"
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-primary/15 border border-primary/30 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                                    {(c.authorName || 'U').charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0 flex-1 space-y-0.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-bold text-foreground truncate">{c.authorName}</span>
+                                      <span className="text-[10px] text-muted-foreground shrink-0">
+                                        {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(c.createdAt).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                                      {c.content}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal Footer - Fixed & Responsive */}
+                  <div className="shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 border-t border-border/70 flex items-center justify-between bg-card/95">
                     <div>
-                      {!isReadOnly && canEditTask(editingTask) && (
+                      {!isReadOnly && canDeleteTask && (
                         <button
                           type="button"
                           onClick={() => setTaskToDelete(editingTask)}
@@ -3806,7 +3931,7 @@ export default function TasksPage() {
                       <button
                         type="button"
                         onClick={() => setEditingTask(null)}
-                        className="px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                        className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
                       >
                         {isReadOnly ? 'Close' : 'Cancel'}
                       </button>
@@ -3815,16 +3940,16 @@ export default function TasksPage() {
                           type="button"
                           onClick={() => handleSaveEdit()}
                           disabled={isUpdatingTask || !editTitle.trim()}
-                          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                          className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                         >
                           {isUpdatingTask ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               <span>Saving Changes...</span>
                             </>
                           ) : (
                             <>
-                              <Check className="w-4 h-4" />
+                              <Check className="w-3.5 h-3.5" />
                               <span>Save Changes to DB</span>
                             </>
                           )}

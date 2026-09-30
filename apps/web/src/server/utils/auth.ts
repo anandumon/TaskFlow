@@ -9,6 +9,7 @@ export interface AuthUser {
   fullName?: string
   firstName?: string
   lastName?: string
+  avatarUrl?: string
 }
 
 
@@ -207,4 +208,88 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
 
   return null
 }
+
+/**
+ * Checks whether the given user has administrator or owner privileges
+ * within the context of an organization, workspace, project, or task.
+ */
+export async function isUserAdmin(
+  userId: string,
+  context: { orgId?: string; workspaceId?: string; projectId?: string; taskId?: string }
+): Promise<boolean> {
+  if (!userId) return false
+
+  try {
+    let orgId = context.orgId
+    let workspaceId = context.workspaceId
+
+    // 1. Resolve workspaceId from taskId if given
+    if (!workspaceId && context.taskId) {
+      const task = await queryOne(`SELECT workspace_id, project_id FROM tasks WHERE id = $1`, [context.taskId])
+      if (task) {
+        workspaceId = task.workspace_id
+        if (!context.projectId && task.project_id) {
+          context.projectId = task.project_id
+        }
+      }
+    }
+
+    // 2. Resolve workspaceId from projectId if given
+    if (!workspaceId && context.projectId) {
+      const proj = await queryOne(`SELECT workspace_id FROM projects WHERE id = $1`, [context.projectId])
+      if (proj) workspaceId = proj.workspace_id
+    }
+
+    // 3. Resolve orgId from workspaceId if given
+    if (!orgId && workspaceId) {
+      const ws = await queryOne(`SELECT organization_id FROM workspaces WHERE id = $1`, [workspaceId])
+      if (ws) orgId = ws.organization_id
+    }
+
+    // 4. Check if user is superuser admin@taskflow.dev
+    const userRow = await queryOne(`SELECT email FROM users WHERE id = $1`, [userId])
+    if (userRow?.email?.toLowerCase() === 'admin@taskflow.dev') {
+      return true
+    }
+
+    // 5. Check organization owner or admin role
+    if (orgId) {
+      const org = await queryOne(`SELECT owner_id FROM organizations WHERE id = $1`, [orgId])
+      if (org && org.owner_id === userId) return true
+
+      const orgMember = await queryOne(
+        `SELECT om.id, r.name as role_name 
+         FROM organization_members om 
+         LEFT JOIN roles r ON r.id = om.role_id 
+         WHERE om.organization_id = $1 AND om.user_id = $2`,
+        [orgId, userId]
+      )
+      if (orgMember) {
+        const rName = (orgMember.role_name || '').toUpperCase()
+        if (rName === 'OWNER' || rName === 'ADMIN') return true
+      }
+    }
+
+    // 6. Check workspace level role
+    if (workspaceId) {
+      const wsMember = await queryOne(
+        `SELECT wm.id, r.name as role_name 
+         FROM workspace_members wm 
+         LEFT JOIN roles r ON r.id = wm.role_id 
+         WHERE wm.workspace_id = $1 AND wm.user_id = $2`,
+        [workspaceId, userId]
+      )
+      if (wsMember) {
+        const rName = (wsMember.role_name || '').toUpperCase()
+        if (rName === 'OWNER' || rName === 'ADMIN') return true
+      }
+    }
+
+    return false
+  } catch (err) {
+    console.warn('[auth.ts] isUserAdmin error:', err)
+    return false
+  }
+}
+
 

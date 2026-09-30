@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -10,9 +10,20 @@ import { Header } from '@/components/header'
 import { CommandPalette } from '@/components/command-palette'
 import { OnboardingWizardModal } from '@/features/onboarding/components/OnboardingWizardModal'
 import { AppShellSkeleton } from '@/components/loading'
+import { usePresence } from '@/hooks/use-presence'
+import { useChatRealtime } from '@/hooks/use-chat-realtime'
+
+import { useProjectStore } from '@/stores/project-store'
+import { useTaskStore } from '@/stores/task-store'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  usePresence()
+  useChatRealtime()
   const router = useRouter()
+  const pathname = usePathname()
+  const isChatRoute = pathname === '/app/messages' || pathname?.startsWith('/app/messages')
+  const isSettingsRoute = pathname === '/app/settings' || pathname?.startsWith('/app/settings')
+  const isFitScreenRoute = isChatRoute || isSettingsRoute
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore()
   const { fetchOrganizations, currentOrg, organizations } = useOrgStore()
   const { fetchWorkspaces, currentWorkspace } = useWorkspaceStore()
@@ -74,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Parallel prefetching for maximum speed and zero waterfall delay
+    // Parallel prefetching for maximum speed, caching, and zero waterfall delay
     Promise.all([
       loadUser(),
       fetchOrganizations(),
@@ -83,9 +94,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setAuthChecked(true)
         const activeOrgs = orgs || []
         if (activeOrgs.length > 0) {
-          fetchWorkspaces(activeOrgs[0].id).finally(() => {
-            setInitialLoaded(true)
-          })
+          fetchWorkspaces(activeOrgs[0].id)
+            .then((wss) => {
+              const activeWs = (wss && wss[0]) || null
+              if (activeWs?.id) {
+                // Immediately preload all user data for blazing-fast tab switching
+                Promise.all([
+                  useProjectStore.getState().loadProjects(activeWs.id),
+                  useTaskStore.getState().loadTasks(activeWs.id),
+                  useWorkspaceStore.getState().fetchMembers(activeWs.id),
+                  useOrgStore.getState().fetchMembers(activeOrgs[0].id),
+                ]).catch(() => {})
+              }
+            })
+            .finally(() => {
+              setInitialLoaded(true)
+            })
         } else {
           // User has no organizations: clean stale completion flags and show create card
           if (typeof window !== 'undefined') {
@@ -117,6 +141,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [currentOrg, fetchWorkspaces])
 
+  // Preload workspace data whenever workspace changes
+  useEffect(() => {
+    if (currentWorkspace?.id) {
+      Promise.all([
+        useProjectStore.getState().loadProjects(currentWorkspace.id),
+        useTaskStore.getState().loadTasks(currentWorkspace.id),
+        useWorkspaceStore.getState().fetchMembers(currentWorkspace.id),
+      ]).catch(() => {})
+    }
+  }, [currentWorkspace?.id])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -128,7 +163,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  if (!authChecked || isLoading || !initialLoaded) {
+  if (!initialLoaded && (!authChecked || isLoading)) {
     return <AppShellSkeleton />
   }
 
@@ -155,18 +190,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
+  if (pathname?.startsWith('/app/whiteboard')) {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-[#0d0e12]">
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       <Sidebar
         mobileOpen={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
       />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Header
           onOpenCommand={() => setCommandOpen(true)}
           onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
         />
-        <main className="flex-1 overflow-y-auto bg-background/50 p-4 sm:p-6">
+        <main className={`flex-1 min-w-0 min-h-0 ${isChatRoute ? 'overflow-hidden p-0 flex flex-col h-full' : isSettingsRoute ? 'overflow-hidden p-3 sm:p-5 flex flex-col h-full' : 'overflow-y-auto p-4 sm:p-6'} bg-background/50`}>
           {children}
         </main>
       </div>

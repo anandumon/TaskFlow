@@ -111,9 +111,29 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const currentTasks = get().tasks
     const isDifferentWorkspace =
       currentTasks.length > 0 && currentTasks.some((t) => t.workspaceId && t.workspaceId !== workspaceId)
+
     if (currentTasks.length === 0 || isDifferentWorkspace) {
-      set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(`taskflow_cached_tasks_${workspaceId}`)
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              set({ tasks: parsed, isLoading: false, error: null })
+            } else {
+              set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
+            }
+          } catch {
+            set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
+          }
+        } else {
+          set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
+        }
+      } else {
+        set({ tasks: isDifferentWorkspace ? [] : currentTasks, isLoading: true, error: null })
+      }
     }
+
     try {
       const res = await apiClient.get<Task[]>(`/api/v1/workspaces/${workspaceId}/tasks`)
       let list = res.data || []
@@ -130,6 +150,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           } catch {}
         }
+        localStorage.setItem(`taskflow_cached_tasks_${workspaceId}`, JSON.stringify(list))
       }
       set({ tasks: list, isLoading: false })
     } catch (err: any) {

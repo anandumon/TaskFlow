@@ -341,7 +341,7 @@ export default function CalendarPage() {
   return (
     <div className="h-[calc(100vh-7.5rem)] flex flex-col min-h-0 max-w-7xl mx-auto gap-2.5 animate-fade-in overflow-hidden">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toastMessage}</span>
         </div>

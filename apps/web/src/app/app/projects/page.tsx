@@ -33,8 +33,10 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { ProjectCard } from '@/features/projects/components/ProjectCard'
 import { ProjectSkeleton } from '@/components/loading'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export default function ProjectsPage() {
+  const { canCreateProject, canDeleteProject } = usePermissions()
   const { currentOrg } = useOrgStore()
   const { currentWorkspace, workspaces, setCurrentWorkspace, fetchWorkspaces } = useWorkspaceStore()
   const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading } = useProjectStore()
@@ -253,6 +255,10 @@ export default function ProjectsPage() {
   }
 
   const handleDelete = (id: string) => {
+    if (!canDeleteProject) {
+      showToast('Only administrators have permission to delete projects.')
+      return Promise.resolve()
+    }
     const p = projects.find((x) => x.id === id)
     if (p) {
       setProjectToDelete(p)
@@ -286,7 +292,7 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto animate-fade-in pb-12">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>
@@ -333,12 +339,14 @@ export default function ProjectsPage() {
             </button>
           </div>
 
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] text-white text-xs font-semibold hover:opacity-95 shadow-md shadow-[#00638E]/25 transition-all active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> New Project
-          </button>
+          {canCreateProject && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] text-white text-xs font-semibold hover:opacity-95 shadow-md shadow-[#00638E]/25 transition-all active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> New Project
+            </button>
+          )}
         </div>
       </div>
 
@@ -347,14 +355,18 @@ export default function ProjectsPage() {
           <FolderKanban className="w-12 h-12 text-muted-foreground mx-auto" />
           <h3 className="text-sm font-bold text-foreground">No projects found</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Get started by creating your first project roadmap with custom delivery environments.
+            {canCreateProject
+              ? 'Get started by creating your first project roadmap with custom delivery environments.'
+              : 'No projects have been created in this workspace yet.'}
           </p>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-md shadow-primary/20"
-          >
-            + Create First Project
-          </button>
+          {canCreateProject && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-md shadow-primary/20"
+            >
+              + Create First Project
+            </button>
+          )}
         </div>
       ) : viewMode === 'grid' ? (
         /* Clean Minimal Liquid Glass Grid View with Drag & Drop */

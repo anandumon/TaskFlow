@@ -49,7 +49,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     { label: 'Go to Overview', icon: LayoutDashboard, action: () => router.push('/app/home') },
     { label: 'Go to Tasks', icon: CheckSquare, action: () => router.push('/app/tasks') },
     { label: 'Go to Projects', icon: FolderKanban, action: () => router.push('/app/projects') },
-    { label: 'Go to Teams', icon: Users2, action: () => router.push('/app/teams') },
+    { label: 'Go to Members', icon: Users2, action: () => router.push('/app/teams') },
     { label: 'Go to Settings', icon: Settings, action: () => router.push('/app/settings') },
   ]
 

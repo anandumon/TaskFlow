@@ -48,7 +48,7 @@ export function TaskPropertiesCard({ task, project }: TaskPropertiesCardProps) {
           <div className="space-y-2 pb-3 border-b border-border/50">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground font-medium flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" /> Assigned Team
+                <Users className="w-3.5 h-3.5" /> Assignees
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">

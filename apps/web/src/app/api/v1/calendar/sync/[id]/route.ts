@@ -107,7 +107,7 @@ export async function POST(
                AND LOWER(status) != 'done' 
                AND due_date IS NOT NULL AND due_date != '' 
              ORDER BY due_date ASC 
-             LIMIT 25`
+             LIMIT 50`
           const activeTasks = await query(tasksQuery, [])
 
           for (const task of activeTasks) {
@@ -120,31 +120,87 @@ export async function POST(
               }
               if (!dateStr || dateStr.length < 10) continue
 
+              // RFC 5545 / Google Calendar API requirement:
+              // For all-day events, the end date is EXCLUSIVE.
+              // If start is 2026-10-01, end MUST be strictly later (e.g. 2026-10-02).
+              const startDateObj = new Date(dateStr + 'T00:00:00Z')
+              const nextDayObj = new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000)
+              const nextDayStr = nextDayObj.toISOString().split('T')[0]
+
               const eventPayload = {
                 summary: `[TaskFlow] ${task.title}`,
                 description: `${task.description || ''}\n\nPriority: ${
                   task.priority || 'Medium'
                 }\nStatus: ${task.status || 'Active'}\nDue Date: ${dateStr}\nSynchronized from TaskFlow`,
                 start: { date: dateStr },
-                end: { date: dateStr },
+                end: { date: nextDayStr },
+                extendedProperties: {
+                  private: {
+                    taskflow_resource_id: String(task.id),
+                    taskflow_origin: 'true',
+                  },
+                },
               }
 
-              const pushRes = await fetch(
-                `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-                  targetCalendarId
-                )}/events`,
-                {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify(eventPayload),
+              // Check if event was previously mapped to prevent duplicates
+              const existingMapping = await queryOne(
+                `SELECT external_event_id FROM calendar_event_mapping 
+                 WHERE taskflow_resource_id = $1 AND provider = 'GOOGLE' LIMIT 1`,
+                [task.id]
+              ).catch(() => null)
+
+              let pushRes: Response
+              if (existingMapping?.external_event_id) {
+                // Update existing Google Calendar event
+                pushRes = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+                    targetCalendarId
+                  )}/events/${encodeURIComponent(existingMapping.external_event_id)}`,
+                  {
+                    method: 'PATCH',
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(eventPayload),
+                  }
+                )
+              } else {
+                // Create new Google Calendar event
+                pushRes = await fetch(
+                  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+                    targetCalendarId
+                  )}/events`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(eventPayload),
+                  }
+                )
+
+                if (pushRes.ok) {
+                  const gEvent = await pushRes.json()
+                  if (gEvent?.id) {
+                    await query(
+                      `INSERT INTO calendar_event_mapping 
+                        (taskflow_resource_type, taskflow_resource_id, external_calendar_id, external_event_id, provider, last_synced_at)
+                       VALUES ('TASK', $1, $2, $3, 'GOOGLE', NOW())
+                       ON CONFLICT (taskflow_resource_type, taskflow_resource_id, provider)
+                       DO UPDATE SET external_event_id = $3, last_synced_at = NOW()`,
+                      [task.id, targetCalendarId, gEvent.id]
+                    ).catch((err) => console.warn('[calendar/sync] Mapping insert error:', err))
+                  }
                 }
-              )
+              }
 
               if (pushRes.ok) {
                 tasksExported++
+              } else {
+                const errText = await pushRes.text()
+                console.warn(`[calendar/sync] Task push failed for ${task.id} (${pushRes.status}):`, errText)
               }
             } catch (taskExportErr) {
               console.warn('[calendar/sync] Task push error for task:', task.id, taskExportErr)

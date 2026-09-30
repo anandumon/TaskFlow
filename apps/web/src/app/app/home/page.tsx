@@ -8,6 +8,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
 import { DashboardSkeleton } from '@/components/loading'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   CheckCircle2,
   CheckSquare,
@@ -28,6 +29,7 @@ import {
 export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuthStore()
+  const { canCreateProject } = usePermissions()
   const { currentWorkspace } = useWorkspaceStore()
   const { tasks, loadTasks, updateStatus, isLoading: tasksLoading } = useTaskStore()
   const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore()
@@ -139,13 +141,15 @@ export default function DashboardPage() {
             <Calendar className="w-3.5 h-3.5 text-primary" />
             <span>Sprint Calendar</span>
           </Link>
-          <Link
-            href="/app/projects"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New Project</span>
-          </Link>
+          {canCreateProject && (
+            <Link
+              href="/app/projects"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Project</span>
+            </Link>
+          )}
         </div>
       </div>
 

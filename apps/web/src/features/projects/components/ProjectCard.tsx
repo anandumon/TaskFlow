@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { FolderKanban, Trash2, Layers, ArrowRight, GripVertical, Pencil } from 'lucide-react'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface ProjectCardProps {
   project: Project
@@ -26,6 +27,7 @@ export function ProjectCard({
   onDragEnd,
   isDragging,
 }: ProjectCardProps) {
+  const { canDeleteProject } = usePermissions()
   let projectEnvs: string[] = [...ALL_ENVIRONMENTS]
   try {
     if (project.environments) {
@@ -148,17 +150,19 @@ export function ProjectCard({
                 <Pencil className="w-4 h-4" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteProject(project.id)
-              }}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-              title="Delete Project"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {canDeleteProject && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteProject(project.id)
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Delete Project"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

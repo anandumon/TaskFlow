@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
-import { getAuthUser } from '@/server/utils/auth'
+import { getAuthUser, isUserAdmin } from '@/server/utils/auth'
 import { removeOrgMember } from '@/server/services/organization.service'
 
 export async function DELETE(
@@ -9,9 +9,17 @@ export async function DELETE(
 ) {
   try {
     const authUser = await getAuthUser(req)
-    await removeOrgMember(params.id, params.memberId, authUser?.id)
+    if (!authUser) return apiError('Unauthorized', 401)
+
+    const isAdmin = await isUserAdmin(authUser.id, { orgId: params.id })
+    if (!isAdmin) {
+      return apiError('Forbidden: Only organization administrators have permission to remove members', 403)
+    }
+
+    await removeOrgMember(params.id, params.memberId, authUser.id)
     return apiSuccess(null)
   } catch (err: any) {
     return apiError(err.message || 'Failed to remove member', 500)
   }
 }
+

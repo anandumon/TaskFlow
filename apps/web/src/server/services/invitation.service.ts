@@ -142,12 +142,21 @@ export async function createInvitation(
   else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
   else roleId = 'a0000000-0000-0000-0000-000000000002'
 
+  // Look up if invited user already exists in TaskFlow
+  let invitedUserId: string | null = null
+  try {
+    const existingInvitee = await queryOne(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [input.email.toLowerCase().trim()])
+    if (existingInvitee?.id) {
+      invitedUserId = existingInvitee.id
+    }
+  } catch {}
+
   const row = await queryOne(
     `INSERT INTO invitations (
       id, email, role, role_id, scope, organization_id, organization_name,
       workspace_id, workspace_name, project_id, project_name, project_ids,
-      token, token_hash, referral_code, status, invited_by, expires_at, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'PENDING', $16, $17, $18, $18)
+      token, token_hash, referral_code, status, invited_by, invited_user_id, expires_at, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'PENDING', $16, $17, $18, $19, $19)
     RETURNING *`,
     [
       id,
@@ -166,6 +175,7 @@ export async function createInvitation(
       tokenHash,
       referralCode,
       creatorId,
+      invitedUserId,
       expiresAt,
       now,
     ]
@@ -195,13 +205,26 @@ export async function createInvitation(
   return mapInvitation(row)
 }
 
-export async function getPendingInvitationsForUser(email: string): Promise<InvitationDto[]> {
-  if (!email) return []
+export async function getPendingInvitationsForUser(email: string, userId?: string): Promise<InvitationDto[]> {
   try {
     await ensureInvitationsSchema()
+    const conditions: string[] = []
+    const params: any[] = []
+
+    if (email && email.trim()) {
+      params.push(email.trim().toLowerCase())
+      conditions.push(`LOWER(email) = $${params.length}`)
+    }
+    if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim())) {
+      params.push(userId.trim())
+      conditions.push(`invited_user_id = $${params.length}`)
+    }
+
+    if (conditions.length === 0) return []
+
     const rows = await query(
-      `SELECT * FROM invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING' ORDER BY created_at DESC`,
-      [email.trim()]
+      `SELECT * FROM invitations WHERE (${conditions.join(' OR ')}) AND status = 'PENDING' ORDER BY created_at DESC`,
+      params
     )
     return rows.map((r) => mapInvitation(r))
   } catch (err) {
@@ -275,7 +298,8 @@ export async function getInvitationsForResource(
 
 export async function acceptInvitation(
   userId: string,
-  tokenOrCode: string
+  tokenOrCode: string,
+  referralCodeInput?: string
 ): Promise<InvitationDto> {
   await ensureInvitationsSchema()
   const cleaned = (tokenOrCode || '').trim()
@@ -294,6 +318,15 @@ export async function acceptInvitation(
   )
 
   if (!inv) throw new Error('Invitation or referral code not found or invalid.')
+
+  // Referral code verification check
+  if (referralCodeInput && typeof referralCodeInput === 'string' && referralCodeInput.trim()) {
+    const cleanInput = referralCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    const cleanExpected = (inv.referral_code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    if (cleanExpected && cleanInput !== cleanExpected) {
+      throw new Error('Invalid referral code. Please check the code in your invitation email.')
+    }
+  }
 
   // Resolve target user id and perform email verification to prevent misuse
   const isUuid = (val?: string | null) => val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
@@ -316,15 +349,27 @@ export async function acceptInvitation(
     }
   }
 
-  // If anonymous or user id not found, fallback to invited email user record
+  // If anonymous or user id not found, fallback to invited email user record or create in public.users
   if (!targetUserId || targetUserId === 'anonymous' || !isUuid(targetUserId)) {
     if (inv.email) {
-      const u = await queryOne(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email])
+      const u = await queryOne(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email.trim()])
       if (u?.id) {
         targetUserId = u.id
       } else {
-        const au = await queryOne(`SELECT id FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email])
-        if (au?.id) targetUserId = au.id
+        const au = await queryOne(`SELECT id, email, raw_user_meta_data FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [inv.email.trim()])
+        if (au?.id) {
+          const meta = au.raw_user_meta_data || {}
+          const name = meta.full_name || meta.name || au.email.split('@')[0]
+          const nameParts = name.trim().split(' ')
+          const newId = au.id
+          await query(
+            `INSERT INTO users (id, email, username, first_name, last_name, display_name, status, email_verified, auth_user_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', true, $1, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [newId, au.email.toLowerCase().trim(), au.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, ''), nameParts[0] || 'User', nameParts.slice(1).join(' ') || '', name]
+          )
+          targetUserId = newId
+        }
       }
     }
   }
@@ -357,11 +402,25 @@ export async function acceptInvitation(
   else if (roleName.includes('guest')) roleId = 'a0000000-0000-0000-0000-000000000005'
   else roleId = 'a0000000-0000-0000-0000-000000000002'
 
-  if (inv.workspace_id && isUuid(targetUserId)) {
+  // Resolve hierarchy: Workspace & Organization IDs
+  let targetWsId = inv.workspace_id
+  let targetOrgId = inv.organization_id
+
+  if (!targetWsId && inv.project_id) {
+    const p = await queryOne(`SELECT workspace_id FROM projects WHERE id = $1`, [inv.project_id])
+    if (p?.workspace_id) targetWsId = p.workspace_id
+  }
+  if (!targetOrgId && targetWsId) {
+    const w = await queryOne(`SELECT organization_id FROM workspaces WHERE id = $1`, [targetWsId])
+    if (w?.organization_id) targetOrgId = w.organization_id
+  }
+
+  // 1. Provision Workspace Membership
+  if (targetWsId && isUuid(targetUserId)) {
     try {
       const existingWm = await queryOne(
         `SELECT id FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
-        [inv.workspace_id, targetUserId]
+        [targetWsId, targetUserId]
       )
       if (existingWm) {
         await query(
@@ -372,7 +431,7 @@ export async function acceptInvitation(
         await query(
           `INSERT INTO workspace_members (id, workspace_id, user_id, role_id, joined_at, created_at, updated_at, status)
            VALUES ($1, $2, $3, $4, $5, $5, $5, 'ACTIVE')`,
-          [crypto.randomUUID(), inv.workspace_id, targetUserId, roleId, now]
+          [crypto.randomUUID(), targetWsId, targetUserId, roleId, now]
         )
       }
     } catch (wmErr) {
@@ -380,11 +439,12 @@ export async function acceptInvitation(
     }
   }
 
-  if (inv.organization_id && isUuid(targetUserId)) {
+  // 2. Provision Organization Membership
+  if (targetOrgId && isUuid(targetUserId)) {
     try {
       const existingOm = await queryOne(
         `SELECT id FROM organization_members WHERE organization_id = $1 AND user_id = $2`,
-        [inv.organization_id, targetUserId]
+        [targetOrgId, targetUserId]
       )
       if (existingOm) {
         await query(
@@ -395,7 +455,7 @@ export async function acceptInvitation(
         await query(
           `INSERT INTO organization_members (id, organization_id, user_id, role, role_id, joined_at, created_at, updated_at, status)
            VALUES ($1, $2, $3, $4, $5, $6, $6, $6, 'ACTIVE')`,
-          [crypto.randomUUID(), inv.organization_id, targetUserId, inv.role || 'MEMBER', roleId, now]
+          [crypto.randomUUID(), targetOrgId, targetUserId, inv.role || 'MEMBER', roleId, now]
         )
       }
     } catch (omErr) {
@@ -403,7 +463,7 @@ export async function acceptInvitation(
     }
   }
 
-  // Upsert project memberships for all target projects
+  // 3. Provision Project Memberships for all target projects
   let targetProjectIds: string[] = []
   if (inv.project_ids) {
     try {
@@ -413,6 +473,14 @@ export async function acceptInvitation(
   }
   if (targetProjectIds.length === 0 && inv.project_id) {
     targetProjectIds = [inv.project_id]
+  }
+
+  // If no specific projects designated, grant access to all projects in workspace
+  if (targetProjectIds.length === 0 && targetWsId) {
+    try {
+      const wsProjects = await query(`SELECT id FROM projects WHERE workspace_id = $1`, [targetWsId])
+      targetProjectIds = wsProjects.map((p) => p.id)
+    } catch {}
   }
 
   for (const pid of targetProjectIds) {
@@ -440,7 +508,12 @@ export async function acceptInvitation(
     }
   }
 
-  return mapInvitation({ ...inv, status: 'ACCEPTED' })
+  return mapInvitation({
+    ...inv,
+    organization_id: targetOrgId || inv.organization_id,
+    workspace_id: targetWsId || inv.workspace_id,
+    status: 'ACCEPTED',
+  })
 }
 
 export async function declineInvitation(tokenOrId: string): Promise<void> {

@@ -8,6 +8,7 @@ import { getEnvForStatus, getStatusForEnv, getProjectEnvironments } from '@/lib/
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   useTaskStore,
   TaskStatus,
@@ -51,6 +52,7 @@ export default function TaskDetailsPage() {
     addNote,
   } = useTaskStore()
   const { projects, loadProjects } = useProjectStore()
+  const { canDeleteTask } = usePermissions()
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -332,7 +334,7 @@ export default function TaskDetailsPage() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>
@@ -414,14 +416,18 @@ export default function TaskDetailsPage() {
             </select>
           </div>
 
-          {canEdit && (
+          {canDeleteTask && (
             <button
               onClick={async () => {
+                if (!canDeleteTask) {
+                  setToastMessage('Only administrators have permission to delete tasks.')
+                  return
+                }
                 await deleteTask(task.id)
                 router.push('/app/tasks')
               }}
               className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-              title="Delete Task"
+              title="Delete Task (Admin Only)"
             >
               <Trash2 className="w-4 h-4" />
             </button>

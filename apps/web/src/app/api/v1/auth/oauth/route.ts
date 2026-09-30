@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
     const firstName = nameParts[0] || 'Google'
     const lastName = nameParts.slice(1).join(' ') || 'User'
 
+    const isSignInMode = body.mode === 'signin'
+
     // 1. Look up existing user in users table
     const existingUser = await queryOne(
       `SELECT id, email, username, first_name, last_name, display_name, avatar_url, email_verified, status 
@@ -26,58 +28,48 @@ export async function POST(req: NextRequest) {
       [cleanEmail]
     )
 
-    // Clean username if provided
+    // If signin mode and user does not exist in DB, reject with clear message
+    if (isSignInMode && !existingUser) {
+      return apiError(
+        'No TaskFlow account found with this Google email. Please register or sign up first.',
+        404,
+        'USER_NOT_FOUND'
+      )
+    }
+
+    // Check account status
+    if (existingUser && (existingUser.status === 'SUSPENDED' || existingUser.status === 'DEACTIVATED')) {
+      return apiError('Your account has been deactivated or suspended. Please contact support.', 403, 'ACCOUNT_SUSPENDED')
+    }
+
+    // Clean or auto-generate username
     let cleanUsername: string | null = null
     if (typeof username === 'string' && username.trim()) {
       cleanUsername = username.trim().toLowerCase()
-      if (cleanUsername.length < 3) {
-        return apiError('Username must be at least 3 characters long', 400)
+      if (cleanUsername.length >= 3 && cleanUsername.length <= 30 && /^[a-z0-9_-]+$/.test(cleanUsername)) {
+        // Valid username format
+      } else {
+        cleanUsername = null
       }
-      if (cleanUsername.length > 30) {
-        return apiError('Username cannot exceed 30 characters', 400)
-      }
-      if (!/^[a-z0-9_-]+$/.test(cleanUsername)) {
-        return apiError('Username can only contain letters, numbers, underscores, and hyphens', 400)
-      }
-
-      // Check if username is taken by someone else
-      const takenUser = await queryOne(
-        `SELECT id FROM users WHERE LOWER(username) = $1 AND (deleted = false OR deleted IS NULL) ${
-          existingUser ? 'AND id != $2' : ''
-        } LIMIT 1`,
-        existingUser ? [cleanUsername, existingUser.id] : [cleanUsername]
-      )
-      if (takenUser) {
-        return apiError('This username is already taken. Please choose another.', 409, 'USERNAME_TAKEN')
-      }
-    }
-
-    // If user does not exist and no username provided, signal frontend to prompt
-    if (!existingUser && !cleanUsername) {
-      return apiSuccess({
-        requiresUsername: true,
-        email: cleanEmail,
-        name: name || `${firstName} ${lastName}`,
-        avatarUrl,
-        provider: provider || 'google',
-        isNewUser: true,
-      })
-    }
-
-    // If existing user has no username and none was provided, signal frontend to prompt
-    if (existingUser && !existingUser.username && !cleanUsername) {
-      return apiSuccess({
-        requiresUsername: true,
-        email: cleanEmail,
-        name: existingUser.display_name || name || `${existingUser.first_name} ${existingUser.last_name}`,
-        avatarUrl: existingUser.avatar_url || avatarUrl,
-        provider: provider || 'google',
-        isNewUser: false,
-      })
     }
 
     const userId = existingUser?.id || crypto.randomUUID()
-    const finalUsername = cleanUsername || existingUser?.username || cleanEmail.split('@')[0]
+    let finalUsername = existingUser?.username || cleanUsername
+
+    if (!finalUsername) {
+      const basePrefix = cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'user'
+      let candidate = basePrefix.length < 3 ? `${basePrefix}123` : basePrefix
+      let suffix = 1
+      while (true) {
+        const takenUser = await queryOne(
+          `SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2 LIMIT 1`,
+          [candidate, userId]
+        )
+        if (!takenUser) break
+        candidate = `${basePrefix.slice(0, 20)}_${suffix++}`
+      }
+      finalUsername = candidate
+    }
 
     if (!existingUser) {
       // Create new user in users table with email, username, and profile
@@ -103,6 +95,11 @@ export async function POST(req: NextRequest) {
       await query(
         `UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2`,
         [cleanUsername, userId]
+      )
+    } else if (!existingUser.username && finalUsername) {
+      await query(
+        `UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2`,
+        [finalUsername, userId]
       )
     }
 

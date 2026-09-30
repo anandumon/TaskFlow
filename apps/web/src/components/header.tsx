@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { Search, Bell, Plus, Sparkles, Command, HelpCircle, Calendar, CheckCircle2, Clock, Menu, Mail, Loader2, X, ArrowRight, ShieldCheck, Building2, FolderKanban } from 'lucide-react'
@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
 import { UserGuideModal } from '@/components/user-guide-modal'
+import { AcceptInviteModal } from '@/components/accept-invite-modal'
 import { apiClient } from '@/lib/api-client'
 
 interface HeaderProps {
@@ -31,6 +32,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
   const [actioningToken, setActioningToken] = useState<string | null>(null)
   const [headerToast, setHeaderToast] = useState<string | null>(null)
   const [clearedNotifications, setClearedNotifications] = useState(false)
+  const [inviteForAcceptModal, setInviteForAcceptModal] = useState<any | null>(null)
 
   // Ensure organization and workspace are always loaded for both users
   useEffect(() => {
@@ -65,7 +67,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
       }
       return foundTask?.title || 'Deliverable Details'
     }
-    if (pathname === '/app/teams') return 'Teams & Members'
+    if (pathname === '/app/teams') return 'Members'
     if (pathname === '/app/tasks') return 'My Tasks & Board'
     if (pathname === '/app/calendar') return 'Sprint Calendar'
     if (pathname === '/app/overview') return 'Workspace Overview'
@@ -176,11 +178,22 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
     return alerts.sort((a, b) => a.daysDiff - b.daysDiff)
   }, [tasks])
 
+  const previousPendingCountRef = useRef(0)
+
   const fetchPendingInvitations = useCallback(async () => {
     if (!user) return
     try {
       const res = await apiClient.get<any[]>('/api/v1/invitations/pending-for-me')
       if (res.data) {
+        // Detect newly arrived invitation and display live banner notification
+        if (res.data.length > previousPendingCountRef.current && previousPendingCountRef.current > 0) {
+          const newest = res.data[0]
+          if (newest) {
+            setHeaderToast(`📩 New Invitation! ${newest.inviterName || 'A team member'} invited you to join ${newest.projectName || 'project'} in ${newest.orgName || 'organization'}.`)
+            setTimeout(() => setHeaderToast(null), 5000)
+          }
+        }
+        previousPendingCountRef.current = res.data.length
         setPendingInvitations(res.data)
       }
     } catch {
@@ -194,51 +207,55 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         fetchPendingInvitations()
       }
-    }, 30000)
-    return () => clearInterval(timer)
+    }, 8000)
+
+    const handleFocus = () => fetchPendingInvitations()
+    const handleCustom = () => fetchPendingInvitations()
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('taskflow:invitation-sent', handleCustom)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('taskflow:invitation-sent', handleCustom)
+    }
   }, [fetchPendingInvitations])
 
-  const handleAcceptInvite = async (inv: any) => {
-    const identifier = inv.id || inv.token
-    if (!identifier) return
-    setActioningToken(identifier)
-    try {
-      const res = await apiClient.post<any>(`/api/v1/invitations/${identifier}/accept`)
-      const acceptData = res.data || inv
-      setHeaderToast(`Joined ${acceptData.projectName || inv.projectName || 'project'} in ${acceptData.organizationName || inv.orgName || 'organization'}!`)
-      setPendingInvitations(prev => prev.filter(i => i.id !== inv.id && i.token !== inv.token))
+  const handleOpenAcceptModal = (inv: any) => {
+    setInviteForAcceptModal(inv)
+    setNotificationsOpen(false)
+  }
 
-      // Refresh organizations & switch active context
-      const orgs = await fetchOrganizations()
-      const targetOrgId = acceptData.organizationId || inv.organizationId
-      const targetOrg = orgs.find(o => o.id === targetOrgId) || orgs[0]
-      if (targetOrg) {
-        setCurrentOrg(targetOrg)
-        const wss = await fetchWorkspaces(targetOrg.id)
-        const targetWsId = acceptData.workspaceId || inv.workspaceId
-        const targetWs = wss.find(w => w.id === targetWsId) || wss[0]
-        if (targetWs) {
-          setCurrentWorkspace(targetWs)
-          await loadProjects(targetWs.id)
-        }
+  const handleCompleteAccept = async (acceptData: any) => {
+    const inv = inviteForAcceptModal || acceptData
+    setHeaderToast(`Joined ${acceptData.projectName || inv?.projectName || 'project'} in ${acceptData.organizationName || inv?.orgName || 'organization'}!`)
+    setPendingInvitations((prev) => prev.filter((i) => i.id !== inv?.id && i.token !== inv?.token))
+
+    // Refresh organizations & switch active context
+    const orgs = await fetchOrganizations()
+    const targetOrgId = acceptData.organizationId || inv?.organizationId
+    const targetOrg = orgs.find((o) => o.id === targetOrgId) || orgs[0]
+    if (targetOrg) {
+      setCurrentOrg(targetOrg)
+      const wss = await fetchWorkspaces(targetOrg.id)
+      const targetWsId = acceptData.workspaceId || inv?.workspaceId
+      const targetWs = wss.find((w) => w.id === targetWsId) || wss[0]
+      if (targetWs) {
+        setCurrentWorkspace(targetWs)
+        await loadProjects(targetWs.id)
       }
-
-      await fetchUserResources()
-
-      setTimeout(() => {
-        setHeaderToast(null)
-        if (acceptData.projectId || inv.projectId) {
-          router.push(`/app/projects/${acceptData.projectId || inv.projectId}`)
-        } else if (pathname === '/app/teams') {
-          window.location.reload()
-        }
-      }, 1000)
-    } catch (err: any) {
-      setHeaderToast(err?.response?.data?.message || err?.message || 'Failed to accept invitation')
-      setTimeout(() => setHeaderToast(null), 3000)
-    } finally {
-      setActioningToken(null)
     }
+
+    await fetchUserResources()
+
+    setTimeout(() => {
+      setHeaderToast(null)
+      if (acceptData.projectId || inv?.projectId) {
+        router.push(`/app/projects/${acceptData.projectId || inv?.projectId}`)
+      } else if (pathname === '/app/teams') {
+        window.location.reload()
+      }
+    }, 1000)
   }
 
   const handleDeclineInvite = async (inv: any) => {
@@ -261,8 +278,15 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
     <>
       <UserGuideModal isOpen={guideModalOpen} onClose={() => setGuideModalOpen(false)} />
 
+      <AcceptInviteModal
+        isOpen={!!inviteForAcceptModal}
+        onClose={() => setInviteForAcceptModal(null)}
+        invitation={inviteForAcceptModal}
+        onAccepted={handleCompleteAccept}
+      />
+
       {headerToast && (
-        <div className="fixed top-16 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl animate-fade-in text-xs font-semibold">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4" />
           <span>{headerToast}</span>
         </div>
@@ -433,15 +457,11 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                           </div>
                           <div className="flex items-center gap-2 pt-1">
                             <button
-                              onClick={() => handleAcceptInvite(inv)}
+                              onClick={() => handleOpenAcceptModal(inv)}
                               disabled={actioningToken === (inv.id || inv.token)}
-                              className="flex-1 py-1.5 px-3 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              className="flex-1 py-1.5 px-3 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                             >
-                              {actioningToken === (inv.id || inv.token) ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                              )}
+                              <CheckCircle2 className="w-3.5 h-3.5" />
                               Accept &amp; Join
                             </button>
                             <button

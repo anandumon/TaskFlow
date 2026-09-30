@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
+import { getAuthUser, isUserAdmin } from '@/server/utils/auth'
 import { getTaskById, updateTask, deleteTask } from '@/server/services/task.service'
 
 export async function GET(
@@ -33,6 +34,14 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getAuthUser(req)
+    if (!user) return apiError('Unauthorized', 401)
+
+    const isAdmin = await isUserAdmin(user.id, { taskId: params.id })
+    if (!isAdmin) {
+      return apiError('Forbidden: Only administrators have permission to delete tasks', 403)
+    }
+
     await deleteTask(params.id)
     return apiSuccess(null)
   } catch (err: any) {

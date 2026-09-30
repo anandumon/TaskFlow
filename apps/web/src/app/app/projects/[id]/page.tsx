@@ -61,6 +61,7 @@ import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
 import { UserSelect, AssignableUser, getInitials, getAvatarColor } from '@/components/ui/user-select'
 import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { UserGuideModal } from '@/components/user-guide-modal'
+import { RoleSelectDropdown } from '@/components/RoleSelectDropdown'
 import { getFirstName } from '@/lib/utils'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
@@ -186,6 +187,7 @@ export default function ProjectDetailsPage() {
   // Invite Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('Member')
   const [inviting, setInviting] = useState(false)
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -277,12 +279,32 @@ export default function ProjectDetailsPage() {
     e.preventDefault()
     if (!inviteEmail.trim() || !projectId) return
     setInviting(true)
+
+    const emails = inviteEmail
+      .split(/[\s,]+/)
+      .map((em) => em.trim().toLowerCase())
+      .filter((em) => em.length > 0 && em.includes('@'))
+
+    if (emails.length === 0) {
+      showToast('Please enter at least one valid email address.')
+      setInviting(false)
+      return
+    }
+
     try {
-      await apiClient.post(`/api/v1/projects/${projectId}/invitations`, {
-        email: inviteEmail.trim().toLowerCase(),
-        role: 'MEMBER',
-      })
-      showToast(`Invitation sent to ${inviteEmail}!`)
+      let sentCount = 0
+      for (const em of emails) {
+        await apiClient.post(`/api/v1/projects/${projectId}/invitations`, {
+          email: em,
+          role: inviteRole.toUpperCase().replace(/\s+/g, '_'),
+        })
+        sentCount++
+      }
+      showToast(
+        sentCount === 1
+          ? `Invitation sent to ${emails[0]} as ${inviteRole}!`
+          : `Successfully sent ${sentCount} invitations as ${inviteRole}!`
+      )
       setInviteEmail('')
       setIsInviteModalOpen(false)
     } catch (err: any) {
@@ -935,7 +957,7 @@ export default function ProjectDetailsPage() {
 
       <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
         {toastMessage && (
-          <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold backdrop-blur-md">
             <CheckCircle2 className="w-4 h-4" />
             <span>{toastMessage}</span>
           </div>
@@ -2551,20 +2573,28 @@ export default function ProjectDetailsPage() {
                   <div className="relative">
                     <Mail className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type="email"
+                      type="text"
                       required
                       autoFocus
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="colleague@example.com"
-                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="Enter email, comma or space separated"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
                     />
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-accent/30 border border-border/50 text-[11px] text-muted-foreground leading-relaxed space-y-1">
-                  <div className="font-semibold text-foreground flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-primary" /> Automatic Setup Included
+                {/* Role and Access Level Selection */}
+                <RoleSelectDropdown
+                  value={inviteRole}
+                  onChange={setInviteRole}
+                  label="Invite as"
+                  isProjectScope={true}
+                />
+
+                <div className="p-3.5 rounded-xl bg-accent/30 border border-border/50 text-[11px] text-muted-foreground leading-relaxed space-y-1.5">
+                  <div className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" /> Automatic Setup Included
                   </div>
                   <p>
                     When they open the invite link, if they don't have an account, they can sign up and the organization, workspace, and project will be automatically attached for them.
@@ -2582,7 +2612,7 @@ export default function ProjectDetailsPage() {
                   <button
                     type="submit"
                     disabled={inviting || !inviteEmail.trim()}
-                    className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-md shadow-primary/25 disabled:opacity-50 cursor-pointer"
+                    className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all flex items-center gap-2 shadow-md shadow-primary/25 disabled:opacity-50 cursor-pointer"
                   >
                     {inviting ? (
                       <>

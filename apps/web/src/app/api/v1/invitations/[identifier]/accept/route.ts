@@ -9,7 +9,9 @@ export async function POST(
 ) {
   try {
     const user = await getAuthUser(req)
-    const inv = await acceptInvitation(user?.id || 'anonymous', params.identifier)
+    const body = await req.json().catch(() => ({}))
+    const referralCode = body?.referralCode || body?.code
+    const inv = await acceptInvitation(user?.id || 'anonymous', params.identifier, referralCode)
     return apiSuccess(inv)
   } catch (err: any) {
     return apiError(err.message || 'Failed to accept invitation', 400)
