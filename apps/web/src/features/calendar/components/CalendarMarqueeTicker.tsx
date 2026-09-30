@@ -179,7 +179,7 @@ export function CalendarMarqueeTicker({ tasks, projects, onSelectTaskDate }: Cal
         .animate-ticker-slide {
           display: flex;
           width: max-content;
-          animation: tickerSlide 28s linear infinite;
+          animation: tickerSlide ${Math.max(65, uniqueUpcomingTasks.length * 6)}s linear infinite;
         }
         .animate-ticker-slide:hover {
           animation-play-state: paused;

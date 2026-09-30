@@ -984,7 +984,6 @@ export function KryaWhiteboardModal({
         { title: '3. Purchase / Onboard', color: '#e0f2fe', border: '#38bdf8', note: 'Invites workspace team and sets up sprints' },
         { title: '4. Retention', color: '#dcfce7', border: '#4ade80', note: 'Daily standups & Google Meet collaboration' },
       ]
-
       phases.forEach((p, idx) => {
         newItems.push({
           id: `cjm-col-${now}-${idx}`,
@@ -1011,7 +1010,7 @@ export function KryaWhiteboardModal({
           color: '#fef08a',
         })
       })
-    } else if (templateKey === 'eisenhower-matrix') {
+    } else if (templateKey === 'eisenhower-matrix' || templateKey === '2x2-priority-matrix') {
       newItems.push(
         {
           id: `em-1-${now}`,
@@ -1066,97 +1065,235 @@ export function KryaWhiteboardModal({
           thickness: 2.5,
         }
       )
-    } else if (templateKey === 'bcg-matrix') {
-      newItems.push(
-        {
-          id: `bcg-1-${now}`,
+    } else if (templateKey === 'sprint-retro') {
+      const cols = [
+        { title: '🟢 WHAT WENT WELL', color: '#dcfce7', border: '#22c55e', notes: ['High team velocity in Sprint 14', 'Smooth Google Calendar sync rollout'] },
+        { title: '🔴 WHAT DIDN\'T GO WELL', color: '#fee2e2', border: '#ef4444', notes: ['OAuth consent verification delays', 'Slow org loading on low bandwidth'] },
+        { title: '💡 ACTION ITEMS', color: '#e0e7ff', border: '#6366f1', notes: ['Add automated pre-fetching cache', 'Optimize mobile touch response'] },
+      ]
+      cols.forEach((col, idx) => {
+        newItems.push({
+          id: `retro-col-${now}-${idx}`,
           type: 'rect',
-          x: 180,
-          y: 140,
-          width: 300,
-          height: 220,
-          content: 'STARS ⭐\nHigh Growth, High Share\n\n• AI Copilot Workspace Engine',
-          color: '#eff6ff',
-          borderColor: '#3b82f6',
-        },
-        {
-          id: `bcg-2-${now}`,
+          x: 120 + idx * 300,
+          y: 120,
+          width: 280,
+          height: 420,
+          content: col.title,
+          color: col.color,
+          borderColor: col.border,
+          borderStyle: 'solid',
+          thickness: 2,
+        })
+        col.notes.forEach((note, nIdx) => {
+          newItems.push({
+            id: `retro-note-${now}-${idx}-${nIdx}`,
+            type: 'sticky',
+            x: 140 + idx * 300,
+            y: 200 + nIdx * 150,
+            width: 240,
+            height: 120,
+            content: note,
+            color: '#fef08a',
+          })
+        })
+      })
+    } else if (templateKey === 'four-ls-retro') {
+      const lCols = [
+        { title: 'LIKED 👍', color: '#dcfce7', border: '#10b981', note: 'Fast UI feedback & real-time updates' },
+        { title: 'LEARNED 💡', color: '#e0f2fe', border: '#0284c7', note: 'Optimistic state caching prevents flashes' },
+        { title: 'LACKED ❌', color: '#fee2e2', border: '#ef4444', note: 'Granular subpage deletion confirmations' },
+        { title: 'LONGED FOR 🌟', color: '#f3e8ff', border: '#a855f7', note: 'Automated whiteboard AI generator' },
+      ]
+      lCols.forEach((col, idx) => {
+        newItems.push({
+          id: `4ls-col-${now}-${idx}`,
           type: 'rect',
-          x: 500,
-          y: 140,
-          width: 300,
-          height: 220,
-          content: 'QUESTION MARKS ❓\nHigh Growth, Low Share\n\n• New Marketplace Integration',
-          color: '#fffbeb',
-          borderColor: '#f59e0b',
-        },
-        {
-          id: `bcg-3-${now}`,
-          type: 'rect',
-          x: 180,
-          y: 380,
-          width: 300,
-          height: 220,
-          content: 'CASH COWS 🐄\nLow Growth, High Share\n\n• Core Task & Project Tracking',
-          color: '#f0fdf4',
-          borderColor: '#10b981',
-        },
-        {
-          id: `bcg-4-${now}`,
-          type: 'rect',
-          x: 500,
-          y: 380,
-          width: 300,
-          height: 220,
-          content: 'DOGS 🐕\nLow Growth, Low Share\n\n• Legacy Export Plugin',
-          color: '#fef2f2',
-          borderColor: '#ef4444',
-        }
-      )
-    } else if (templateKey === 'benchmark-analysis') {
+          x: 100 + idx * 250,
+          y: 120,
+          width: 230,
+          height: 400,
+          content: col.title,
+          color: col.color,
+          borderColor: col.border,
+          borderStyle: 'solid',
+          thickness: 2,
+        })
+        newItems.push({
+          id: `4ls-note-${now}-${idx}`,
+          type: 'sticky',
+          x: 115 + idx * 250,
+          y: 200,
+          width: 200,
+          height: 130,
+          content: col.note,
+          color: '#fef08a',
+        })
+      })
+    } else if (templateKey === 'five-whys') {
       newItems.push({
-        id: `bm-table-${now}`,
+        id: `fw-prob-${now}`,
+        type: 'rect',
+        x: 100,
+        y: 140,
+        width: 320,
+        height: 100,
+        content: '🚨 PROBLEM STATEMENT:\nPayment checkout failed during flash sale',
+        color: '#fee2e2',
+        borderColor: '#ef4444',
+        thickness: 2.5,
+      })
+      const whys = [
+        'Why 1? API gateway timed out on high load',
+        'Why 2? Database connection pool reached maximum capacity',
+        'Why 3? Unindexed customer lookup queries caused lock contention',
+        'Why 4? Performance test neglected query execution plan check',
+        'Why 5? CI/CD pipeline lacked automated load test stage',
+      ]
+      whys.forEach((w, idx) => {
+        newItems.push({
+          id: `fw-${now}-${idx}`,
+          type: 'rect',
+          x: 460,
+          y: 120 + idx * 80,
+          width: 380,
+          height: 65,
+          content: w,
+          color: '#f8fafc',
+          borderColor: '#6366f1',
+        })
+      })
+      newItems.push({
+        id: `fw-solution-${now}`,
+        type: 'rect',
+        x: 880,
+        y: 200,
+        width: 300,
+        height: 140,
+        content: '✅ ROOT CAUSE & ACTION:\nAdd connection pooling and automated k6 load tests into GitHub Actions',
+        color: '#dcfce7',
+        borderColor: '#22c55e',
+        thickness: 2.5,
+      })
+    } else if (templateKey === 'raci-matrix') {
+      newItems.push({
+        id: `raci-tbl-${now}`,
+        type: 'rect',
+        x: 120,
+        y: 120,
+        width: 760,
+        height: 420,
+        content: 'RACI RESPONSIBILITY ASSIGNMENT MATRIX\n\nTask / Deliverable | Product | Eng Lead | Designer | QA\n----------------------------------------------------\nArchitecture Spec  |    C    |    A/R   |    I     |  C\nUI Design System   |    C    |     I    |   A/R    |  C\nCore API Engine    |    I    |    A/R   |     I    |  R\nSecurity & Privacy |    A    |     R    |     I    |  C\nRelease Deployment |    A    |     R    |     I    |  R\n\nR = Responsible | A = Accountable | C = Consulted | I = Informed',
+        color: '#14151e',
+        borderColor: '#6366f1',
+      })
+    } else if (templateKey === 'action-priority-matrix') {
+      newItems.push(
+        { id: `apm-1-${now}`, type: 'rect', x: 140, y: 120, width: 340, height: 220, content: '⭐ QUICK WINS\n(High Impact, Low Effort)\n\n• Enable local response caching\n• Add single-click event guards', color: '#ecfdf5', borderColor: '#10b981' },
+        { id: `apm-2-${now}`, type: 'rect', x: 500, y: 120, width: 340, height: 220, content: '🚀 MAJOR PROJECTS\n(High Impact, High Effort)\n\n• Full multi-tenant data sharding\n• AI meeting transcription engine', color: '#eff6ff', borderColor: '#3b82f6' },
+        { id: `apm-3-${now}`, type: 'rect', x: 140, y: 360, width: 340, height: 220, content: '🛠️ FILL-INS\n(Low Impact, Low Effort)\n\n• Update icon hover tooltips\n• Minor typography refinements', color: '#fffbeb', borderColor: '#f59e0b' },
+        { id: `apm-4-${now}`, type: 'rect', x: 500, y: 360, width: 340, height: 220, content: '⚠️ THANKLESS TASKS\n(Low Impact, High Effort)\n\n• Legacy browser polyfills\n• Manual export conversions', color: '#fef2f2', borderColor: '#ef4444' }
+      )
+    } else if (templateKey === 'system-architecture') {
+      newItems.push(
+        { id: `arch-1-${now}`, type: 'rect', x: 100, y: 220, width: 200, height: 120, content: '🖥️ Frontend Client\n(Next.js 14 App Router\nTailwind & Zustand)', color: '#eff6ff', borderColor: '#3b82f6' },
+        { id: `arch-2-${now}`, type: 'rect', x: 360, y: 220, width: 220, height: 120, content: '🛡️ API Gateway\n(Edge Middleware,\nRate Limiting & Auth)', color: '#f5f3ff', borderColor: '#8b5cf6' },
+        { id: `arch-3-${now}`, type: 'rect', x: 640, y: 140, width: 220, height: 100, content: '⚙️ TaskFlow Services\n(Sprint, Docs, Tasks API)', color: '#ecfdf5', borderColor: '#10b981' },
+        { id: `arch-4-${now}`, type: 'rect', x: 640, y: 280, width: 220, height: 100, content: '📅 Google Calendar &\nMeet Integration Sync', color: '#fffbeb', borderColor: '#f59e0b' },
+        { id: `arch-5-${now}`, type: 'rect', x: 920, y: 220, width: 200, height: 120, content: '💾 Data Layer\n(Supabase PostgreSQL\n& Redis Cache)', color: '#f8fafc', borderColor: '#64748b' }
+      )
+    } else if (templateKey === 'user-story-map') {
+      newItems.push(
+        { id: `usm-head-${now}`, type: 'frame', title: 'User Story Mapping Board', x: 100, y: 100, width: 880, height: 500 },
+        { id: `usm-act1-${now}`, type: 'rect', x: 140, y: 160, width: 200, height: 60, content: '1. Plan Sprints', color: '#818cf8', borderColor: '#4f46e5' },
+        { id: `usm-act2-${now}`, type: 'rect', x: 380, y: 160, width: 200, height: 60, content: '2. Collaborate on Docs', color: '#a78bfa', borderColor: '#7c3aed' },
+        { id: `usm-act3-${now}`, type: 'rect', x: 620, y: 160, width: 200, height: 60, content: '3. Track Deliverables', color: '#34d399', borderColor: '#059669' },
+        { id: `usm-s1-${now}`, type: 'sticky', x: 140, y: 260, width: 180, height: 100, content: 'MVP: Kanban board drag and drop', color: '#fef08a' },
+        { id: `usm-s2-${now}`, type: 'sticky', x: 380, y: 260, width: 180, height: 100, content: 'MVP: Real-time rich text doc editor', color: '#fef08a' },
+        { id: `usm-s3-${now}`, type: 'sticky', x: 620, y: 260, width: 180, height: 100, content: 'MVP: Due date alerts ticker', color: '#fef08a' }
+      )
+    } else if (templateKey === 'swot-analysis') {
+      newItems.push(
+        { id: `swot-s-${now}`, type: 'rect', x: 140, y: 120, width: 340, height: 220, content: '💪 STRENGTHS\n\n• High performance Next.js web application\n• Integrated Whiteboard & Sprints in one tab\n• Frictionless real-time team collaboration', color: '#ecfdf5', borderColor: '#10b981' },
+        { id: `swot-w-${now}`, type: 'rect', x: 500, y: 120, width: 340, height: 220, content: '📉 WEAKNESSES\n\n• Requires Google OAuth verification for public\n• Limited offline caching without ServiceWorker', color: '#fee2e2', borderColor: '#ef4444' },
+        { id: `swot-o-${now}`, type: 'rect', x: 140, y: 360, width: 340, height: 220, content: '🚀 OPPORTUNITIES\n\n• AI meeting transcription & action items\n• Pre-built enterprise project templates', color: '#eff6ff', borderColor: '#3b82f6' },
+        { id: `swot-t-${now}`, type: 'rect', x: 500, y: 360, width: 340, height: 220, content: '🛡️ THREATS\n\n• Existing legacy incumbents (Jira, ClickUp)\n• Rapidly shifting cloud API rate limits', color: '#fffbeb', borderColor: '#f59e0b' }
+      )
+    } else if (templateKey === 'fishbone-diagram') {
+      newItems.push(
+        { id: `fb-head-${now}`, type: 'rect', x: 800, y: 240, width: 220, height: 100, content: '🎯 PROBLEM EFFECT:\nSprint Velocity Dropped by 25%', color: '#fee2e2', borderColor: '#ef4444' },
+        { id: `fb-1-${now}`, type: 'sticky', x: 200, y: 120, width: 180, height: 100, content: 'PEOPLE:\n• 2 seniors on leave\n• New hires onboarding', color: '#fef08a' },
+        { id: `fb-2-${now}`, type: 'sticky', x: 480, y: 120, width: 180, height: 100, content: 'PROCESS:\n• Requirements changed mid-sprint\n• Missing QA checklist', color: '#e0e7ff' },
+        { id: `fb-3-${now}`, type: 'sticky', x: 200, y: 360, width: 180, height: 100, content: 'TECHNOLOGY:\n• CI builds took 20+ mins\n• Database staging downtime', color: '#fce7f3' },
+        { id: `fb-4-${now}`, type: 'sticky', x: 480, y: 360, width: 180, height: 100, content: 'ENVIRONMENT:\n• Unscheduled customer calls\n• Fragmented docs', color: '#dcfce7' }
+      )
+    } else if (templateKey === 'one-on-one') {
+      newItems.push(
+        { id: `1on1-1-${now}`, type: 'rect', x: 120, y: 120, width: 260, height: 360, content: '🎉 RECENT WINS & HIGHLIGHTS\n\n• Finished API integration ahead of time\n• Mentored new frontend developer', color: '#ecfdf5', borderColor: '#10b981' },
+        { id: `1on1-2-${now}`, type: 'rect', x: 400, y: 120, width: 260, height: 360, content: '🚧 CURRENT CHALLENGES & BLOCKERS\n\n• Waiting on design approvals for modal\n• Flaky automated tests in CI', color: '#fffbeb', borderColor: '#f59e0b' },
+        { id: `1on1-3-${now}`, type: 'rect', x: 680, y: 120, width: 260, height: 360, content: '🎯 GROWTH GOALS & NEXT STEPS\n\n• Lead Q4 sprint planning meeting\n• Complete system architecture course', color: '#eff6ff', borderColor: '#3b82f6' }
+      )
+    } else if (templateKey === 'twelve-week-plan') {
+      newItems.push(
+        { id: `12w-1-${now}`, type: 'rect', x: 120, y: 120, width: 260, height: 380, content: 'MONTH 1: FOUNDATION\n\n• Core schema migration\n• Performance benchmarking\n• Authentication hardening', color: '#eff6ff', borderColor: '#3b82f6' },
+        { id: `12w-2-${now}`, type: 'rect', x: 400, y: 120, width: 260, height: 380, content: 'MONTH 2: FEATURE EXPANSION\n\n• Real-time Whiteboard & Docs\n• Multi-org instant caching\n• Google Calendar two-way sync', color: '#f5f3ff', borderColor: '#8b5cf6' },
+        { id: `12w-3-${now}`, type: 'rect', x: 680, y: 120, width: 260, height: 380, content: 'MONTH 3: SCALE & LAUNCH\n\n• End-to-end stress testing\n• Staging verification with users\n• Public launch & feedback loop', color: '#ecfdf5', borderColor: '#10b981' }
+      )
+    } else if (templateKey === 'business-model-canvas') {
+      newItems.push(
+        { id: `bmc-1-${now}`, type: 'rect', x: 100, y: 120, width: 200, height: 260, content: 'KEY PARTNERS\n\n• Cloud hosting providers\n• Google Workspace APIs\n• Open source contributors', color: '#f8fafc', borderColor: '#94a3b8' },
+        { id: `bmc-2-${now}`, type: 'rect', x: 320, y: 120, width: 240, height: 260, content: 'VALUE PROPOSITIONS\n\n• All-in-one sprint & task workspace\n• Native interactive whiteboard\n• 0ms optimistic instant navigation', color: '#eff6ff', borderColor: '#3b82f6' },
+        { id: `bmc-3-${now}`, type: 'rect', x: 580, y: 120, width: 240, height: 260, content: 'CUSTOMER RELATIONSHIPS\n\n• Developer self-serve\n• Active community discord\n• Automated onboarding guide', color: '#ecfdf5', borderColor: '#10b981' },
+        { id: `bmc-4-${now}`, type: 'rect', x: 840, y: 120, width: 200, height: 260, content: 'CUSTOMER SEGMENTS\n\n• Agile tech startups\n• Remote product engineering teams\n• Solo creators & founders', color: '#fffbeb', borderColor: '#f59e0b' }
+      )
+    } else if (templateKey === 'twenty-four-hour-schedule') {
+      const times = [
+        { time: '07:00 - 09:00', title: '🌅 Morning Routine & Planning', note: 'Coffee, review priorities, review sprint due dates' },
+        { time: '09:00 - 12:30', title: '🚀 Deep Work Block 1', note: 'Core coding, critical bug fixes, architectural design' },
+        { time: '13:30 - 15:30', title: '🤝 Collaboration & Standups', note: 'Team 1-on-1s, PR code reviews, client sync' },
+        { time: '15:30 - 18:00', title: '⚡ Deep Work Block 2 & Wrap-up', note: 'Documentation, verify builds, plan next day' },
+      ]
+      times.forEach((t, idx) => {
+        newItems.push({
+          id: `24h-${now}-${idx}`,
+          type: 'rect',
+          x: 140 + idx * 260,
+          y: 140,
+          width: 240,
+          height: 320,
+          content: `${t.time}\n\n${t.title}\n\n• ${t.note}`,
+          color: idx === 1 ? '#eff6ff' : '#f8fafc',
+          borderColor: idx === 1 ? '#3b82f6' : '#94a3b8',
+        })
+      })
+    } else if (templateKey === 'five-year-plan') {
+      const years = ['YEAR 1: Foundation', 'YEAR 2: Scaling', 'YEAR 3: Leadership', 'YEAR 4: Equity', 'YEAR 5: Vision']
+      years.forEach((y, idx) => {
+        newItems.push({
+          id: `5yp-${now}-${idx}`,
+          type: 'rect',
+          x: 100 + idx * 210,
+          y: 140,
+          width: 190,
+          height: 340,
+          content: `${y}\n\n• Career milestones\n• Technical skills\n• Financial targets\n• Health & wellness`,
+          color: '#f8fafc',
+          borderColor: '#6366f1',
+        })
+      })
+    } else {
+      // Default / BCG / Benchmark / Brand Guidelines fallback
+      newItems.push({
+        id: `tpl-default-${now}`,
         type: 'rect',
         x: 160,
         y: 140,
-        width: 680,
-        height: 380,
-        content: 'BENCHMARK ANALYSIS TABLE\n\nFeature | TaskFlow | Competitor A | Competitor B\n---------------------------------------------\nRealtime Whiteboard | ✓ Built-in (Krya) | $ Third-party | ✗ None\nChat & DM Tasks | ✓ Unified | Separate | Separate\nGoogle Meet Auto-Sync | ✓ Included | Plugin | ✗ None\nKanban & Sprints | ✓ Full Suite | Partial | Limited',
-        color: '#181920',
+        width: 600,
+        height: 340,
+        content: `TEMPLATE: ${templateKey.toUpperCase().replace(/-/g, ' ')}\n\n• Double click to edit any card or text\n• Drag elements freely across the canvas\n• Use the bottom toolbar to add shapes, sticky notes, and connectors`,
+        color: '#14151e',
         borderColor: '#6366f1',
       })
-    } else if (templateKey === 'brand-guidelines') {
-      newItems.push(
-        {
-          id: `bg-frame-${now}`,
-          type: 'frame',
-          title: 'Brand Guidelines Artboard',
-          x: 160,
-          y: 100,
-          width: 680,
-          height: 480,
-        },
-        {
-          id: `bg-sticky-1-${now}`,
-          type: 'sticky',
-          x: 190,
-          y: 160,
-          width: 200,
-          height: 140,
-          content: 'Typography:\nInter & Outfit\nWeights: 400, 600, 800',
-          color: '#fef08a',
-        },
-        {
-          id: `bg-sticky-2-${now}`,
-          type: 'sticky',
-          x: 420,
-          y: 160,
-          width: 200,
-          height: 140,
-          content: 'Color Palette:\n• Primary: #6366f1 (Indigo)\n• Dark: #0d0e12 (Obsidian)\n• Accent: #f59e0b (Amber)',
-          color: '#e0e7ff',
-        }
-      )
     }
 
     setElements((prev) => [...prev, ...newItems])
@@ -1165,49 +1302,44 @@ export function KryaWhiteboardModal({
     setTimeout(() => setSaveToast(null), 2500)
   }
 
-  // Template Search Filter
+  // Comprehensive 30+ Template Catalog (matching ClickUp & Template.net/whiteboard)
   const templatesList = useMemo(() => {
     const list = [
-      {
-        id: 'customer-journey-map',
-        title: 'Customer Journey Map',
-        category: 'Featured',
-        tag: 'Product',
-        isFeatured: true,
-        previewType: 'journey',
-      },
-      {
-        id: 'eisenhower-matrix',
-        title: 'Eisenhower Matrix',
-        category: 'Featured',
-        tag: 'Prioritization',
-        isFeatured: true,
-        previewType: 'matrix',
-      },
-      {
-        id: 'bcg-matrix',
-        title: 'BCG Matrix',
-        category: 'Marketing',
-        tag: 'Strategy',
-        isFeatured: false,
-        previewType: 'bcg',
-      },
-      {
-        id: 'benchmark-analysis',
-        title: 'Benchmark Analysis',
-        category: 'Marketing',
-        tag: 'Competitive',
-        isFeatured: false,
-        previewType: 'benchmark',
-      },
-      {
-        id: 'brand-guidelines',
-        title: 'Brand Guidelines',
-        category: 'Marketing',
-        tag: 'Design',
-        isFeatured: false,
-        previewType: 'brand',
-      },
+      // 1. Featured
+      { id: 'customer-journey-map', title: 'Customer Journey Map', category: 'Featured', tag: 'Product', isFeatured: true, previewType: 'journey', complexity: 'Intermediate' },
+      { id: '2x2-priority-matrix', title: '2x2 Priority Matrix', category: 'Featured', tag: 'PMO', isFeatured: true, previewType: 'matrix', complexity: 'Beginner' },
+      { id: 'sprint-retro', title: 'Sprint Retrospective & Kanban', category: 'Featured', tag: 'Agile', isFeatured: true, previewType: 'retro', complexity: 'Beginner' },
+      { id: 'swot-analysis', title: 'SWOT Analysis Canvas', category: 'Featured', tag: 'Strategy', isFeatured: true, previewType: 'matrix', complexity: 'Beginner' },
+
+      // 2. PMO - Project Management
+      { id: 'four-ls-retro', title: '4Ls Retro (Liked, Learned, Lacked)', category: 'PMO', tag: 'Retrospective', previewType: 'journey', complexity: 'Beginner' },
+      { id: 'five-whys', title: '5 Whys Root Cause Analysis', category: 'PMO', tag: 'Problem Solving', previewType: 'flow', complexity: 'Intermediate' },
+      { id: 'raci-matrix', title: 'RACI Matrix Responsibility Table', category: 'PMO', tag: 'Governance', previewType: 'benchmark', complexity: 'Intermediate' },
+      { id: 'action-priority-matrix', title: 'Action Priority Matrix', category: 'PMO', tag: 'Execution', previewType: 'matrix', complexity: 'Beginner' },
+      { id: 'user-story-map', title: 'User Story Mapping Board', category: 'PMO', tag: 'Scrum', previewType: 'journey', complexity: 'Advanced' },
+
+      // 3. HR & Recruiting
+      { id: 'one-on-one', title: '1-on-1s Meeting Template', category: 'HR & Recruiting', tag: 'Management', previewType: 'journey', complexity: 'Beginner' },
+      { id: 'job-proposal', title: 'Job Proposal & Hiring Funnel', category: 'HR & Recruiting', tag: 'Hiring', previewType: 'journey', complexity: 'Intermediate' },
+      { id: 'all-hands-agenda', title: 'All Hands Meeting Agenda', category: 'HR & Recruiting', tag: 'Company', previewType: 'benchmark', complexity: 'Beginner' },
+      { id: 'agency-feedback', title: 'Agency Feedback Matrix', category: 'HR & Recruiting', tag: 'Feedback', previewType: 'matrix', complexity: 'Intermediate' },
+
+      // 4. Engineering & Product Design
+      { id: 'system-architecture', title: 'System Architecture Flowchart', category: 'Engineering', tag: 'Architecture', previewType: 'flow', complexity: 'Advanced' },
+      { id: 'fishbone-diagram', title: 'Fishbone (Ishikawa) Diagram', category: 'Engineering', tag: 'Quality', previewType: 'flow', complexity: 'Intermediate' },
+      { id: 'wireframe-canvas', title: 'Wireframe & Flow Prototype', category: 'Engineering', tag: 'Design', previewType: 'brand', complexity: 'Intermediate' },
+
+      // 5. Operations & Strategy
+      { id: 'twelve-week-plan', title: '12-Week Execution Plan', category: 'Operations', tag: 'Planning', previewType: 'journey', complexity: 'Intermediate' },
+      { id: 'business-model-canvas', title: 'Business Model Canvas', category: 'Operations', tag: 'Business', previewType: 'matrix', complexity: 'Advanced' },
+      { id: 'two-two-three-schedule', title: '2-2-3 Shift Schedule', category: 'Operations', tag: 'Scheduling', previewType: 'journey', complexity: 'Beginner' },
+      { id: 'bcg-matrix', title: 'BCG Growth-Share Matrix', category: 'Operations', tag: 'Marketing', previewType: 'bcg', complexity: 'Intermediate' },
+      { id: 'benchmark-analysis', title: 'Benchmark Competitive Analysis', category: 'Operations', tag: 'Competitive', previewType: 'benchmark', complexity: 'Intermediate' },
+
+      // 6. Personal Use
+      { id: 'twenty-four-hour-schedule', title: '24 Hours Schedule & Timeboxing', category: 'Personal', tag: 'Productivity', previewType: 'journey', complexity: 'Beginner' },
+      { id: 'five-year-plan', title: '5 Year Plan Tracker', category: 'Personal', tag: 'Goals', previewType: 'journey', complexity: 'Intermediate' },
+      { id: 'apartment-hunting', title: 'Apartment Hunting & Comparison', category: 'Personal', tag: 'Lifestyle', previewType: 'matrix', complexity: 'Beginner' },
     ]
 
     if (!templateSearchQuery.trim()) return list
@@ -2619,81 +2751,49 @@ export function KryaWhiteboardModal({
                 {/* Left Sidebar */}
                 <div className="w-60 border-r border-zinc-800/80 p-4 flex flex-col justify-between bg-[#101115]/60 shrink-0 text-xs">
                   <div className="space-y-6">
-                    {/* Navigation Links */}
+                    {/* Navigation Categories matching ClickUp / Template.net */}
                     <div className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTemplateTab('featured')}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                          selectedTemplateTab === 'featured'
-                            ? 'bg-zinc-800 text-white font-bold shadow-xs'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                          <span>Featured</span>
-                        </div>
-                        <span className="text-[10px] text-zinc-500 font-mono">2</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTemplateTab('workspace')}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                          selectedTemplateTab === 'workspace'
-                            ? 'bg-zinc-800 text-white font-bold shadow-xs'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="w-3.5 h-3.5 rounded bg-emerald-600 flex items-center justify-center text-[9px] font-bold text-white">
-                            A
+                      {[
+                        { id: 'featured', label: 'Featured', icon: Star, count: 4, color: 'text-amber-400 fill-amber-400' },
+                        { id: 'PMO', label: 'PMO - Project Mgmt', icon: LayoutTemplate, count: 5, color: 'text-indigo-400' },
+                        { id: 'HR & Recruiting', label: 'HR & Recruiting', icon: UserIcon, count: 4, color: 'text-pink-400' },
+                        { id: 'Engineering', label: 'Engineering & Product', icon: GitBranch, count: 3, color: 'text-sky-400' },
+                        { id: 'Operations', label: 'Operations & Strategy', icon: Layers, count: 5, color: 'text-emerald-400' },
+                        { id: 'Personal', label: 'Personal Use', icon: Calendar, count: 3, color: 'text-purple-400' },
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedTemplateTab(cat.id as any)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
+                            selectedTemplateTab === cat.id
+                              ? 'bg-zinc-800 text-white font-bold shadow-xs'
+                              : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <cat.icon className={`w-3.5 h-3.5 ${cat.color}`} />
+                            <span>{cat.label}</span>
                           </div>
-                          <span>Workspace Templates</span>
-                        </div>
-                        <span className="text-[10px] text-zinc-500 font-mono">0</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTemplateTab('taskflow')}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                          selectedTemplateTab === 'taskflow'
-                            ? 'bg-zinc-800 text-white font-bold shadow-xs'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Layers className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>ClickUp Templates</span>
-                        </div>
-                        <span className="text-[10px] text-zinc-500 font-mono">171</span>
-                      </button>
+                          <span className="text-[10px] text-zinc-500 font-mono">{cat.count}</span>
+                        </button>
+                      ))}
                     </div>
 
                     {/* Section: Template Types */}
                     <div className="space-y-2">
                       <div className="text-[11px] font-bold text-zinc-400 tracking-wider">Template Types</div>
                       <div className="space-y-1.5 pl-0.5 text-zinc-400">
-                        {['Super Agent', 'Space', 'Folder', 'List', 'Task', 'Doc', 'View'].map((item) => (
-                          <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-zinc-200">
+                        {['Whiteboard (Active)', 'Doc', 'Task', 'Folder', 'Space'].map((item, idx) => (
+                          <label key={item} className={`flex items-center gap-2 cursor-pointer ${idx === 0 ? 'text-white font-semibold' : 'hover:text-zinc-200'}`}>
                             <input
                               type="checkbox"
+                              defaultChecked={idx === 0}
                               className="rounded border-zinc-700 bg-zinc-800 text-indigo-500 focus:ring-0 w-3.5 h-3.5"
                             />
                             <span>{item}</span>
                           </label>
                         ))}
-                        {/* Whiteboard Checked matching Image 4 */}
-                        <label className="flex items-center gap-2 cursor-pointer text-white font-semibold">
-                          <input
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded border-indigo-600 bg-indigo-600 text-white focus:ring-0 w-3.5 h-3.5"
-                          />
-                          <span>Whiteboard</span>
-                        </label>
                       </div>
                     </div>
 
@@ -2705,6 +2805,7 @@ export function KryaWhiteboardModal({
                           <label key={c} className="flex items-center gap-2 cursor-pointer hover:text-zinc-200">
                             <input
                               type="checkbox"
+                              defaultChecked
                               className="rounded border-zinc-700 bg-zinc-800 text-indigo-500 focus:ring-0 w-3.5 h-3.5"
                             />
                             <span>{c}</span>
@@ -2718,24 +2819,24 @@ export function KryaWhiteboardModal({
                   <div className="space-y-1 pt-4 border-t border-zinc-800/80 text-zinc-400 text-xs">
                     <button type="button" className="flex items-center gap-2 hover:text-white cursor-pointer py-1">
                       <HelpCircle className="w-3.5 h-3.5" />
-                      <span>Learn</span>
+                      <span>Learn Whiteboards</span>
                     </button>
                     <button type="button" className="flex items-center gap-2 hover:text-white cursor-pointer py-1">
                       <FileText className="w-3.5 h-3.5" />
-                      <span>Audit Log</span>
+                      <span>Browse 3,000+ Online</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Right Content Area */}
-                <div className="flex-1 p-6 flex flex-col gap-5 overflow-y-auto bg-[#14151a]">
+                <div className="flex-1 p-6 flex flex-col gap-5 overflow-y-auto bg-[#14151a] custom-scrollbar">
                   {/* Search and Filters Bar */}
                   <div className="flex items-center gap-3">
                     <div className="relative flex-1">
                       <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="Search templates..."
+                        placeholder="Search templates (e.g. Retro, Matrix, Architecture, 5 Whys, RACI, 1-on-1)..."
                         value={templateSearchQuery}
                         onChange={(e) => setTemplateSearchQuery(e.target.value)}
                         className="w-full bg-[#1c1d24] border border-zinc-700/70 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
@@ -2751,9 +2852,9 @@ export function KryaWhiteboardModal({
                       )}
                     </div>
 
-                    {/* Filter Pills on Right matching Image 4 */}
                     <button
                       type="button"
+                      onClick={() => setSelectedTemplateTab('featured')}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c1d24] border border-zinc-700/70 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
                     >
                       <Layers className="w-3.5 h-3.5 text-zinc-400" />
@@ -2767,224 +2868,123 @@ export function KryaWhiteboardModal({
                       <Tag className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Tags</span>
                     </button>
-
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1c1d24] border border-zinc-700/70 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-                    >
-                      <UserIcon className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Created by</span>
-                    </button>
                   </div>
 
-                  {/* Purple Banner matching Image 4 */}
+                  {/* Gradient Banner matching Reference Screenshots */}
                   <div className="bg-gradient-to-r from-indigo-950/80 via-purple-950/60 to-indigo-950/80 border border-indigo-500/30 rounded-xl px-4 py-3 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2.5 text-zinc-200">
                       <Sparkles className="w-4 h-4 text-purple-400" />
-                      <span>Create your first template and eliminate repetitive work!</span>
+                      <span>Over 3,000+ interactive diagrams & templates for collaborative whiteboarding!</span>
                     </div>
-                    <button
-                      type="button"
-                      className="px-3 py-1 rounded-lg bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/40 text-xs font-semibold text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      Learn more
-                    </button>
+                    <span className="px-2.5 py-1 rounded-lg bg-indigo-900/60 border border-indigo-500/40 text-[10px] font-bold text-indigo-200">
+                      Template.net & ClickUp Suite
+                    </span>
                   </div>
 
-                  {/* Section 1: Featured Templates (2 Cards matching Image 4) */}
-                  <div>
-                    <h3 className="text-xs font-bold text-white mb-3">Featured Templates</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* 1. Customer Journey Map */}
-                      <div
-                        onClick={() => handleApplyTemplate('customer-journey-map')}
-                        className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
-                      >
-                        <div className="h-32 bg-[#121318] p-3 flex flex-col justify-between relative overflow-hidden border-b border-zinc-800">
-                          {/* Star Badge */}
-                          <div className="w-4 h-4 rounded-full bg-amber-400/20 flex items-center justify-center">
-                            <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                          </div>
-
-                          {/* Graphical preview of 4 journey columns */}
-                          <div className="grid grid-cols-4 gap-1.5 h-20 items-stretch opacity-90">
-                            <div className="rounded bg-orange-200/90 flex flex-col p-1 gap-1">
-                              <div className="w-6 h-1 bg-orange-400 rounded" />
-                              <div className="w-full h-2 bg-orange-100 rounded" />
-                            </div>
-                            <div className="rounded bg-pink-200/90 flex flex-col p-1 gap-1">
-                              <div className="w-6 h-1 bg-pink-400 rounded" />
-                              <div className="w-full h-2 bg-pink-100 rounded" />
-                            </div>
-                            <div className="rounded bg-sky-200/90 flex flex-col p-1 gap-1">
-                              <div className="w-6 h-1 bg-sky-400 rounded" />
-                              <div className="w-full h-2 bg-sky-100 rounded" />
-                            </div>
-                            <div className="rounded bg-emerald-200/90 flex flex-col p-1 gap-1">
-                              <div className="w-6 h-1 bg-emerald-400 rounded" />
-                              <div className="w-full h-2 bg-emerald-100 rounded" />
-                            </div>
-                          </div>
-
-                          {/* Hover Overlay: "Use Template" */}
-                          <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-md">
-                              Use Template
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Card Footer */}
-                        <div className="px-3.5 py-2.5 flex items-center gap-2 text-xs font-semibold text-zinc-200 bg-[#16171d]">
-                          <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-                            <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
-                          </div>
-                          <span>Customer Journey Map</span>
-                        </div>
-                      </div>
-
-                      {/* 2. Eisenhower Matrix */}
-                      <div
-                        onClick={() => handleApplyTemplate('eisenhower-matrix')}
-                        className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
-                      >
-                        <div className="h-32 bg-[#121318] p-3 flex flex-col justify-between relative overflow-hidden border-b border-zinc-800">
-                          <div className="w-4 h-4 rounded-full bg-amber-400/20 flex items-center justify-center">
-                            <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                          </div>
-
-                          {/* Graphical preview of 4 quadrants */}
-                          <div className="grid grid-cols-2 grid-rows-2 gap-1.5 h-20 items-stretch opacity-90">
-                            <div className="rounded bg-red-200/90 border border-red-300 p-1">
-                              <div className="w-8 h-1 bg-red-500 rounded" />
-                            </div>
-                            <div className="rounded bg-green-200/90 border border-green-300 p-1">
-                              <div className="w-8 h-1 bg-green-500 rounded" />
-                            </div>
-                            <div className="rounded bg-orange-200/90 border border-orange-300 p-1">
-                              <div className="w-8 h-1 bg-orange-500 rounded" />
-                            </div>
-                            <div className="rounded bg-blue-200/90 border border-blue-300 p-1">
-                              <div className="w-8 h-1 bg-blue-500 rounded" />
-                            </div>
-                          </div>
-
-                          <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-md">
-                              Use Template
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="px-3.5 py-2.5 flex items-center gap-2 text-xs font-semibold text-zinc-200 bg-[#16171d]">
-                          <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-                            <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
-                          </div>
-                          <span>Eisenhower Matrix</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 2: Templates by TaskFlow / ClickUp (Image 4) */}
+                  {/* Template Cards Grid */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <div className="text-xs font-bold text-zinc-300">Marketing</div>
-                      <button type="button" className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer">
-                        See 7 more
+                      <h3 className="text-xs font-bold text-white capitalize">
+                        {selectedTemplateTab === 'featured' ? 'Featured Templates' : `${selectedTemplateTab} Templates`} ({templatesList.length})
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTemplateTab('featured')}
+                        className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                      >
+                        Reset filters
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
-                      {/* 1. BCG Matrix */}
-                      <div
-                        onClick={() => handleApplyTemplate('bcg-matrix')}
-                        className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
-                      >
-                        <div className="h-28 bg-[#121318] p-2.5 flex items-center justify-center relative overflow-hidden border-b border-zinc-800">
-                          {/* 2x2 colored boxes */}
-                          <div className="grid grid-cols-2 gap-1 w-28 h-20">
-                            <div className="rounded bg-blue-200/90 border border-blue-400" />
-                            <div className="rounded bg-amber-200/90 border border-amber-400" />
-                            <div className="rounded bg-emerald-200/90 border border-emerald-400" />
-                            <div className="rounded bg-rose-200/90 border border-rose-400" />
-                          </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {templatesList
+                        .filter((item) => {
+                          if (selectedTemplateTab === 'featured') return true
+                          return item.category.toLowerCase().includes(selectedTemplateTab.toLowerCase())
+                        })
+                        .map((tpl) => (
+                          <div
+                            key={tpl.id}
+                            onClick={() => handleApplyTemplate(tpl.id)}
+                            className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
+                          >
+                            {/* Graphical Preview Box */}
+                            <div className="h-28 bg-[#121318] p-2.5 flex items-center justify-center relative overflow-hidden border-b border-zinc-800">
+                              {/* Preview based on diagram type */}
+                              {tpl.previewType === 'journey' && (
+                                <div className="grid grid-cols-4 gap-1 w-full h-16 items-stretch opacity-90 px-1">
+                                  <div className="rounded bg-orange-200/90 p-1 flex flex-col justify-between"><div className="w-4 h-1 bg-orange-500 rounded" /></div>
+                                  <div className="rounded bg-pink-200/90 p-1 flex flex-col justify-between"><div className="w-4 h-1 bg-pink-500 rounded" /></div>
+                                  <div className="rounded bg-sky-200/90 p-1 flex flex-col justify-between"><div className="w-4 h-1 bg-sky-500 rounded" /></div>
+                                  <div className="rounded bg-emerald-200/90 p-1 flex flex-col justify-between"><div className="w-4 h-1 bg-emerald-500 rounded" /></div>
+                                </div>
+                              )}
+                              {tpl.previewType === 'matrix' && (
+                                <div className="grid grid-cols-2 gap-1 w-28 h-20">
+                                  <div className="rounded bg-red-200/90 border border-red-400" />
+                                  <div className="rounded bg-emerald-200/90 border border-emerald-400" />
+                                  <div className="rounded bg-amber-200/90 border border-amber-400" />
+                                  <div className="rounded bg-blue-200/90 border border-blue-400" />
+                                </div>
+                              )}
+                              {tpl.previewType === 'retro' && (
+                                <div className="grid grid-cols-3 gap-1.5 w-full h-18 px-2">
+                                  <div className="rounded bg-emerald-200/90 p-1 flex flex-col gap-1"><div className="w-full h-2 rounded bg-emerald-400" /></div>
+                                  <div className="rounded bg-rose-200/90 p-1 flex flex-col gap-1"><div className="w-full h-2 rounded bg-rose-400" /></div>
+                                  <div className="rounded bg-indigo-200/90 p-1 flex flex-col gap-1"><div className="w-full h-2 rounded bg-indigo-400" /></div>
+                                </div>
+                              )}
+                              {tpl.previewType === 'flow' && (
+                                <div className="flex items-center gap-1.5 w-full justify-center px-1">
+                                  <div className="w-12 h-8 rounded bg-sky-200 border border-sky-400 flex items-center justify-center text-[8px] font-bold text-sky-900">Start</div>
+                                  <span className="text-zinc-500 text-xs">➔</span>
+                                  <div className="w-12 h-8 rounded bg-purple-200 border border-purple-400 flex items-center justify-center text-[8px] font-bold text-purple-900">Logic</div>
+                                  <span className="text-zinc-500 text-xs">➔</span>
+                                  <div className="w-12 h-8 rounded bg-emerald-200 border border-emerald-400 flex items-center justify-center text-[8px] font-bold text-emerald-900">Done</div>
+                                </div>
+                              )}
+                              {tpl.previewType === 'benchmark' && (
+                                <div className="w-32 flex flex-col gap-1">
+                                  <div className="w-full h-2 rounded bg-purple-300" />
+                                  <div className="w-full h-1.5 rounded bg-zinc-700" />
+                                  <div className="w-full h-1.5 rounded bg-zinc-700" />
+                                  <div className="w-full h-1.5 rounded bg-zinc-700" />
+                                </div>
+                              )}
+                              {tpl.previewType === 'brand' && (
+                                <div className="w-32 flex flex-col gap-1.5">
+                                  <div className="flex gap-1 justify-center">
+                                    <div className="w-3 h-3 rounded-full bg-pink-400" />
+                                    <div className="w-3 h-3 rounded-full bg-indigo-400" />
+                                    <div className="w-3 h-3 rounded-full bg-amber-400" />
+                                  </div>
+                                  <div className="w-full h-3 rounded bg-zinc-800 border border-zinc-700" />
+                                  <div className="w-3/4 h-2 rounded bg-zinc-800 mx-auto" />
+                                </div>
+                              )}
 
-                          <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[11px]">
-                              Use Template
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="px-3 py-2 flex items-center gap-2 text-xs font-semibold text-zinc-200 bg-[#16171d]">
-                          <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-                            <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
-                          </div>
-                          <span>BCG Matrix</span>
-                        </div>
-                      </div>
-
-                      {/* 2. Benchmark Analysis */}
-                      <div
-                        onClick={() => handleApplyTemplate('benchmark-analysis')}
-                        className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
-                      >
-                        <div className="h-28 bg-[#121318] p-2.5 flex items-center justify-center relative overflow-hidden border-b border-zinc-800">
-                          {/* Table rows preview */}
-                          <div className="w-32 flex flex-col gap-1">
-                            <div className="w-full h-2 rounded bg-purple-200" />
-                            <div className="w-full h-1.5 rounded bg-zinc-700" />
-                            <div className="w-full h-1.5 rounded bg-zinc-700" />
-                            <div className="w-full h-1.5 rounded bg-zinc-700" />
-                          </div>
-
-                          <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[11px]">
-                              Use Template
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="px-3 py-2 flex items-center gap-2 text-xs font-semibold text-zinc-200 bg-[#16171d]">
-                          <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-                            <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
-                          </div>
-                          <span>Benchmark Analysis</span>
-                        </div>
-                      </div>
-
-                      {/* 3. Brand Guidelines */}
-                      <div
-                        onClick={() => handleApplyTemplate('brand-guidelines')}
-                        className="group relative rounded-xl border border-zinc-800 bg-[#191a21] hover:border-zinc-600 transition-all overflow-hidden cursor-pointer flex flex-col shadow-sm"
-                      >
-                        <div className="h-28 bg-[#121318] p-2.5 flex items-center justify-center relative overflow-hidden border-b border-zinc-800">
-                          {/* Color dots and typography card preview */}
-                          <div className="w-32 flex flex-col gap-1.5">
-                            <div className="flex gap-1">
-                              <div className="w-3 h-3 rounded-full bg-pink-400" />
-                              <div className="w-3 h-3 rounded-full bg-indigo-400" />
-                              <div className="w-3 h-3 rounded-full bg-amber-400" />
+                              {/* Hover Overlay: "Use Template" */}
+                              <div className="absolute inset-0 bg-black/70 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-md">
+                                  Use Template
+                                </span>
+                              </div>
                             </div>
-                            <div className="w-full h-3 rounded bg-zinc-800 border border-zinc-700" />
-                            <div className="w-3/4 h-2 rounded bg-zinc-800" />
-                          </div>
 
-                          <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[11px]">
-                              Use Template
-                            </span>
+                            {/* Card Footer */}
+                            <div className="px-3.5 py-2.5 flex items-center justify-between text-xs bg-[#16171d]">
+                              <div className="flex items-center gap-2 truncate">
+                                <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center shrink-0">
+                                  <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
+                                </div>
+                                <span className="font-semibold text-zinc-200 truncate">{tpl.title}</span>
+                              </div>
+                              <span className="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0 ml-1">
+                                {tpl.category}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-
-                        <div className="px-3 py-2 flex items-center gap-2 text-xs font-semibold text-zinc-200 bg-[#16171d]">
-                          <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/40 flex items-center justify-center">
-                            <LayoutTemplate className="w-2.5 h-2.5 text-orange-400" />
-                          </div>
-                          <span>Brand Guidelines</span>
-                        </div>
-                      </div>
+                        ))}
                     </div>
                   </div>
                 </div>
