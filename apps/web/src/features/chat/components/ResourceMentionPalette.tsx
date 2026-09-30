@@ -19,7 +19,8 @@ import {
   Hash,
   Radio,
 } from 'lucide-react'
-import { DMContact } from '@/stores/chat-store'
+import { DMContact, useChatStore } from '@/stores/chat-store'
+import { useDocStore } from '@/stores/doc-store'
 import { usePresenceStore } from '@/stores/presence-store'
 
 export interface ResourceMentionPaletteProps {
@@ -178,17 +179,8 @@ export function ResourceMentionPalette({
   const containerRef = useRef<HTMLDivElement>(null)
   const [activeTab, setActiveTab] = useState<TabKey>('all')
   const { isUserOnline } = usePresenceStore()
-
-  // Sample or loaded docs
-  const sampleDocs = useMemo(
-    () => [
-      { id: 'doc-1', title: 'Untitled', type: 'gdoc', url: 'https://docs.google.com' },
-      { id: 'doc-2', title: 'Product Architecture & Specifications', type: 'gdoc', url: 'https://docs.google.com' },
-      { id: 'doc-3', title: 'Sprint Roadmap Q3 / Q4', type: 'gsheet', url: 'https://sheets.google.com' },
-      { id: 'doc-4', title: 'API Integration Design Deck', type: 'gslide', url: 'https://slides.google.com' },
-    ],
-    []
-  )
+  const { docs } = useDocStore()
+  const { messages, activeChannel } = useChatStore()
 
   // AI Agents
   const defaultAgents = useMemo(
@@ -340,10 +332,89 @@ export function ResourceMentionPalette({
     return { processedTasks: filtered, isPersonalDmMode: false }
   }, [tasks, targetType, activeDMUser, cleanQuery])
 
+  // Filter docs: show only docs that actually exist in the active chat (General channel or DM)
+  const chatDocs = useMemo(() => {
+    const list: Array<{ id: string; title: string; location?: string; authorName?: string; updatedAt?: string }> = []
+    const seen = new Set<string>()
+
+    // 1. Scan messages in the current chat for docs
+    const currentMessages = messages || []
+    currentMessages.forEach((msg) => {
+      const isCurrentChat =
+        targetType === 'channel'
+          ? !msg.recipientId || (activeChannel?.id && msg.channelId === activeChannel.id)
+          : activeDMUser && (msg.recipientId === activeDMUser.id || msg.senderId === activeDMUser.id)
+
+      if (isCurrentChat && msg.attachments) {
+        msg.attachments.forEach((att: any) => {
+          if (att.type === 'doc' || att.type === 'gdoc' || Boolean(att.docId)) {
+            const docTitle = att.title || att.docId
+            if (docTitle && !seen.has(docTitle.toLowerCase())) {
+              seen.add(docTitle.toLowerCase())
+              list.push({
+                id: att.docId || docTitle,
+                title: docTitle,
+                location:
+                  targetType === 'channel'
+                    ? activeChannel?.name
+                      ? `#${activeChannel.name}`
+                      : '#General'
+                    : `DM with ${activeDMUser?.name || 'User'}`,
+                authorName: msg.senderName,
+                updatedAt: msg.createdAt,
+              })
+            }
+          }
+        })
+      }
+    })
+
+    // 2. Also include docs from useDocStore associated with this channel or DM
+    docs.forEach((d) => {
+      const lowerTitle = d.title.toLowerCase()
+      const lowerId = d.id.toLowerCase()
+      if (seen.has(lowerTitle) || seen.has(lowerId)) return
+
+      let matches = false
+      if (targetType === 'channel') {
+        const channelName = activeChannel?.name?.toLowerCase() || 'general'
+        const docLoc = (d.location || '').toLowerCase()
+        if (
+          d.channelId === activeChannel?.id ||
+          docLoc.includes(channelName) ||
+          docLoc === '#general' ||
+          docLoc === 'general chat'
+        ) {
+          matches = true
+        }
+      } else if (targetType === 'dm' && activeDMUser) {
+        const dmName = activeDMUser.name.toLowerCase()
+        const docLoc = (d.location || '').toLowerCase()
+        if (d.recipientId === activeDMUser.id || docLoc.includes(dmName)) {
+          matches = true
+        }
+      }
+
+      if (matches) {
+        seen.add(lowerTitle)
+        seen.add(lowerId)
+        list.push({
+          id: d.id,
+          title: d.title,
+          location: d.location,
+          authorName: d.authorName,
+          updatedAt: d.updatedAt,
+        })
+      }
+    })
+
+    return list
+  }, [messages, docs, targetType, activeChannel, activeDMUser])
+
   const filteredDocs = useMemo(() => {
-    if (!cleanQuery) return sampleDocs
-    return sampleDocs.filter((d) => d.title.toLowerCase().includes(cleanQuery))
-  }, [sampleDocs, cleanQuery])
+    if (!cleanQuery) return chatDocs
+    return chatDocs.filter((d) => d.title.toLowerCase().includes(cleanQuery))
+  }, [chatDocs, cleanQuery])
 
   if (!isOpen) return null
 
@@ -673,44 +744,87 @@ export function ResourceMentionPalette({
           </div>
         )}
 
-        {/* TAB 3: DOCS & GOOGLE DRIVE */}
+        {/* TAB 3: DOCS IN THIS CHAT */}
         {activeTab === 'docs' && (
           <div className="space-y-2">
             <div className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-              <span>Recent Docs &amp; Drive Files</span>
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenGoogleDrive()
-                  onClose()
-                }}
-                className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <FolderOpen className="w-3 h-3" />
-                <span>Open Drive</span>
-              </button>
-            </div>
-            <div className="space-y-0.5">
-              {filteredDocs.map((doc) => (
+              <span>
+                {targetType === 'channel'
+                  ? `Docs in #${activeChannel?.name || 'General'}`
+                  : `Docs in Chat`}
+              </span>
+              {onOpenDoc && (
                 <button
-                  key={doc.id}
                   type="button"
                   onClick={() => {
-                    onSelectDoc(doc)
+                    onOpenDoc()
                     onClose()
                   }}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left group"
+                  className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span className="truncate font-medium text-xs text-foreground group-hover:text-primary transition-colors">
-                      {doc.title}
-                    </span>
-                  </div>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground shrink-0 opacity-70" />
+                  <Plus className="w-3 h-3" />
+                  <span>Create Doc</span>
                 </button>
-              ))}
+              )}
             </div>
+
+            {filteredDocs.length === 0 ? (
+              <div className="py-6 px-4 text-center space-y-2">
+                <FileText className="w-7 h-7 mx-auto text-muted-foreground/40" />
+                <p className="text-xs font-semibold text-foreground">
+                  {targetType === 'channel'
+                    ? `No docs shared in #${activeChannel?.name || 'General'} yet`
+                    : `No docs shared in this chat yet`}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Use /Create Doc in chat to create and reference a document
+                </p>
+                {onOpenDoc && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenDoc()
+                      onClose()
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-xs hover:opacity-95 transition-all cursor-pointer mt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create Doc</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                {filteredDocs.map((doc) => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectDoc(doc)
+                      onClose()
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      <div className="min-w-0 truncate">
+                        <span className="truncate font-medium text-xs text-foreground group-hover:text-primary transition-colors block">
+                          {doc.title}
+                        </span>
+                        {doc.location && (
+                          <span className="text-[10px] text-muted-foreground truncate block">
+                            {doc.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground group-hover:text-primary transition-colors shrink-0">
+                      Attach
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

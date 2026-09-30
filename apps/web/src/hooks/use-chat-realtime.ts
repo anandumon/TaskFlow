@@ -96,7 +96,16 @@ export function useChatRealtime() {
 
               case 'delete_message': {
                 const msgData = payload.data
-                if (msgData?.id) receiveDeleteMessage(msgData.id)
+                if (msgData?.id) {
+                  if (msgData.mode === 'me') {
+                    const currentId = userRef.current?.id
+                    if (currentId && msgData.userId === currentId) {
+                      receiveDeleteMessage(msgData.id)
+                    }
+                  } else {
+                    receiveDeleteMessage(msgData.id)
+                  }
+                }
                 break
               }
 

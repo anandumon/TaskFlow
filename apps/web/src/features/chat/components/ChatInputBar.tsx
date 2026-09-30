@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { DMContact } from '@/stores/chat-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useDocStore } from '@/stores/doc-store'
 import { SlashCommandPalette } from './SlashCommandPalette'
 import { RichEmojiPicker } from './RichEmojiPicker'
 import { ResourceMentionPalette } from './ResourceMentionPalette'
@@ -172,13 +173,27 @@ export function ChatInputBar({
 
     if (isDocMode) {
       const finalDocTitle = docName.trim() || 'demo'
+      const authorName = (user as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'User'
+      const location =
+        targetType === 'channel'
+          ? activeChannel?.name
+            ? `#${activeChannel.name}`
+            : '#General'
+          : `DM with ${activeDMUser?.name || 'User'}`
+
+      const created = useDocStore.getState().createDoc(finalDocTitle, '', authorName, location, {
+        channelId: targetType === 'channel' ? activeChannel?.id : undefined,
+        recipientId: targetType === 'dm' ? activeDMUser?.id : undefined,
+        docId: finalDocTitle,
+      })
+
       finalAttachments.push({
         id: crypto.randomUUID(),
         type: 'doc',
         platform: 'Docs',
         title: finalDocTitle,
-        docId: finalDocTitle,
-        link: `/app/docs/${encodeURIComponent(finalDocTitle)}`,
+        docId: created.id || finalDocTitle,
+        link: `/app/docs/${encodeURIComponent(created.id || finalDocTitle)}`,
         createdAt: new Date().toISOString(),
       })
       if (docMessageText.trim()) {
@@ -288,19 +303,38 @@ export function ChatInputBar({
     inputRef.current?.focus()
   }
 
-  const addGoogleDriveDoc = (doc?: { title: string; url?: string; type?: string }) => {
+  const addAttachedDoc = (doc?: { id?: string; title: string; url?: string; type?: string }) => {
+    const docTitle = doc?.title || 'Untitled'
+    const docId = doc?.id || docTitle
+    const authorName = (user as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'User'
+    const location =
+      targetType === 'channel'
+        ? activeChannel?.name
+          ? `#${activeChannel.name}`
+          : '#General'
+        : `DM with ${activeDMUser?.name || 'User'}`
+
+    const existingOrCreated = useDocStore
+      .getState()
+      .createDoc(docTitle, '', authorName, location, {
+        channelId: targetType === 'channel' ? activeChannel?.id : undefined,
+        recipientId: targetType === 'dm' ? activeDMUser?.id : undefined,
+        docId,
+      })
+
     setStagedAttachments((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
-        type: 'gdoc',
-        platform: 'Google Drive',
-        title: doc?.title || 'Untitled Document',
-        link: doc?.url || 'https://docs.google.com',
-        size: 'Cloud Doc',
+        type: 'doc',
+        platform: 'TaskFlow Docs',
+        title: existingOrCreated.title || docTitle,
+        docId: existingOrCreated.id || docId,
+        link: `/app/docs/${encodeURIComponent(existingOrCreated.id || docId)}`,
+        size: 'Workspace Doc',
       },
     ])
-    setInputText((prev) => (prev ? prev : `Referencing Google Doc "${doc?.title || 'Untitled'}":`))
+    setInputText((prev) => (prev ? prev : `Referencing Doc "${docTitle}":`))
     setIsMenuOpen(false)
     inputRef.current?.focus()
   }
@@ -549,7 +583,7 @@ export function ChatInputBar({
           onOpenWhiteboard={addWhiteboard}
           onStartGoogleMeet={addGoogleMeet}
           onStartGoogleCalendar={addGoogleCalendarEvent}
-          onOpenGoogleDrive={() => addGoogleDriveDoc()}
+          onOpenGoogleDrive={() => addAttachedDoc()}
           onStartZoomMeeting={addZoomMeeting}
           onStartRecordVideo={() => setIsRecordingVideo(true)}
           onStartRecordAudio={() => setIsRecordingAudio(true)}
@@ -591,7 +625,7 @@ export function ChatInputBar({
             inputRef.current?.focus()
           }}
           onSelectDoc={(doc) => {
-            addGoogleDriveDoc(doc)
+            addAttachedDoc(doc)
           }}
           onSelectAgent={(agent) => {
             setInputText((prev) => `@${agent.name} `)
@@ -599,7 +633,7 @@ export function ChatInputBar({
           }}
           onStartGoogleMeet={addGoogleMeet}
           onStartGoogleCalendar={addGoogleCalendarEvent}
-          onOpenGoogleDrive={() => addGoogleDriveDoc()}
+          onOpenGoogleDrive={() => addAttachedDoc()}
           onOpenDoc={() => addDoc()}
         />
 
@@ -903,11 +937,11 @@ export function ChatInputBar({
 
                   <button
                     type="button"
-                    onClick={() => addGoogleDriveDoc()}
+                    onClick={() => addDoc()}
                     className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
                   >
-                    <FolderOpen className="w-4 h-4 text-amber-500" />
-                    <span>Google Drive &amp; Docs</span>
+                    <FileText className="w-4 h-4 text-sky-400" />
+                    <span>Create / Attach Document</span>
                   </button>
 
                   <button

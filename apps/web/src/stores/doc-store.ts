@@ -19,7 +19,9 @@ export interface DocItem {
   updatedAt: string
   starred?: boolean
   icon?: string
-  location?: string // e.g. "Team Space"
+  location?: string // e.g. "Team Space", "#General", "DM with user"
+  channelId?: string
+  recipientId?: string
   tags?: string[]
   viewedAt?: string
   subpages?: SubPageItem[]
@@ -35,7 +37,13 @@ interface DocStore {
   setActiveDoc: (doc: DocItem | null) => void
   setActiveSubpageId: (subpageId: string | null) => void
   loadDocs: () => void
-  createDoc: (title?: string, content?: string, authorName?: string, location?: string) => DocItem
+  createDoc: (
+    title?: string,
+    content?: string,
+    authorName?: string,
+    location?: string,
+    extra?: { channelId?: string; recipientId?: string; docId?: string }
+  ) => DocItem
   updateDoc: (id: string, updates: Partial<DocItem>) => void
   deleteDoc: (id: string) => void
   getDoc: (id: string) => DocItem | undefined
@@ -74,14 +82,37 @@ export const useDocStore = create<DocStore>((set, get) => ({
     }
   },
 
-  createDoc: (title = 'Untitled Doc', content = '', authorName = 'anandu', location = 'Team Space') => {
+  createDoc: (
+    title = 'Untitled Doc',
+    content = '',
+    authorName = 'anandu',
+    location = 'Team Space',
+    extra?: { channelId?: string; recipientId?: string; docId?: string }
+  ) => {
     const trimmedTitle = title.trim() || 'Untitled Doc'
-    const cleanId = trimmedTitle
+    const existing = get().docs.find(
+      (d) =>
+        (extra?.docId && d.id === extra.docId) ||
+        d.id.toLowerCase() === trimmedTitle.toLowerCase() ||
+        d.title.toLowerCase() === trimmedTitle.toLowerCase()
+    )
+    if (existing) {
+      if (location && location !== 'Team Space' && (!existing.location || existing.location === 'Team Space')) {
+        get().updateDoc(existing.id, {
+          location,
+          channelId: extra?.channelId ?? existing.channelId,
+          recipientId: extra?.recipientId ?? existing.recipientId,
+        })
+      }
+      return existing
+    }
+
+    const cleanId = (extra?.docId || trimmedTitle)
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '-')
       .replace(/-+/g, '-')
       .slice(0, 30) || 'doc'
-    const id = `${cleanId}-${Date.now().toString(36)}`
+    const id = extra?.docId || `${cleanId}-${Date.now().toString(36)}`
     
     const newDoc: DocItem = {
       id,
@@ -89,6 +120,8 @@ export const useDocStore = create<DocStore>((set, get) => ({
       content: content || `# ${trimmedTitle}\n\nStart writing notes or specifications...`,
       authorName,
       location,
+      channelId: extra?.channelId,
+      recipientId: extra?.recipientId,
       tags: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

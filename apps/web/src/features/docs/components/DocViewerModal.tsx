@@ -344,6 +344,32 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={() => {
+              if (currentDoc) {
+                if (activeSubpageId) {
+                  updateSubpage(currentDoc.id, activeSubpageId, {
+                    title: title.trim() || 'Untitled Page',
+                    content,
+                  })
+                } else {
+                  updateDoc(currentDoc.id, {
+                    title: title.trim() || 'Untitled Doc',
+                    content,
+                  })
+                }
+                setAutoSaveStatus('saved')
+                showToast(`Saved "${title}" to Docs`)
+              }
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+            title="Save changes to TaskFlow Docs"
+          >
+            <Check className="w-3.5 h-3.5" />
+            <span>Save to Docs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               if (navigator.clipboard) {
                 navigator.clipboard.writeText(window.location.href)
                 showToast('Doc link copied to clipboard!')

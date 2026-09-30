@@ -110,16 +110,42 @@ export default function MessagesPage() {
     deleteMessage,
   } = useChatStore()
 
-  const { deleteDoc } = useDocStore()
+  const { deleteDoc, createDoc, docs } = useDocStore()
 
   // Message Editing state
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageText, setEditingMessageText] = useState('')
 
-  // Message Deletion state (delete for me / delete for everyone + document permission)
+  // Message Deletion state (delete for me / delete for everyone)
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null)
   const [deleteMode, setDeleteMode] = useState<'everyone' | 'me'>('everyone')
-  const [alsoDeleteDoc, setAlsoDeleteDoc] = useState(false)
+
+  // Auto-sync docs from chat messages into useDocStore (shows docs from General chat and DMs in Docs page)
+  useEffect(() => {
+    if (!messages || messages.length === 0) return
+    const docStore = useDocStore.getState()
+    const activeLoc = activeChannel
+      ? `#${activeChannel.name}`
+      : activeDMUser
+      ? `DM with ${activeDMUser.name}`
+      : '#General'
+
+    messages.forEach((msg) => {
+      const atts = msg.attachments || []
+      atts.forEach((a: any) => {
+        if (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)) {
+          const docTitle = a.title || a.docId
+          if (docTitle) {
+            docStore.createDoc(docTitle, '', msg.senderName || 'User', activeLoc, {
+              channelId: activeChannel?.id,
+              recipientId: activeDMUser?.id,
+              docId: a.docId || docTitle,
+            })
+          }
+        }
+      })
+    })
+  }, [messages, activeChannel, activeDMUser])
 
   // Pinned Messages state
   const [showPinnedFlyout, setShowPinnedFlyout] = useState(false)
@@ -243,42 +269,19 @@ export default function MessagesPage() {
 
     setDeletingMessage(msg)
     setDeleteMode(canEveryone ? 'everyone' : 'me')
-    setAlsoDeleteDoc(false)
   }
 
   const handleConfirmDeleteMessage = async () => {
     if (!deletingMessage || !currentWorkspace?.id) return
 
-    const docAtt = deletingMessage.attachments?.find((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))
-    const wbAtt = deletingMessage.attachments?.find((a: any) => a.type === 'whiteboard' || Boolean(a.boardId))
-
-    // If user explicitly confirmed deleting document
-    if (alsoDeleteDoc && docAtt) {
-      const docId = docAtt.docId || docAtt.title
-      if (docId) {
-        deleteDoc(docId)
-        try {
-          localStorage.removeItem(`taskflow_doc_${docId}`)
-        } catch {}
-      }
-    }
-
-    // Clean up whiteboard cache if any
-    if (wbAtt && wbAtt.boardId) {
-      try {
-        localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
-      } catch {}
-    }
-
     await deleteMessage(currentWorkspace.id, deletingMessage.id, deleteMode)
     setToastMessage(
       deleteMode === 'everyone'
-        ? 'Message permanently deleted from DB (zero trace)'
+        ? 'Message deleted for everyone'
         : 'Message deleted for you'
     )
     setTimeout(() => setToastMessage(null), 3000)
     setDeletingMessage(null)
-    setAlsoDeleteDoc(false)
   }
 
   // Members list for Direct Messages and Channels
@@ -1362,15 +1365,36 @@ export default function MessagesPage() {
                         <div className="flex items-center flex-wrap gap-2 text-xs">
                           <button
                             type="button"
-                            onClick={() => setActiveDocModal({ id: docAtt.docId || docAtt.title || 'demo', title: docAtt.title || 'demo' })}
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 font-bold transition-all shadow-xs cursor-pointer group/doc"
-                            title={`Open ${docAtt.title || 'document'}`}
+                            onClick={() =>
+                              setActiveDocModal({
+                                id: docAtt.docId || docAtt.title || 'demo',
+                                title: docAtt.title || 'demo',
+                              })
+                            }
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl font-bold transition-all shadow-sm cursor-pointer border ${
+                              isMe
+                                ? 'bg-zinc-950/90 hover:bg-zinc-900 text-white border-zinc-700/80 shadow-md'
+                                : 'bg-zinc-900/90 hover:bg-zinc-800 text-white border-zinc-700 shadow-xs'
+                            }`}
+                            title={`Open ${docAtt.title || 'Document'}`}
                           >
-                            <span className="text-xs">📄</span>
-                            <span className="font-bold underline decoration-sky-400/50 group-hover/doc:decoration-sky-400">{docAtt.title || 'demo'}</span>
+                            <span className="text-sm">📄</span>
+                            <span className="font-extrabold tracking-wide text-white">
+                              {docAtt.title || 'demo'}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/20 text-white font-bold uppercase tracking-wider">
+                              Doc
+                            </span>
                           </button>
-                          <span className="text-muted-foreground font-medium">Page</span>
-                          {msg.content && <span className="font-normal">{msg.content}</span>}
+                          {msg.content && (
+                            <span
+                              className={
+                                isMe ? 'font-medium text-white/95' : 'font-normal text-foreground'
+                              }
+                            >
+                              {msg.content}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         msg.content && <p>{msg.content}</p>
@@ -1616,33 +1640,49 @@ export default function MessagesPage() {
                               )
                             }
 
-                            if (att.type === 'gdoc') {
+                            if (att.type === 'gdoc' || att.type === 'doc') {
                               return (
                                 <div
                                   key={aIdx}
-                                  className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+                                  onClick={() =>
+                                    setActiveDocModal({
+                                      id: att.docId || att.title || 'Untitled',
+                                      title: att.title || 'Untitled',
+                                    })
+                                  }
+                                  className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer group shadow-sm ${
                                     isMe
-                                      ? 'bg-white/10 border-white/20 text-white'
-                                      : 'bg-muted/50 border-border text-foreground'
+                                      ? 'bg-zinc-950/90 hover:bg-zinc-900 border-zinc-700/80 text-white'
+                                      : 'bg-card hover:bg-muted/70 border-border text-foreground'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                                      <FolderOpen className="w-4 h-4" />
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+                                      <FileText className="w-4 h-4" />
                                     </div>
-                                    <div className="min-w-0 truncate">
-                                      <div className="font-bold truncate">{att.title || 'Google Drive Document'}</div>
-                                      <div className="text-[10px] opacity-75">Cloud Workspace Document</div>
+                                    <div className="min-w-0 truncate space-y-0.5">
+                                      <div className="font-bold text-xs truncate group-hover:text-primary transition-colors text-white">
+                                        {att.title || 'Workspace Document'}
+                                      </div>
+                                      <div className="text-[10px] text-zinc-400 font-medium">
+                                        TaskFlow Document • Click to view &amp; edit
+                                      </div>
                                     </div>
                                   </div>
-                                  <a
-                                    href={att.link || 'https://docs.google.com'}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] shrink-0 transition-colors"
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setActiveDocModal({
+                                        id: att.docId || att.title || 'Untitled',
+                                        title: att.title || 'Untitled',
+                                      })
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shrink-0 transition-all shadow-xs cursor-pointer flex items-center gap-1"
                                   >
-                                    Open Doc
-                                  </a>
+                                    <FileText className="w-3 h-3" />
+                                    <span>Open Doc</span>
+                                  </button>
                                 </div>
                               )
                             }
@@ -2082,7 +2122,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Deletion Mode Radio Options */}
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {/* Delete for everyone option */}
                   <div
                     onClick={() => {
@@ -2098,7 +2138,7 @@ export default function MessagesPage() {
                         : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer'
                     }`}
                   >
-                    <label className={`flex items-start gap-3 ${!canDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <label className={`flex items-center gap-3 ${!canDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                       <input
                         type="radio"
                         name="deleteMode"
@@ -2108,23 +2148,11 @@ export default function MessagesPage() {
                         onChange={() => {
                           if (canDeleteForEveryone) setDeleteMode('everyone')
                         }}
-                        className="accent-red-500 mt-0.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        className="accent-red-500 cursor-pointer w-4 h-4"
                       />
-                      <div className="space-y-0.5">
-                        <span className={`text-xs font-bold block ${!canDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
-                          Delete for everyone
-                        </span>
-                        {!canDeleteForEveryone ? (
-                          <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3 shrink-0" />
-                            {deleteForEveryoneDisabledNotice}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground block">
-                            Permanently deletes this message for all participants (within 24h)
-                          </span>
-                        )}
-                      </div>
+                      <span className={`text-xs font-bold ${!canDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
+                        Delete for everyone
+                      </span>
                     </label>
                   </div>
 
@@ -2137,73 +2165,27 @@ export default function MessagesPage() {
                         : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <label className="flex items-start gap-3 cursor-pointer">
+                    <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="radio"
                         name="deleteMode"
                         value="me"
                         checked={deleteMode === 'me'}
                         onChange={() => setDeleteMode('me')}
-                        className="accent-primary mt-0.5 cursor-pointer"
+                        className="accent-primary cursor-pointer w-4 h-4"
                       />
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-bold text-foreground block">
-                          Delete for me
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          Removes this message from your view only
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* DOCUMENT PERMISSION PROMPT (Required by user: "before deleting the documents ask for permission") */}
-                {deletingMessage.attachments?.some((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)) && (
-                  <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-2">
-                    <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span>Permission Required: Attached Document Detected</span>
-                    </div>
-                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                      This message contains a linked document (
-                      <strong>
-                        {deletingMessage.attachments.find((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))?.title || 'Document'}
-                      </strong>
-                      ). Please confirm whether you want to delete the document permanently from the database.
-                    </p>
-                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={alsoDeleteDoc}
-                        onChange={(e) => setAlsoDeleteDoc(e.target.checked)}
-                        className="rounded border-amber-400 accent-amber-500 cursor-pointer"
-                      />
-                      <span className="text-xs font-bold text-amber-300">
-                        Yes, grant permission to permanently delete this document with zero trace
+                      <span className="text-xs font-bold text-foreground">
+                        Delete for me
                       </span>
                     </label>
                   </div>
-                )}
-
-                {/* Whiteboard / Google Meet Notice */}
-                {deletingMessage.attachments?.some((a: any) => a.type === 'whiteboard' || a.type === 'meeting' || Boolean(a.boardId) || Boolean(a.meetingId)) && (
-                  <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
-                    <span className="text-xs">ℹ️</span>
-                    <span>
-                      Associated whiteboard cached state and Google Meet links will also be purged cleanly with zero trace.
-                    </span>
-                  </div>
-                )}
+                </div>
 
                 {/* Modal Actions */}
                 <div className="flex items-center justify-end gap-2.5 pt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setDeletingMessage(null)
-                      setAlsoDeleteDoc(false)
-                    }}
+                    onClick={() => setDeletingMessage(null)}
                     className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                   >
                     Cancel
@@ -2242,7 +2224,7 @@ export default function MessagesPage() {
               </div>
 
               {/* Deletion Mode Radio Options */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div
                   onClick={() => {
                     if (canBulkDeleteForEveryone) {
@@ -2257,7 +2239,7 @@ export default function MessagesPage() {
                       : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer'
                   }`}
                 >
-                  <label className={`flex items-start gap-3 ${!canBulkDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <label className={`flex items-center gap-3 ${!canBulkDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                     <input
                       type="radio"
                       name="bulkDeleteMode"
@@ -2267,23 +2249,11 @@ export default function MessagesPage() {
                       onChange={() => {
                         if (canBulkDeleteForEveryone) setBulkDeleteMode('everyone')
                       }}
-                      className="accent-red-500 mt-0.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      className="accent-red-500 cursor-pointer w-4 h-4"
                     />
-                    <div className="space-y-0.5">
-                      <span className={`text-xs font-bold block ${!canBulkDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
-                        Delete for everyone
-                      </span>
-                      {!canBulkDeleteForEveryone ? (
-                        <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 shrink-0" />
-                          Disabled: Only allowed when all selected messages were sent by you within 24 hours
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground block">
-                          Permanently delete all selected messages from the database
-                        </span>
-                      )}
-                    </div>
+                    <span className={`text-xs font-bold ${!canBulkDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
+                      Delete for everyone
+                    </span>
                   </label>
                 </div>
 
@@ -2295,23 +2265,18 @@ export default function MessagesPage() {
                       : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <label className="flex items-start gap-3 cursor-pointer">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="radio"
                       name="bulkDeleteMode"
                       value="me"
                       checked={bulkDeleteMode === 'me'}
                       onChange={() => setBulkDeleteMode('me')}
-                      className="accent-primary mt-0.5 cursor-pointer"
+                      className="accent-primary cursor-pointer w-4 h-4"
                     />
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-bold text-foreground block">
-                        Delete for me
-                      </span>
-                      <span className="text-[10px] text-muted-foreground block">
-                        Removes selected messages from your chat only
-                      </span>
-                    </div>
+                    <span className="text-xs font-bold text-foreground">
+                      Delete for me
+                    </span>
                   </label>
                 </div>
               </div>
