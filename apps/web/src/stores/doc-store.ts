@@ -1,5 +1,14 @@
 import { create } from 'zustand'
 
+export interface SubPageItem {
+  id: string
+  title: string
+  content: string
+  authorName?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface DocItem {
   id: string
   title: string
@@ -10,79 +19,93 @@ export interface DocItem {
   updatedAt: string
   starred?: boolean
   icon?: string
+  location?: string // e.g. "Team Space"
+  tags?: string[]
+  viewedAt?: string
+  subpages?: SubPageItem[]
+  isProtected?: boolean
+  isPublic?: boolean
+  isWiki?: boolean
 }
 
 interface DocStore {
   docs: DocItem[]
   activeDoc: DocItem | null
+  activeSubpageId: string | null
   setActiveDoc: (doc: DocItem | null) => void
+  setActiveSubpageId: (subpageId: string | null) => void
   loadDocs: () => void
-  createDoc: (title?: string, content?: string, authorName?: string) => DocItem
+  createDoc: (title?: string, content?: string, authorName?: string, location?: string) => DocItem
   updateDoc: (id: string, updates: Partial<DocItem>) => void
   deleteDoc: (id: string) => void
   getDoc: (id: string) => DocItem | undefined
+  createSubpage: (docId: string, title?: string, content?: string) => SubPageItem
+  updateSubpage: (docId: string, subpageId: string, updates: Partial<SubPageItem>) => void
+  deleteSubpage: (docId: string, subpageId: string) => void
 }
 
 const STORAGE_KEY = 'taskflow_user_docs'
 
-const DEFAULT_DOCS: DocItem[] = [
-  {
-    id: 'demo',
-    title: 'demo',
-    content: `# demo\n\nWelcome to your collaborative document! You can start writing notes, project requirements, architectural diagrams, or sprint wiki articles right here.\n\n### Key Highlights\n- Fully responsive and editable\n- Real-time automatic cloud saving\n- Seamless integration with tasks, boards, and chat\n\n### Next Steps\n- [ ] Review sprint deliverables\n- [ ] Align with engineering and product teams`,
-    authorName: 'anandu',
-    authorEmail: 'anandu2109@gmail.com',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    starred: true,
-  },
-]
-
 export const useDocStore = create<DocStore>((set, get) => ({
-  docs: DEFAULT_DOCS,
+  docs: [],
   activeDoc: null,
+  activeSubpageId: null,
   setActiveDoc: (doc) => set({ activeDoc: doc }),
+  setActiveSubpageId: (subpageId) => set({ activeSubpageId: subpageId }),
 
   loadDocs: () => {
     if (typeof window === 'undefined') return
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          set({ docs: parsed })
+        if (Array.isArray(parsed)) {
+          // Filter out dummy/mock docs if user had them before
+          const filtered = parsed.filter((d: DocItem) => d && d.id && d.title)
+          set({ docs: filtered })
           return
         }
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DOCS))
-      set({ docs: DEFAULT_DOCS })
+      // If nothing saved yet, keep empty (no dummy datas per user request)
+      set({ docs: [] })
     } catch (e) {
       console.error('Failed to load docs from storage', e)
+      set({ docs: [] })
     }
   },
 
-  createDoc: (title = 'Untitled Doc', content = '', authorName = 'You') => {
-    const cleanId = title.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 30) || 'doc'
-    const id = cleanId === 'demo' ? 'demo' : `${cleanId}-${Date.now().toString(36)}`
+  createDoc: (title = 'Untitled Doc', content = '', authorName = 'anandu', location = 'Team Space') => {
+    const trimmedTitle = title.trim() || 'Untitled Doc'
+    const cleanId = trimmedTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 30) || 'doc'
+    const id = `${cleanId}-${Date.now().toString(36)}`
     
     const newDoc: DocItem = {
       id,
-      title: title.trim() || 'Untitled Doc',
-      content: content || `# ${title.trim() || 'Untitled Doc'}\n\nStart writing notes or specifications...`,
+      title: trimmedTitle,
+      content: content || `# ${trimmedTitle}\n\nStart writing notes or specifications...`,
       authorName,
+      location,
+      tags: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      viewedAt: new Date().toISOString(),
       starred: false,
+      subpages: [],
+      isProtected: false,
+      isPublic: false,
+      isWiki: false,
     }
 
     set((state) => {
-      // If doc with id already exists, update it instead of duplicate
-      const exists = state.docs.some((d) => d.id === id)
-      const updated = exists ? state.docs.map((d) => (d.id === id ? newDoc : d)) : [newDoc, ...state.docs]
+      const updated = [newDoc, ...state.docs.filter((d) => d.id !== id)]
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       }
-      return { docs: updated, activeDoc: newDoc }
+      return { docs: updated, activeDoc: newDoc, activeSubpageId: null }
     })
 
     return newDoc
@@ -92,15 +115,21 @@ export const useDocStore = create<DocStore>((set, get) => ({
     set((state) => {
       const updated = state.docs.map((d) => {
         if (d.id === id) {
-          const fresh = { ...d, ...updates, updatedAt: new Date().toISOString() }
-          return fresh
+          return {
+            ...d,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+            viewedAt: new Date().toISOString(),
+          }
         }
         return d
       })
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       }
-      const active = state.activeDoc?.id === id ? { ...state.activeDoc, ...updates, updatedAt: new Date().toISOString() } : state.activeDoc
+      const active = state.activeDoc?.id === id 
+        ? { ...state.activeDoc, ...updates, updatedAt: new Date().toISOString() } 
+        : state.activeDoc
       return { docs: updated, activeDoc: active }
     })
   },
@@ -112,11 +141,87 @@ export const useDocStore = create<DocStore>((set, get) => ({
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       }
       const active = state.activeDoc?.id === id ? null : state.activeDoc
-      return { docs: updated, activeDoc: active }
+      return { docs: updated, activeDoc: active, activeSubpageId: null }
     })
   },
 
   getDoc: (id) => {
     return get().docs.find((d) => d.id === id)
+  },
+
+  createSubpage: (docId, title = 'Untitled Page', content = '') => {
+    const subpageId = `sub-${Date.now().toString(36)}`
+    const newSubpage: SubPageItem = {
+      id: subpageId,
+      title: title.trim() || 'Untitled Page',
+      content: content || `# ${title.trim() || 'Untitled Page'}\n\nStart writing notes or specifications...`,
+      authorName: 'anandu',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    set((state) => {
+      const updated = state.docs.map((d) => {
+        if (d.id === docId) {
+          const currentSubs = d.subpages || []
+          return {
+            ...d,
+            subpages: [...currentSubs, newSubpage],
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return d
+      })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      }
+      const active = state.activeDoc?.id === docId ? updated.find((d) => d.id === docId) || null : state.activeDoc
+      return { docs: updated, activeDoc: active, activeSubpageId: subpageId }
+    })
+
+    return newSubpage
+  },
+
+  updateSubpage: (docId, subpageId, updates) => {
+    set((state) => {
+      const updated = state.docs.map((d) => {
+        if (d.id === docId && d.subpages) {
+          const updatedSubs = d.subpages.map((s) => (s.id === subpageId ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s))
+          return {
+            ...d,
+            subpages: updatedSubs,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return d
+      })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      }
+      const active = state.activeDoc?.id === docId ? updated.find((d) => d.id === docId) || null : state.activeDoc
+      return { docs: updated, activeDoc: active }
+    })
+  },
+
+  deleteSubpage: (docId, subpageId) => {
+    set((state) => {
+      const updated = state.docs.map((d) => {
+        if (d.id === docId && d.subpages) {
+          const filteredSubs = d.subpages.filter((s) => s.id !== subpageId)
+          return {
+            ...d,
+            subpages: filteredSubs,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return d
+      })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      }
+      const active = state.activeDoc?.id === docId ? updated.find((d) => d.id === docId) || null : state.activeDoc
+      const nextActiveSubId = state.activeSubpageId === subpageId ? null : state.activeSubpageId
+      return { docs: updated, activeDoc: active, activeSubpageId: nextActiveSubId }
+    })
   },
 }))

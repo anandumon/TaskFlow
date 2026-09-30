@@ -50,61 +50,141 @@ export function CalendarMarqueeTicker({ tasks, projects, onSelectTaskDate }: Cal
           <span>Upcoming Due Dates ({uniqueUpcomingTasks.length})</span>
         </div>
 
-        {/* Liquid Glass Scrollable Container - Each unique task appears exactly once */}
-        <div className="flex-1 overflow-x-auto scrollbar-none py-0.5">
-          <div className="flex items-center gap-2.5 w-max">
-            {uniqueUpcomingTasks.map((t) => {
-              const proj = projects.find((p) => p.id === t.projectId)
-              const projColor = getProjectColor(proj)
+        {/* Liquid Glass Container - Animated Right-to-Left Slider when > 2 tasks, static when <= 2 */}
+        <div className="flex-1 overflow-hidden py-0.5 relative group">
+          {/* Subtle gradient edge fades */}
+          {uniqueUpcomingTasks.length > 2 && (
+            <>
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-card/80 dark:from-black/60 to-transparent z-10 pointer-events-none" />
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card/80 dark:from-black/60 to-transparent z-10 pointer-events-none" />
+            </>
+          )}
 
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => t.dueDate && onSelectTaskDate(t.dueDate)}
-                  className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer hover:scale-[1.02] active:scale-95 shrink-0 backdrop-blur-md relative overflow-hidden group"
-                  style={{
-                    borderColor: `${projColor}50`,
-                    backgroundColor: `${projColor}15`,
-                    boxShadow: `0 4px 16px -2px ${projColor}20`,
-                  }}
-                  title={`Click to inspect due date ${t.dueDate}`}
-                >
-                  {/* Subtle top glass reflection highlight */}
-                  <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+          {uniqueUpcomingTasks.length > 2 ? (
+            <div className="flex items-center gap-2.5 w-max animate-ticker-slide hover:[animation-play-state:paused] cursor-grab active:cursor-grabbing">
+              {/* Duplicated for seamless continuous right-to-left loop */}
+              {[...uniqueUpcomingTasks, ...uniqueUpcomingTasks].map((t, idx) => {
+                const proj = projects.find((p) => p.id === t.projectId)
+                const projColor = getProjectColor(proj)
 
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: projColor }}
-                  />
-                  <span className="max-w-[200px] truncate font-bold text-foreground group-hover:text-primary transition-colors">
-                    {t.title}
-                  </span>
+                return (
+                  <button
+                    key={`${t.id}-${idx}`}
+                    type="button"
+                    onClick={() => t.dueDate && onSelectTaskDate(t.dueDate)}
+                    className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer hover:scale-[1.03] active:scale-95 shrink-0 backdrop-blur-md relative overflow-hidden group/item select-none"
+                    style={{
+                      borderColor: `${projColor}50`,
+                      backgroundColor: `${projColor}15`,
+                      boxShadow: `0 4px 16px -2px ${projColor}20`,
+                    }}
+                    title={`Click to inspect due date ${t.dueDate}`}
+                  >
+                    <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
 
-                  {proj && (
                     <span
-                      className="text-[10px] px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1 border truncate max-w-[120px]"
-                      style={{
-                        backgroundColor: `${projColor}25`,
-                        color: projColor,
-                        borderColor: `${projColor}55`,
-                      }}
-                    >
-                      <FolderKanban className="w-2.5 h-2.5 shrink-0" />
-                      <span className="truncate">{proj.name}</span>
+                      className="w-2 h-2 rounded-full shrink-0 animate-ping"
+                      style={{ backgroundColor: projColor }}
+                    />
+                    <span className="max-w-[220px] truncate font-bold text-foreground group-hover/item:text-primary transition-colors">
+                      {t.title}
                     </span>
-                  )}
 
-                  <span className="text-[10px] font-mono flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border/60 bg-muted/70 text-foreground font-semibold">
-                    <Clock className="w-2.5 h-2.5 text-primary" />
-                    {t.dueDate}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+                    {proj && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1 border truncate max-w-[120px]"
+                        style={{
+                          backgroundColor: `${projColor}25`,
+                          color: projColor,
+                          borderColor: `${projColor}55`,
+                        }}
+                      >
+                        <FolderKanban className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{proj.name}</span>
+                      </span>
+                    )}
+
+                    <span className="text-[10px] font-mono flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border/60 bg-muted/70 text-foreground font-semibold">
+                      <Clock className="w-2.5 h-2.5 text-primary" />
+                      {t.dueDate}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 w-max">
+              {uniqueUpcomingTasks.map((t) => {
+                const proj = projects.find((p) => p.id === t.projectId)
+                const projColor = getProjectColor(proj)
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => t.dueDate && onSelectTaskDate(t.dueDate)}
+                    className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs cursor-pointer hover:scale-[1.02] active:scale-95 shrink-0 backdrop-blur-md relative overflow-hidden group select-none"
+                    style={{
+                      borderColor: `${projColor}50`,
+                      backgroundColor: `${projColor}15`,
+                      boxShadow: `0 4px 16px -2px ${projColor}20`,
+                    }}
+                    title={`Click to inspect due date ${t.dueDate}`}
+                  >
+                    <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: projColor }}
+                    />
+                    <span className="max-w-[200px] truncate font-bold text-foreground group-hover:text-primary transition-colors">
+                      {t.title}
+                    </span>
+
+                    {proj && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1 border truncate max-w-[120px]"
+                        style={{
+                          backgroundColor: `${projColor}25`,
+                          color: projColor,
+                          borderColor: `${projColor}55`,
+                        }}
+                      >
+                        <FolderKanban className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{proj.name}</span>
+                      </span>
+                    )}
+
+                    <span className="text-[10px] font-mono flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border/60 bg-muted/70 text-foreground font-semibold">
+                      <Clock className="w-2.5 h-2.5 text-primary" />
+                      {t.dueDate}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes tickerSlide {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-50%);
+          }
+        }
+        .animate-ticker-slide {
+          display: flex;
+          width: max-content;
+          animation: tickerSlide 28s linear infinite;
+        }
+        .animate-ticker-slide:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
     </div>
   )
 }

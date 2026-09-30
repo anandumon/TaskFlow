@@ -15,7 +15,7 @@ export default function DocDetailPage() {
       isOpen={true}
       docId={docId}
       docTitle={docTitle}
-      onClose={() => router.back()}
+      onClose={() => router.push('/app/docs')}
     />
   )
 }
