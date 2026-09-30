@@ -4,6 +4,17 @@ import { getAuthUser } from '@/server/utils/auth'
 import { query, queryOne } from '@/server/db/postgres'
 import { decryptCalendarToken } from '@/server/utils/calendar-crypto'
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal })
+    return res
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -35,37 +46,43 @@ export async function POST(
     const targetCalendarId = policy?.external_calendar_id || 'primary'
 
     // Fetch events created by TaskFlow
-    const listRes = await fetch(
+    const listRes = await fetchWithTimeout(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
         targetCalendarId
       )}/events?q=${encodeURIComponent('[TaskFlow]')}&maxResults=100`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    )
+      },
+      8000
+    ).catch(() => null)
 
     let deletedCount = 0
-    if (listRes.ok) {
-      const data = await listRes.json()
-      const items = data.items || []
+    if (listRes && listRes.ok) {
+      const data = await listRes.json().catch(() => ({}))
+      const items = (data.items || []).filter((it: any) => it.summary?.includes('[TaskFlow]'))
 
-      for (const it of items) {
-        if (it.summary?.includes('[TaskFlow]')) {
-          try {
-            const delRes = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-                targetCalendarId
-              )}/events/${encodeURIComponent(it.id)}`,
-              {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${accessToken}` },
+      const BATCH_SIZE = 5
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const chunk = items.slice(i, i + BATCH_SIZE)
+        await Promise.allSettled(
+          chunk.map(async (it: any) => {
+            try {
+              const delRes = await fetchWithTimeout(
+                `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+                  targetCalendarId
+                )}/events/${encodeURIComponent(it.id)}`,
+                {
+                  method: 'DELETE',
+                  headers: { Authorization: `Bearer ${accessToken}` },
+                },
+                4000
+              )
+              if (delRes.ok || delRes.status === 204) {
+                deletedCount++
               }
-            )
-            if (delRes.ok || delRes.status === 204) {
-              deletedCount++
-            }
-          } catch {}
-        }
+            } catch {}
+          })
+        )
       }
     }
 

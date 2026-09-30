@@ -283,7 +283,11 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   triggerSync: async (connectionId: string) => {
     set({ isSyncing: true, error: null })
     try {
-      const res = await apiClient.post<CalendarSyncResult>(`/api/v1/calendar/sync/${connectionId}`)
+      const res = await apiClient.post<CalendarSyncResult>(
+        `/api/v1/calendar/sync/${connectionId}`,
+        undefined,
+        { timeoutMs: 60000 }
+      )
       await get().fetchConnections()
       set({ isSyncing: false })
       return res.data

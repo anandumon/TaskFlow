@@ -44,7 +44,7 @@ class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: RequestInit
+    options?: RequestInit & { timeoutMs?: number }
   ): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -57,9 +57,10 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`
     }
 
-    // Fast 15s abort timeout to guarantee requests never hang indefinitely
+    // Configurable abort timeout (default 45s, or custom timeoutMs)
+    const timeoutMs = options?.timeoutMs || 45000
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
       const res = await fetch(`${this.baseUrl}${path}`, {
@@ -156,24 +157,24 @@ class ApiClient {
     return this.refreshPromise
   }
 
-  get<T>(path: string) {
-    return this.request<T>('GET', path)
+  get<T>(path: string, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('GET', path, undefined, options)
   }
 
-  post<T>(path: string, body?: unknown) {
-    return this.request<T>('POST', path, body)
+  post<T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('POST', path, body, options)
   }
 
-  patch<T>(path: string, body?: unknown) {
-    return this.request<T>('PATCH', path, body)
+  patch<T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('PATCH', path, body, options)
   }
 
-  put<T>(path: string, body?: unknown) {
-    return this.request<T>('PUT', path, body)
+  put<T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('PUT', path, body, options)
   }
 
-  delete<T>(path: string) {
-    return this.request<T>('DELETE', path)
+  delete<T>(path: string, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('DELETE', path, undefined, options)
   }
 }
 
