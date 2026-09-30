@@ -233,9 +233,7 @@ export function ChatInputBar({
     const hostName = (user as any)?.name || user?.email?.split('@')[0] || 'Meeting Host'
     const hostEmail = user?.email || ''
     const hostId = user?.id || ''
-    const meetUrl = hostEmail
-      ? `https://meet.google.com/new?authuser=${encodeURIComponent(hostEmail)}`
-      : 'https://meet.google.com/new'
+    const sharedMeetUrl = `https://meet.google.com/${code}`
 
     setStagedAttachments((prev) => [
       ...prev,
@@ -244,8 +242,8 @@ export function ChatInputBar({
         type: 'meeting',
         platform: 'Google Meet',
         title: `Google Meet with ${targetName}`,
-        link: meetUrl,
-        meetingId: 'live-room',
+        link: sharedMeetUrl,
+        meetingId: code,
         ownerId: hostId,
         ownerName: hostName,
         ownerEmail: hostEmail,

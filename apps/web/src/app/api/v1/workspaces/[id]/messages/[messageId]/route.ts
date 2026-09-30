@@ -8,6 +8,7 @@ import {
   deleteMessageForMe,
 } from '@/server/services/chat.service'
 import { broadcastChatEvent } from '@/server/events/chat-events'
+import { queryOne } from '@/server/db/postgres'
 
 export async function PATCH(
   req: NextRequest,
@@ -106,6 +107,34 @@ export async function DELETE(
     }
 
     // Default: 'everyone' - hard delete from database with zero trace
+    // Only the message sender can delete for everyone, and only within 24 hours
+    const targetMsg = await queryOne(
+      `SELECT cm.id, cm.sender_id, cm.sender_name, cm.created_at, u.email as sender_email 
+       FROM chat_messages cm 
+       LEFT JOIN users u ON u.id = cm.sender_id 
+       WHERE cm.id = $1 AND cm.workspace_id = $2`,
+      [params.messageId, params.id]
+    )
+
+    if (!targetMsg) {
+      return apiError('Message not found', 404)
+    }
+
+    const isSender = Boolean(
+      targetMsg.sender_id === authUser.id ||
+      (targetMsg.sender_email && authUser.email && targetMsg.sender_email.toLowerCase() === authUser.email.toLowerCase()) ||
+      (targetMsg.sender_name && authUser.email && targetMsg.sender_name.toLowerCase() === authUser.email.toLowerCase())
+    )
+
+    if (!isSender) {
+      return apiError('Forbidden: Only the sender of the message can delete it for everyone', 403)
+    }
+
+    const ageMs = Date.now() - new Date(targetMsg.created_at).getTime()
+    if (ageMs > 24 * 60 * 60 * 1000) {
+      return apiError('Forbidden: Messages sent more than 24 hours ago can only be deleted for yourself', 400)
+    }
+
     const success = await deleteMessageForEveryone(params.id, params.messageId)
     if (!success) {
       return apiError('Failed to delete message from database', 500)

@@ -146,9 +146,63 @@ export default function MessagesPage() {
     setTimeout(() => setToastMessage(null), 2500)
   }
 
+  // Google Meet live URL editing state
+  const [updatingMeetMsg, setUpdatingMeetMsg] = useState<{
+    msgId: string
+    title: string
+    currentUrl: string
+    attachments: any[]
+  } | null>(null)
+  const [newMeetUrlInput, setNewMeetUrlInput] = useState('')
+
+  const handleSaveMeetUrl = async () => {
+    if (!updatingMeetMsg || !currentWorkspace?.id || !newMeetUrlInput.trim()) return
+    let finalUrl = newMeetUrlInput.trim()
+    if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = `https://${finalUrl}`
+    }
+    const codeMatch = finalUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
+    const code = codeMatch ? codeMatch[1] : undefined
+
+    const updatedAttachments = (updatingMeetMsg.attachments || []).map((att: any) => {
+      if (att.type === 'meeting') {
+        return {
+          ...att,
+          link: finalUrl,
+          meetingId: code || att.meetingId,
+        }
+      }
+      return att
+    })
+
+    const origMsg = messages.find((m) => m.id === updatingMeetMsg.msgId)
+    await editMessage(
+      currentWorkspace.id,
+      updatingMeetMsg.msgId,
+      origMsg?.content || "Let's jump on Google Meet:",
+      updatedAttachments
+    )
+
+    setToastMessage('Google Meet link updated and synchronized!')
+    setTimeout(() => setToastMessage(null), 3000)
+    setUpdatingMeetMsg(null)
+    setNewMeetUrlInput('')
+  }
+
   const handleOpenDeleteDialog = (msg: ChatMessage) => {
+    const isSender = Boolean(
+      user && (
+        msg.senderId === user.id ||
+        msg.senderId === (user as any)?.sub ||
+        (user.email && msg.senderName?.toLowerCase() === user.email.toLowerCase())
+      )
+    )
+    const msgTime = new Date(msg.createdAt).getTime()
+    const isWithin24Hours = !isNaN(msgTime) && (Date.now() - msgTime <= 24 * 60 * 60 * 1000)
+    const canEveryone = isSender && isWithin24Hours
+
     setDeletingMessage(msg)
-    setDeleteMode(user && msg.senderId === user.id ? 'everyone' : 'me')
+    setDeleteMode(canEveryone ? 'everyone' : 'me')
     setAlsoDeleteDoc(false)
   }
 
@@ -234,6 +288,26 @@ export default function MessagesPage() {
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false)
   const [bulkDeleteMode, setBulkDeleteMode] = useState<'everyone' | 'me'>('everyone')
+
+  const selectedMessages = useMemo(() => {
+    return messages.filter((m) => selectedMessageIds.has(m.id))
+  }, [messages, selectedMessageIds])
+
+  const canBulkDeleteForEveryone = useMemo(() => {
+    if (selectedMessages.length === 0) return false
+    return selectedMessages.every((m) => {
+      const isSender = Boolean(
+        user && (
+          m.senderId === user.id ||
+          m.senderId === (user as any)?.sub ||
+          (user.email && m.senderName?.toLowerCase() === user.email.toLowerCase())
+        )
+      )
+      const mTime = new Date(m.createdAt).getTime()
+      const isWithin24Hours = !isNaN(mTime) && Date.now() - mTime <= 24 * 60 * 60 * 1000
+      return isSender && isWithin24Hours
+    })
+  }, [selectedMessages, user])
 
   const toggleSelectMessage = (id: string) => {
     setSelectedMessageIds((prev) => {
@@ -427,10 +501,14 @@ export default function MessagesPage() {
   const handleStartSyncUp = async () => {
     if (!currentWorkspace?.id || !activeDMUser) return
     const chars = 'abcdefghijklmnopqrstuvwxyz'
+    const pick = (len: number) => {
+      let s = ''
+      for (let i = 0; i < len; i++) s += chars.charAt(Math.floor(Math.random() * chars.length))
+      return s
+    }
+    const meetCode = `${pick(3)}-${pick(4)}-${pick(3)}`
     const hostEmail = user?.email || ''
-    const instantUrl = hostEmail
-      ? `https://meet.google.com/new?authuser=${encodeURIComponent(hostEmail)}`
-      : 'https://meet.google.com/new'
+    const sharedMeetUrl = `https://meet.google.com/${meetCode}`
 
     try {
       await sendMessage(currentWorkspace.id, {
@@ -440,8 +518,8 @@ export default function MessagesPage() {
           {
             type: 'meeting',
             platform: 'google-meet',
-            meetingId: 'live-room',
-            link: instantUrl,
+            meetingId: meetCode,
+            link: sharedMeetUrl,
             ownerId: user?.id,
             ownerName: (user as any)?.name || user?.email?.split('@')[0] || 'User',
             ownerEmail: user?.email,
@@ -1004,7 +1082,7 @@ export default function MessagesPage() {
                   type="button"
                   disabled={selectedMessageIds.size === 0}
                   onClick={() => {
-                    setBulkDeleteMode('everyone')
+                    setBulkDeleteMode(canBulkDeleteForEveryone ? 'everyone' : 'me')
                     setIsBulkDeleteModalOpen(true)
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-red-600/20 cursor-pointer transition-all"
@@ -1255,10 +1333,21 @@ export default function MessagesPage() {
                               const hostEmailDisplay = att.ownerEmail || ''
                               const rawCode = String(att.meetingId || '').toLowerCase()
                               const cleanMeetId = rawCode.replace(/[^a-z-]/g, '') || 'meet'
-                              const authParam = hostEmailDisplay ? `?authuser=${encodeURIComponent(hostEmailDisplay)}` : ''
-                              const meetUrl = `https://meet.google.com/${cleanMeetId}${authParam}`
-                              const instantMeetUrl = hostEmailDisplay ? `https://meet.google.com/new?authuser=${encodeURIComponent(hostEmailDisplay)}` : 'https://meet.google.com/new'
-                              const targetLaunchUrl = isOwner ? instantMeetUrl : (att.link || meetUrl)
+
+                              // Canonical shared Google Meet room link:
+                              // MUST BE THE SAME ROOM FOR BOTH HOST AND ATTENDEE!
+                              const sharedMeetUrl =
+                                att.link?.startsWith('http') && !att.link.endsWith('/new')
+                                  ? att.link
+                                  : `https://meet.google.com/${cleanMeetId}`
+
+                              // For host, append authuser parameter if available so Google opens with the host's account
+                              const hostLaunchUrl = hostEmailDisplay
+                                ? `${sharedMeetUrl}${sharedMeetUrl.includes('?') ? '&' : '?'}authuser=${encodeURIComponent(hostEmailDisplay)}`
+                                : sharedMeetUrl
+
+                              // Both host and attendee join the exact same Google Meet room:
+                              const targetLaunchUrl = isOwner ? hostLaunchUrl : sharedMeetUrl
 
                               return (
                                 <div
@@ -1288,34 +1377,47 @@ export default function MessagesPage() {
                                         )}
                                       </div>
                                       <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-                                        <span>ID: {cleanMeetId}</span>
+                                        <span>Room: {cleanMeetId}</span>
                                         {isOwner ? (
                                           <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center gap-0.5">
-                                            (Click to launch room)
+                                            (You are Host)
                                           </span>
                                         ) : (
-                                          <a
-                                            href={instantMeetUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-[10px] text-emerald-400 hover:underline inline-flex items-center gap-0.5 font-medium"
-                                            title="Start a new Google Meet room"
-                                          >
-                                            <span>(Start New Room)</span>
-                                            <ExternalLink className="w-2.5 h-2.5" />
-                                          </a>
+                                          <span className="text-[10px] text-zinc-400 font-medium inline-flex items-center gap-0.5">
+                                            (Same Room Link)
+                                          </span>
                                         )}
                                       </div>
                                     </div>
                                   </div>
 
                                   <div className="flex items-center gap-2 shrink-0">
+                                    {isOwner && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setUpdatingMeetMsg({
+                                            msgId: msg.id,
+                                            title: att.title || 'Google Meet',
+                                            currentUrl: sharedMeetUrl,
+                                            attachments: msg.attachments || [],
+                                          })
+                                          setNewMeetUrlInput(sharedMeetUrl)
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-xl border border-border bg-card/60 hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
+                                        title="Edit Google Meet Link"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        <span>Edit Link</span>
+                                      </button>
+                                    )}
+
                                     <button
                                       type="button"
                                       onClick={() => {
                                         if (navigator.clipboard) {
-                                          navigator.clipboard.writeText(isOwner ? instantMeetUrl : (att.link || meetUrl))
-                                          setToastMessage('Meet link copied to clipboard!')
+                                          navigator.clipboard.writeText(sharedMeetUrl)
+                                          setToastMessage('Shared Meet link copied to clipboard!')
                                           setTimeout(() => setToastMessage(null), 2500)
                                         }
                                       }}
@@ -1333,7 +1435,7 @@ export default function MessagesPage() {
                                       className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all hover:scale-[1.02]"
                                     >
                                       <Video className="w-3.5 h-3.5" />
-                                      <span>{isOwner ? 'Start Live Room' : 'Join Meeting'}</span>
+                                      <span>{isOwner ? 'Start Meeting (Host)' : 'Join Meeting'}</span>
                                     </a>
                                   </div>
                                 </div>
@@ -1799,134 +1901,186 @@ export default function MessagesPage() {
       )}
 
       {/* Modal: Delete Message Confirmation (Delete for me / Delete for everyone + Document Permission) */}
-      {deletingMessage && (
-        <Portal>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-            <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-500/15 text-red-500 flex items-center justify-center shrink-0 border border-red-500/30">
-                  <Trash2 className="w-5 h-5" />
-                </div>
-                <div className="space-y-1 min-w-0">
-                  <h3 className="text-base font-bold text-foreground">Delete Message</h3>
-                </div>
-              </div>
+      {deletingMessage && (() => {
+        const isDeletingSender = Boolean(
+          user && (
+            deletingMessage.senderId === user.id ||
+            deletingMessage.senderId === (user as any)?.sub ||
+            (user.email && deletingMessage.senderName?.toLowerCase() === user.email.toLowerCase())
+          )
+        )
+        const deletingMsgTime = new Date(deletingMessage.createdAt).getTime()
+        const isDeletingWithin24Hours = !isNaN(deletingMsgTime) && (Date.now() - deletingMsgTime <= 24 * 60 * 60 * 1000)
+        const canDeleteForEveryone = isDeletingSender && isDeletingWithin24Hours
 
-              {/* Message Snippet Preview */}
-              <div className="p-3 rounded-xl bg-muted/40 border border-border/80 text-xs text-foreground/90 italic truncate">
-                "{deletingMessage.content || (deletingMessage.attachments?.[0]?.title ? `[${deletingMessage.attachments[0].title}]` : 'Attachment')}"
-              </div>
+        let deleteForEveryoneDisabledNotice = ''
+        if (!isDeletingSender) {
+          deleteForEveryoneDisabledNotice = 'Disabled: Only the sender can delete for everyone'
+        } else if (!isDeletingWithin24Hours) {
+          deleteForEveryoneDisabledNotice = 'Disabled: Messages older than 24 hours can only be deleted for yourself'
+        }
 
-              {/* Deletion Mode Radio Options */}
-              <div className="space-y-2">
-                <label
-                  onClick={() => setDeleteMode('everyone')}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    deleteMode === 'everyone'
-                      ? 'border-red-500/50 bg-red-500/10 text-foreground'
-                      : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    value="everyone"
-                    checked={deleteMode === 'everyone'}
-                    onChange={() => setDeleteMode('everyone')}
-                    className="accent-red-500"
-                  />
-                  <span className="text-xs font-bold text-foreground">
-                    Delete for everyone
-                  </span>
-                </label>
-
-                <label
-                  onClick={() => setDeleteMode('me')}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    deleteMode === 'me'
-                      ? 'border-primary/50 bg-primary/10 text-foreground'
-                      : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    value="me"
-                    checked={deleteMode === 'me'}
-                    onChange={() => setDeleteMode('me')}
-                    className="accent-primary"
-                  />
-                  <span className="text-xs font-bold text-foreground">
-                    Delete for me
-                  </span>
-                </label>
-              </div>
-
-              {/* DOCUMENT PERMISSION PROMPT (Required by user: "before deleting the documents ask for permission") */}
-              {deletingMessage.attachments?.some((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)) && (
-                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>Permission Required: Attached Document Detected</span>
+        return (
+          <Portal>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+              <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/15 text-red-500 flex items-center justify-center shrink-0 border border-red-500/30">
+                    <Trash2 className="w-5 h-5" />
                   </div>
-                  <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                    This message contains a linked document (
-                    <strong>
-                      {deletingMessage.attachments.find((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))?.title || 'Document'}
-                    </strong>
-                    ). Please confirm whether you want to delete the document permanently from the database.
-                  </p>
-                  <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={alsoDeleteDoc}
-                      onChange={(e) => setAlsoDeleteDoc(e.target.checked)}
-                      className="rounded border-amber-400 accent-amber-500 cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-amber-300">
-                      Yes, grant permission to permanently delete this document with zero trace
+                  <div className="space-y-1 min-w-0">
+                    <h3 className="text-base font-bold text-foreground">Delete Message</h3>
+                  </div>
+                </div>
+
+                {/* Message Snippet Preview */}
+                <div className="p-3 rounded-xl bg-muted/40 border border-border/80 text-xs text-foreground/90 italic truncate">
+                  "{deletingMessage.content || (deletingMessage.attachments?.[0]?.title ? `[${deletingMessage.attachments[0].title}]` : 'Attachment')}"
+                </div>
+
+                {/* Deletion Mode Radio Options */}
+                <div className="space-y-2">
+                  {/* Delete for everyone option */}
+                  <div
+                    onClick={() => {
+                      if (canDeleteForEveryone) {
+                        setDeleteMode('everyone')
+                      }
+                    }}
+                    className={`p-3 rounded-xl border transition-all ${
+                      !canDeleteForEveryone
+                        ? 'opacity-40 cursor-not-allowed bg-muted/20 border-border/50'
+                        : deleteMode === 'everyone'
+                        ? 'border-red-500/50 bg-red-500/10 text-foreground cursor-pointer'
+                        : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer'
+                    }`}
+                  >
+                    <label className={`flex items-start gap-3 ${!canDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                      <input
+                        type="radio"
+                        name="deleteMode"
+                        value="everyone"
+                        checked={deleteMode === 'everyone'}
+                        disabled={!canDeleteForEveryone}
+                        onChange={() => {
+                          if (canDeleteForEveryone) setDeleteMode('everyone')
+                        }}
+                        className="accent-red-500 mt-0.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      />
+                      <div className="space-y-0.5">
+                        <span className={`text-xs font-bold block ${!canDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
+                          Delete for everyone
+                        </span>
+                        {!canDeleteForEveryone ? (
+                          <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            {deleteForEveryoneDisabledNotice}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground block">
+                            Permanently deletes this message for all participants (within 24h)
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Delete for me option */}
+                  <div
+                    onClick={() => setDeleteMode('me')}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      deleteMode === 'me'
+                        ? 'border-primary/50 bg-primary/10 text-foreground'
+                        : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deleteMode"
+                        value="me"
+                        checked={deleteMode === 'me'}
+                        onChange={() => setDeleteMode('me')}
+                        className="accent-primary mt-0.5 cursor-pointer"
+                      />
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-foreground block">
+                          Delete for me
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Removes this message from your view only
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* DOCUMENT PERMISSION PROMPT (Required by user: "before deleting the documents ask for permission") */}
+                {deletingMessage.attachments?.some((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)) && (
+                  <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-2">
+                    <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>Permission Required: Attached Document Detected</span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                      This message contains a linked document (
+                      <strong>
+                        {deletingMessage.attachments.find((a: any) => a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))?.title || 'Document'}
+                      </strong>
+                      ). Please confirm whether you want to delete the document permanently from the database.
+                    </p>
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={alsoDeleteDoc}
+                        onChange={(e) => setAlsoDeleteDoc(e.target.checked)}
+                        className="rounded border-amber-400 accent-amber-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-amber-300">
+                        Yes, grant permission to permanently delete this document with zero trace
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {/* Whiteboard / Google Meet Notice */}
+                {deletingMessage.attachments?.some((a: any) => a.type === 'whiteboard' || a.type === 'meeting' || Boolean(a.boardId) || Boolean(a.meetingId)) && (
+                  <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
+                    <span className="text-xs">ℹ️</span>
+                    <span>
+                      Associated whiteboard cached state and Google Meet links will also be purged cleanly with zero trace.
                     </span>
-                  </label>
-                </div>
-              )}
+                  </div>
+                )}
 
-              {/* Whiteboard / Google Meet Notice */}
-              {deletingMessage.attachments?.some((a: any) => a.type === 'whiteboard' || a.type === 'meeting' || Boolean(a.boardId) || Boolean(a.meetingId)) && (
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
-                  <span className="text-xs">ℹ️</span>
-                  <span>
-                    Associated whiteboard cached state and Google Meet links will also be purged cleanly with zero trace.
-                  </span>
+                {/* Modal Actions */}
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletingMessage(null)
+                      setAlsoDeleteDoc(false)
+                    }}
+                    className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteMessage}
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {deleteMode === 'everyone' ? 'Delete for Everyone' : 'Delete for Me'}
+                    </span>
+                  </button>
                 </div>
-              )}
-
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeletingMessage(null)
-                    setAlsoDeleteDoc(false)
-                  }}
-                  className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDeleteMessage}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>
-                    {deleteMode === 'everyone' ? 'Delete for Everyone' : 'Delete for Me'}
-                  </span>
-                </button>
               </div>
             </div>
-          </div>
-        </Portal>
-      )}
+          </Portal>
+        )
+      })()}
 
       {/* Modal: Bulk Delete Messages Confirmation */}
       {isBulkDeleteModalOpen && selectedMessageIds.size > 0 && (
@@ -1946,47 +2100,77 @@ export default function MessagesPage() {
 
               {/* Deletion Mode Radio Options */}
               <div className="space-y-2">
-                <label
-                  onClick={() => setBulkDeleteMode('everyone')}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    bulkDeleteMode === 'everyone'
-                      ? 'border-red-500/50 bg-red-500/10 text-foreground'
-                      : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
+                <div
+                  onClick={() => {
+                    if (canBulkDeleteForEveryone) {
+                      setBulkDeleteMode('everyone')
+                    }
+                  }}
+                  className={`p-3 rounded-xl border transition-all ${
+                    !canBulkDeleteForEveryone
+                      ? 'opacity-40 cursor-not-allowed bg-muted/20 border-border/50'
+                      : bulkDeleteMode === 'everyone'
+                      ? 'border-red-500/50 bg-red-500/10 text-foreground cursor-pointer'
+                      : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="bulkDeleteMode"
-                    value="everyone"
-                    checked={bulkDeleteMode === 'everyone'}
-                    onChange={() => setBulkDeleteMode('everyone')}
-                    className="accent-red-500"
-                  />
-                  <span className="text-xs font-bold text-foreground">
-                    Delete for everyone
-                  </span>
-                </label>
+                  <label className={`flex items-start gap-3 ${!canBulkDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <input
+                      type="radio"
+                      name="bulkDeleteMode"
+                      value="everyone"
+                      checked={bulkDeleteMode === 'everyone'}
+                      disabled={!canBulkDeleteForEveryone}
+                      onChange={() => {
+                        if (canBulkDeleteForEveryone) setBulkDeleteMode('everyone')
+                      }}
+                      className="accent-red-500 mt-0.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className={`text-xs font-bold block ${!canBulkDeleteForEveryone ? 'text-muted-foreground' : 'text-foreground'}`}>
+                        Delete for everyone
+                      </span>
+                      {!canBulkDeleteForEveryone ? (
+                        <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          Disabled: Only allowed when all selected messages were sent by you within 24 hours
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground block">
+                          Permanently delete all selected messages from the database
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                </div>
 
-                <label
+                <div
                   onClick={() => setBulkDeleteMode('me')}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
                     bulkDeleteMode === 'me'
                       ? 'border-primary/50 bg-primary/10 text-foreground'
                       : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="bulkDeleteMode"
-                    value="me"
-                    checked={bulkDeleteMode === 'me'}
-                    onChange={() => setBulkDeleteMode('me')}
-                    className="accent-primary"
-                  />
-                  <span className="text-xs font-bold text-foreground">
-                    Delete for me
-                  </span>
-                </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="bulkDeleteMode"
+                      value="me"
+                      checked={bulkDeleteMode === 'me'}
+                      onChange={() => setBulkDeleteMode('me')}
+                      className="accent-primary mt-0.5 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-foreground block">
+                        Delete for me
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        Removes selected messages from your chat only
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               {/* Modal Actions */}
@@ -2007,6 +2191,62 @@ export default function MessagesPage() {
                   <span>
                     {bulkDeleteMode === 'everyone' ? 'Delete for Everyone' : 'Delete for Me'}
                   </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {/* Modal: Edit Google Meet Link (Host Sync) */}
+      {updatingMeetMsg && (
+        <Portal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <Video className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Edit Google Meet Link</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Update the meeting URL for this invitation. All attendees will receive the updated link in real time.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Google Meet URL</label>
+                <input
+                  type="text"
+                  value={newMeetUrlInput}
+                  onChange={(e) => setNewMeetUrlInput(e.target.value)}
+                  placeholder="https://meet.google.com/xxx-yyyy-zzz"
+                  className="w-full px-3 py-2 rounded-xl bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Paste your Google Meet room link or scheduled Google Calendar conference link.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUpdatingMeetMsg(null)
+                    setNewMeetUrlInput('')
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveMeetUrl}
+                  disabled={!newMeetUrlInput.trim()}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+                >
+                  Update & Sync
                 </button>
               </div>
             </div>

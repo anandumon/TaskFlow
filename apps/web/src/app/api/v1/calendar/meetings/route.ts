@@ -58,17 +58,21 @@ export async function POST(req: NextRequest) {
       [user.id]
     )
 
+    const generateMeetCode = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyz'
+      const pick = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+      return `${pick(3)}-${pick(4)}-${pick(3)}`
+    }
+
     if (!conn) {
-      // Return instant Google Meet link as fallback if Google Calendar is not yet connected
-      const hostEmail = user.email || ''
-      const fallbackUrl = hostEmail
-        ? `https://meet.google.com/new?authuser=${encodeURIComponent(hostEmail)}`
-        : 'https://meet.google.com/new'
+      // Return canonical shared Google Meet link as fallback if Google Calendar is not yet connected
+      const meetCode = generateMeetCode()
+      const sharedUrl = `https://meet.google.com/${meetCode}`
 
       return apiSuccess({
-        meetingUrl: fallbackUrl,
+        meetingUrl: sharedUrl,
         mode: 'INSTANT_FALLBACK',
-        message: 'Google Calendar not connected. Created instant Google Meet launch link.',
+        message: 'Google Calendar not connected. Created shared Google Meet room.',
       })
     }
 
@@ -137,24 +141,23 @@ export async function POST(req: NextRequest) {
       const errText = await gRes.text()
       console.warn('[calendar/meetings] Google event creation error:', gRes.status, errText)
 
-      // Fallback to instant live meet URL if Google rejected with auth error
-      const hostEmail = user.email || ''
-      const fallbackUrl = hostEmail
-        ? `https://meet.google.com/new?authuser=${encodeURIComponent(hostEmail)}`
-        : 'https://meet.google.com/new'
+      // Fallback to shared meet URL if Google rejected with auth error
+      const meetCode = generateMeetCode()
+      const fallbackUrl = `https://meet.google.com/${meetCode}`
 
       return apiSuccess({
         meetingUrl: fallbackUrl,
         mode: 'INSTANT_FALLBACK',
-        message: 'Could not schedule Calendar event. Provided instant Google Meet room.',
+        message: 'Could not schedule Calendar event. Provided shared Google Meet room.',
       })
     }
 
     const eventData = await gRes.json()
+    const fallbackMeetCode = generateMeetCode()
     const meetingUrl =
       eventData.hangoutLink ||
       eventData.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === 'video')?.uri ||
-      'https://meet.google.com/new'
+      `https://meet.google.com/${fallbackMeetCode}`
 
     // 4. Record meeting into relational `meeting` table
     try {
