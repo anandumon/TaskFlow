@@ -46,6 +46,7 @@ import {
   AlertTriangle,
   Edit3,
   Check,
+  AlertCircle,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
@@ -154,6 +155,7 @@ export default function MessagesPage() {
     attachments: any[]
   } | null>(null)
   const [newMeetUrlInput, setNewMeetUrlInput] = useState('')
+  const [inlineMeetInput, setInlineMeetInput] = useState<{ [msgId: string]: string }>({})
 
   const handleSaveMeetUrl = async () => {
     if (!updatingMeetMsg || !currentWorkspace?.id || !newMeetUrlInput.trim()) return
@@ -187,6 +189,44 @@ export default function MessagesPage() {
     setTimeout(() => setToastMessage(null), 3000)
     setUpdatingMeetMsg(null)
     setNewMeetUrlInput('')
+  }
+
+  const handleSaveInlineMeetUrl = async (msgId: string, customUrl?: string) => {
+    const targetMsg = messages.find((m) => m.id === msgId)
+    if (!targetMsg || !currentWorkspace?.id) return
+    let url = (customUrl !== undefined ? customUrl : inlineMeetInput[msgId] || '').trim()
+    if (!url) return
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`
+    }
+    const codeMatch = url.match(/meet\.google\.com\/([a-z0-9-]+)/i)
+    const code = codeMatch ? codeMatch[1] : undefined
+
+    const updatedAttachments = (targetMsg.attachments || []).map((att: any) => {
+      if (att.type === 'meeting') {
+        return {
+          ...att,
+          link: url,
+          meetingId: code || att.meetingId,
+        }
+      }
+      return att
+    })
+
+    await editMessage(
+      currentWorkspace.id,
+      msgId,
+      targetMsg.content || "Let's jump on Google Meet:",
+      updatedAttachments
+    )
+
+    setInlineMeetInput((prev) => {
+      const copy = { ...prev }
+      delete copy[msgId]
+      return copy
+    })
+    setToastMessage('Google Meet link saved! Both host and attendee now share this room.')
+    setTimeout(() => setToastMessage(null), 3500)
   }
 
   const handleOpenDeleteDialog = (msg: ChatMessage) => {
@@ -500,15 +540,33 @@ export default function MessagesPage() {
   // Quick Start SyncUp (creates meeting invitation automatically)
   const handleStartSyncUp = async () => {
     if (!currentWorkspace?.id || !activeDMUser) return
-    const chars = 'abcdefghijklmnopqrstuvwxyz'
-    const pick = (len: number) => {
-      let s = ''
-      for (let i = 0; i < len; i++) s += chars.charAt(Math.floor(Math.random() * chars.length))
-      return s
-    }
-    const meetCode = `${pick(3)}-${pick(4)}-${pick(3)}`
+    const hostName = (user as any)?.name || user?.email?.split('@')[0] || 'User'
     const hostEmail = user?.email || ''
-    const sharedMeetUrl = `https://meet.google.com/${meetCode}`
+    const hostId = user?.id || ''
+
+    let realMeetUrl = ''
+    let realMeetCode = ''
+
+    // 1. Try to create real Google Meet conference via Google Calendar API
+    try {
+      const res = await fetch('/api/v1/calendar/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Google Meet with ${activeDMUser.name || 'team'}`,
+          startTime: new Date().toISOString(),
+          attendees: activeDMUser.email ? [activeDMUser.email] : [],
+        }),
+      })
+      const data = await res.json()
+      if (data?.data?.meetingUrl && data.data.meetingUrl.startsWith('http')) {
+        realMeetUrl = data.data.meetingUrl
+        const match = realMeetUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
+        realMeetCode = match ? match[1] : ''
+      }
+    } catch (err) {
+      console.warn('[SyncUp] Calendar API call failed:', err)
+    }
 
     try {
       await sendMessage(currentWorkspace.id, {
@@ -518,12 +576,13 @@ export default function MessagesPage() {
           {
             type: 'meeting',
             platform: 'google-meet',
-            meetingId: meetCode,
-            link: sharedMeetUrl,
-            ownerId: user?.id,
-            ownerName: (user as any)?.name || user?.email?.split('@')[0] || 'User',
-            ownerEmail: user?.email,
+            meetingId: realMeetCode,
+            link: realMeetUrl,
+            ownerId: hostId,
+            ownerName: hostName,
+            ownerEmail: hostEmail,
             title: `Google Meet with ${activeDMUser.name || 'team'}`,
+            createdAt: new Date().toISOString(),
           },
         ],
       })
@@ -1331,23 +1390,107 @@ export default function MessagesPage() {
                               )
                               const hostDisplay = att.ownerName || msg.senderName || 'Meeting Host'
                               const hostEmailDisplay = att.ownerEmail || ''
-                              const rawCode = String(att.meetingId || '').toLowerCase()
-                              const cleanMeetId = rawCode.replace(/[^a-z-]/g, '') || 'meet'
+                              const hasValidLink = Boolean(
+                                att.link &&
+                                typeof att.link === 'string' &&
+                                att.link.startsWith('http') &&
+                                !att.link.endsWith('/new')
+                              )
+                              const sharedMeetUrl = hasValidLink ? att.link.trim() : ''
+                              const matchCode = sharedMeetUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
+                              const cleanMeetId = matchCode ? matchCode[1] : (att.meetingId || '')
 
-                              // Canonical shared Google Meet room link:
-                              // MUST BE THE SAME ROOM FOR BOTH HOST AND ATTENDEE!
-                              const sharedMeetUrl =
-                                att.link?.startsWith('http') && !att.link.endsWith('/new')
-                                  ? att.link
-                                  : `https://meet.google.com/${cleanMeetId}`
+                              // Target URL is the EXACT SAME room URL for both host and attendee
+                              const targetLaunchUrl = sharedMeetUrl
 
-                              // For host, append authuser parameter if available so Google opens with the host's account
-                              const hostLaunchUrl = hostEmailDisplay
-                                ? `${sharedMeetUrl}${sharedMeetUrl.includes('?') ? '&' : '?'}authuser=${encodeURIComponent(hostEmailDisplay)}`
-                                : sharedMeetUrl
-
-                              // Both host and attendee join the exact same Google Meet room:
-                              const targetLaunchUrl = isOwner ? hostLaunchUrl : sharedMeetUrl
+                              if (!hasValidLink) {
+                                return (
+                                  <div key={aIdx}>
+                                    {isOwner ? (
+                                      <div className="p-3.5 rounded-2xl border bg-card border-amber-500/30 text-foreground shadow-md space-y-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                                              <Video className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                              <div className="font-bold text-xs flex items-center gap-1.5">
+                                                <span>{att.title || 'Google Meet Sync'}</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">
+                                                  HOST SETUP REQUIRED
+                                                </span>
+                                              </div>
+                                              <p className="text-[11px] text-muted-foreground">
+                                                Host: <strong className="text-foreground">{hostDisplay}</strong> (You)
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                                          To ensure all attendees join your exact Google Meet room, start a meeting and paste your meeting link below:
+                                        </p>
+                                        <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
+                                          <a
+                                            href="https://meet.google.com/new"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all shrink-0 cursor-pointer"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            <span>1. Start Meeting on Google Meet</span>
+                                          </a>
+                                          <div className="flex-1 flex items-center gap-1.5">
+                                            <input
+                                              type="text"
+                                              placeholder="2. Paste link (meet.google.com/xxx-yyyy-zzz)..."
+                                              value={inlineMeetInput[msg.id] ?? ''}
+                                              onChange={(e) => setInlineMeetInput((prev) => ({ ...prev, [msg.id]: e.target.value }))}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  e.preventDefault()
+                                                  handleSaveInlineMeetUrl(msg.id)
+                                                }
+                                              }}
+                                              className="flex-1 px-2.5 py-1.5 rounded-xl bg-muted/60 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSaveInlineMeetUrl(msg.id)}
+                                              disabled={!inlineMeetInput[msg.id]?.trim()}
+                                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                                            >
+                                              Share
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="p-3.5 rounded-2xl border bg-card border-emerald-500/20 text-foreground shadow-md space-y-2">
+                                        <div className="flex items-center gap-2.5">
+                                          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                                            <Video className="w-4 h-4" />
+                                          </div>
+                                          <div>
+                                            <div className="font-bold text-xs flex items-center gap-1.5">
+                                              <span>{att.title || 'Google Meet Sync'}</span>
+                                              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30 flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                                                WAITING FOR HOST
+                                              </span>
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground">
+                                              Host: <strong className="text-foreground">{hostDisplay}</strong>
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                          {hostDisplay} is setting up the Google Meet room. The join button will appear here in real time as soon as the host shares the link.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              }
 
                               return (
                                 <div
@@ -1377,14 +1520,14 @@ export default function MessagesPage() {
                                         )}
                                       </div>
                                       <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-                                        <span>Room: {cleanMeetId}</span>
+                                        {cleanMeetId && <span>Room: {cleanMeetId}</span>}
                                         {isOwner ? (
                                           <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center gap-0.5">
                                             (You are Host)
                                           </span>
                                         ) : (
-                                          <span className="text-[10px] text-zinc-400 font-medium inline-flex items-center gap-0.5">
-                                            (Same Room Link)
+                                          <span className="text-[10px] text-emerald-400/80 font-medium inline-flex items-center gap-0.5">
+                                            (Shared Room Link)
                                           </span>
                                         )}
                                       </div>
@@ -1431,7 +1574,7 @@ export default function MessagesPage() {
                                     <a
                                       href={targetLaunchUrl}
                                       target="_blank"
-                                      rel="noreferrer"
+                                      rel="noopener noreferrer"
                                       className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all hover:scale-[1.02]"
                                     >
                                       <Video className="w-3.5 h-3.5" />

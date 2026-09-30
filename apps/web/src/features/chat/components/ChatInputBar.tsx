@@ -220,20 +220,35 @@ export function ChatInputBar({
     inputRef.current?.focus()
   }
 
-  const addGoogleMeet = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyz'
-    const pickLetters = (len: number) => {
-      let res = ''
-      for (let i = 0; i < len; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length))
-      }
-      return res
-    }
-    const code = `${pickLetters(3)}-${pickLetters(4)}-${pickLetters(3)}`
+  const addGoogleMeet = async () => {
     const hostName = (user as any)?.name || user?.email?.split('@')[0] || 'Meeting Host'
     const hostEmail = user?.email || ''
     const hostId = user?.id || ''
-    const sharedMeetUrl = `https://meet.google.com/${code}`
+
+    // Try to create a REAL Google Meet room via Calendar API
+    // Fake random codes DON'T work — Google ignores them and creates separate rooms per user
+    let meetUrl = ''
+    let meetCode = ''
+
+    try {
+      const res = await fetch('/api/v1/calendar/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Google Meet with ${targetName}`,
+          startTime: new Date().toISOString(),
+          attendees: [],
+        }),
+      })
+      const data = await res.json()
+      if (data?.data?.meetingUrl && data.data.meetingUrl.startsWith('http')) {
+        meetUrl = data.data.meetingUrl
+        const match = meetUrl.match(/meet\.google\.com\/([a-z]+-[a-z]+-[a-z]+)/i)
+        meetCode = match ? match[1] : ''
+      }
+    } catch (err) {
+      console.warn('[addGoogleMeet] Calendar API failed, using paste-link flow:', err)
+    }
 
     setStagedAttachments((prev) => [
       ...prev,
@@ -242,15 +257,15 @@ export function ChatInputBar({
         type: 'meeting',
         platform: 'Google Meet',
         title: `Google Meet with ${targetName}`,
-        link: sharedMeetUrl,
-        meetingId: code,
+        link: meetUrl,
+        meetingId: meetCode,
         ownerId: hostId,
         ownerName: hostName,
         ownerEmail: hostEmail,
         createdAt: new Date().toISOString(),
       },
     ])
-    setInputText((prev) => (prev ? prev : 'Let’s jump on Google Meet:'))
+    setInputText((prev) => (prev ? prev : "Let's jump on Google Meet:"))
     setIsMenuOpen(false)
     inputRef.current?.focus()
   }

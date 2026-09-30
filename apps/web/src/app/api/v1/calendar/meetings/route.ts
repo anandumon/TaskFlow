@@ -58,21 +58,13 @@ export async function POST(req: NextRequest) {
       [user.id]
     )
 
-    const generateMeetCode = () => {
-      const chars = 'abcdefghijklmnopqrstuvwxyz'
-      const pick = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-      return `${pick(3)}-${pick(4)}-${pick(3)}`
-    }
-
     if (!conn) {
-      // Return canonical shared Google Meet link as fallback if Google Calendar is not yet connected
-      const meetCode = generateMeetCode()
-      const sharedUrl = `https://meet.google.com/${meetCode}`
-
+      // Calendar not connected — return empty URL so client uses paste-link flow
+      // Random fake codes DON'T work: Google Meet ignores them and creates separate rooms
       return apiSuccess({
-        meetingUrl: sharedUrl,
-        mode: 'INSTANT_FALLBACK',
-        message: 'Google Calendar not connected. Created shared Google Meet room.',
+        meetingUrl: '',
+        mode: 'NO_CALENDAR',
+        message: 'Google Calendar not connected. Host must start a meeting and share the link.',
       })
     }
 
@@ -141,23 +133,20 @@ export async function POST(req: NextRequest) {
       const errText = await gRes.text()
       console.warn('[calendar/meetings] Google event creation error:', gRes.status, errText)
 
-      // Fallback to shared meet URL if Google rejected with auth error
-      const meetCode = generateMeetCode()
-      const fallbackUrl = `https://meet.google.com/${meetCode}`
-
+      // Calendar API failed — return empty URL so client uses paste-link flow
       return apiSuccess({
-        meetingUrl: fallbackUrl,
-        mode: 'INSTANT_FALLBACK',
-        message: 'Could not schedule Calendar event. Provided shared Google Meet room.',
+        meetingUrl: '',
+        mode: 'CALENDAR_ERROR',
+        message: 'Could not schedule Calendar event. Host must start a meeting and share the link.',
       })
     }
 
     const eventData = await gRes.json()
-    const fallbackMeetCode = generateMeetCode()
+    // Only use REAL Google-generated meeting URLs (hangoutLink or conferenceData entry point)
     const meetingUrl =
       eventData.hangoutLink ||
       eventData.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === 'video')?.uri ||
-      `https://meet.google.com/${fallbackMeetCode}`
+      '' // empty if Google didn't generate a conference link
 
     // 4. Record meeting into relational `meeting` table
     try {
