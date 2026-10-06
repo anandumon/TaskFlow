@@ -89,8 +89,20 @@ export async function GET(req: NextRequest) {
          LEFT JOIN projects p ON p.id = t.project_id
          WHERE (t.deleted = false OR t.deleted IS NULL)
            AND t.due_date IS NOT NULL
+           AND (
+             t.assignee_id = $1
+             OR t.created_by = $1
+             OR t.workspace_id IN (
+               SELECT wm.workspace_id FROM workspace_members wm WHERE wm.user_id = $1
+               UNION
+               SELECT w.id FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE o.owner_id = $1
+               UNION
+               SELECT w.id FROM workspaces w JOIN organization_members om ON om.organization_id = w.organization_id WHERE om.user_id = $1
+             )
+           )
          ORDER BY t.due_date ASC
-         LIMIT 100`
+         LIMIT 100`,
+        [user.id]
       )
 
       for (const t of taskRows) {

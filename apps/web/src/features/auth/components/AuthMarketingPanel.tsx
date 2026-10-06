@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { TaskFlowLogo } from '@/components/brand/TaskFlowLogo'
 import {
   Zap,
   CheckSquare2,
@@ -101,10 +102,7 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
       {/* Top Header */}
       <header className="relative z-10 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/30">
-            <Zap className="w-4 h-4 text-white" aria-hidden="true" />
-          </div>
-          <span className="text-xl font-black tracking-tight text-white">TaskFlow</span>
+          <TaskFlowLogo variant="full" size="md" colorScheme="dark" textClassName="text-white" animated={true} />
         </div>
         <span className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/25">
           {isSignUp ? 'One account. Everything organized.' : 'Welcome back'}

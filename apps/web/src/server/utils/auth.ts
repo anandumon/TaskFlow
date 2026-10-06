@@ -73,7 +73,7 @@ async function ensureDbUser(authId: string, email: string, fullName?: string): P
     return newId
   } catch (err) {
     console.warn('[auth.ts] Error syncing user with public.users:', err)
-    return '543cb7a9-44dc-4a3e-844c-020d52cefca7'
+    return isUuid(authId) ? authId : ''
   }
 }
 
@@ -81,7 +81,7 @@ import { verifyTaskFlowJwt } from './jwt'
 
 /**
  * Extracts and verifies the authenticated user from the Authorization header,
- * cookies, or query parameters, guaranteeing the returned user.id exists in the public.users table.
+ * cookies, or query parameters, guaranteeing cryptographic validity.
  */
 export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
   let token = ''
@@ -103,7 +103,7 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
     }
   }
 
-  // 3. Check query param (useful for dev / direct testing)
+  // 3. Check query param
   if (!token) {
     const queryToken = req.nextUrl.searchParams.get('token')
     if (queryToken) {
@@ -114,7 +114,7 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
   if (!token) return null
 
   try {
-    // 1. TaskFlow Native HS256 JWT
+    // 1. TaskFlow Native HS256 JWT (cryptographically verified)
     const nativePayload = verifyTaskFlowJwt(token)
     if (nativePayload && nativePayload.sub) {
       const canonicalId = await ensureDbUser(
@@ -122,14 +122,16 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
         nativePayload.email,
         nativePayload.name
       )
-      return {
-        id: canonicalId,
-        email: nativePayload.email,
-        fullName: nativePayload.name,
+      if (canonicalId) {
+        return {
+          id: canonicalId,
+          email: nativePayload.email,
+          fullName: nativePayload.name,
+        }
       }
     }
 
-    // 2. Supabase Auth token
+    // 2. Supabase Auth token (cryptographically verified via Supabase Auth)
     if (token.startsWith('eyJ')) {
       try {
         const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
@@ -141,72 +143,71 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
             (user.email ? user.email.split('@')[0] : 'User')
           const canonicalId = await ensureDbUser(user.id, email, fullName)
 
-          return {
-            id: canonicalId,
-            email,
-            fullName,
+          if (canonicalId) {
+            return {
+              id: canonicalId,
+              email,
+              fullName,
+            }
           }
         }
       } catch {}
-    }
-
-    // 3. Fallback: Parse 3-part JWT payload directly
-    const parts = token.split('.')
-    if (parts.length === 3) {
-      try {
-        const payloadStr = Buffer.from(parts[1], 'base64url').toString('utf8')
-        const payload = JSON.parse(payloadStr)
-        const sub = payload.sub || payload.userId || payload.id
-        const email = payload.email || ''
-        const fullName = payload.name || payload.firstName || email.split('@')[0] || 'User'
-        if (sub || email) {
-          const canonicalId = await ensureDbUser(sub, email, fullName)
-          return {
-            id: canonicalId,
-            email,
-            fullName,
-          }
-        }
-      } catch {}
-    }
-
-    // 4. Fallback: Legacy taskflow_jwt_${userId}_... token
-    if (token.startsWith('taskflow_jwt_')) {
-      const rawId = token.replace('taskflow_jwt_', '').split('_')[0]
-      if (isUuid(rawId)) {
-        const dbUser = await queryOne(
-          `SELECT id, email, display_name FROM users WHERE id = $1 LIMIT 1`,
-          [rawId]
-        )
-        if (dbUser) {
-          return {
-            id: dbUser.id,
-            email: dbUser.email,
-            fullName: dbUser.display_name,
-          }
-        }
-      }
-    }
-
-    // 5. Fallback: Direct UUID token
-    if (isUuid(token)) {
-      const dbUser = await queryOne(
-        `SELECT id, email, display_name FROM users WHERE id = $1 LIMIT 1`,
-        [token]
-      )
-      if (dbUser) {
-        return {
-          id: dbUser.id,
-          email: dbUser.email,
-          fullName: dbUser.display_name,
-        }
-      }
     }
   } catch (err) {
     console.warn('[auth.ts] Failed to parse auth token:', err)
   }
 
   return null
+}
+
+/**
+ * Validates whether the user is a member of the workspace or its parent organization.
+ */
+export async function canUserAccessWorkspace(userId: string, workspaceId: string): Promise<boolean> {
+  if (!userId || !workspaceId) return false
+  try {
+    // 1. Check direct workspace membership
+    const wsMember = await queryOne(
+      `SELECT id FROM workspace_members WHERE workspace_id = $1 AND user_id = $2 LIMIT 1`,
+      [workspaceId, userId]
+    )
+    if (wsMember) return true
+
+    // 2. Check parent organization ownership or membership
+    const orgAccess = await queryOne(
+      `SELECT w.id FROM workspaces w
+       JOIN organizations o ON o.id = w.organization_id
+       LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $2
+       WHERE w.id = $1 AND (o.owner_id = $2 OR om.user_id = $2) LIMIT 1`,
+      [workspaceId, userId]
+    )
+    if (orgAccess) return true
+
+    // 3. Check admin role
+    return await isUserAdmin(userId, { workspaceId })
+  } catch (err) {
+    console.warn('[auth.ts] canUserAccessWorkspace error:', err)
+    return false
+  }
+}
+
+/**
+ * Validates whether the user is an owner or member of the organization.
+ */
+export async function canUserAccessOrganization(userId: string, orgId: string): Promise<boolean> {
+  if (!userId || !orgId) return false
+  try {
+    const org = await queryOne(
+      `SELECT o.id FROM organizations o
+       LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $2
+       WHERE o.id = $1 AND (o.owner_id = $2 OR om.user_id = $2) AND (o.deleted = false OR o.deleted IS NULL) LIMIT 1`,
+      [orgId, userId]
+    )
+    return !!org
+  } catch (err) {
+    console.warn('[auth.ts] canUserAccessOrganization error:', err)
+    return false
+  }
 }
 
 /**

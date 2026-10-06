@@ -190,12 +190,12 @@ export async function createOrganization(
 
     try {
       await query(
-        `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
-         VALUES ($1, $2, $3, 'OWNER', $4, $4)`,
-        [crypto.randomUUID(), defaultWsId, validOwnerId, now]
+        `INSERT INTO workspace_members (id, workspace_id, user_id, role_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $5)`,
+        [crypto.randomUUID(), defaultWsId, validOwnerId, OWNER_ROLE_ID, now]
       )
     } catch (wmErr) {
-      console.debug('[org.service] non-fatal workspace_members insert:', wmErr)
+      console.warn('[org.service] workspace_members insert error:', wmErr)
     }
 
     return mapOrg(row)

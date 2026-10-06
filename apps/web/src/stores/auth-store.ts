@@ -28,6 +28,7 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  isLoggingOut: boolean
   error: string | null
 
   login: (email: string, password: string) => Promise<void>
@@ -52,6 +53,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
+  isLoggingOut: false,
   error: null,
 
   login: async (email: string, password: string) => {
@@ -204,22 +206,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // 1. Immediately mark isLoggingOut and clear auth state to prevent modal/layout flashes
+    set({ isLoggingOut: true, isAuthenticated: false, user: null })
+    apiClient.setAccessToken(null)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('taskflow_is_new_user')
+    }
+    useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
+    useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
+
+    // 2. Perform instant window redirection to landing page so user never sees residual app state
+    if (typeof window !== 'undefined') {
+      window.location.replace('/')
+    }
+
+    // 3. Clear sessions on backend in the background
     try {
-      await apiClient.post('/api/v1/auth/logout', {}).catch(() => {})
-      await supabase.auth.signOut().catch(() => {})
+      await Promise.allSettled([
+        apiClient.post('/api/v1/auth/logout', {}),
+        supabase.auth.signOut(),
+      ])
+    } catch {
+      // ignore
     } finally {
-      apiClient.setAccessToken(null)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
-        localStorage.removeItem('taskflow_is_new_user')
-      }
-      useOrgStore.setState({ organizations: [], currentOrg: null, members: [] })
-      useWorkspaceStore.setState({ workspaces: [], currentWorkspace: null, members: [], teams: [] })
-      set({ user: null, isAuthenticated: false, error: null })
-      if (typeof window !== 'undefined') {
-        window.location.href = '/'
-      }
+      set({ isLoggingOut: false, error: null })
     }
   },
 

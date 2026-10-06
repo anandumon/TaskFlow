@@ -9,10 +9,9 @@ export async function POST(req: NextRequest) {
       return apiError('Email is required', 400)
     }
 
-    const result = await requestPasswordReset(email)
+    await requestPasswordReset(email)
     return apiSuccess({
       message: 'Password reset instructions have been sent to your email.',
-      devToken: result.token,
     })
   } catch (err: any) {
     console.error('[API /auth/forgot-password] Error:', err)

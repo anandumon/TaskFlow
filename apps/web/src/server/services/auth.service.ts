@@ -36,6 +36,11 @@ export async function registerUser(input: {
   message: string
   user: any
 }> {
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+  if (!input.email || !emailRegex.test(input.email.trim())) {
+    throw new Error('Please provide a valid email address')
+  }
+
   const email = input.email.toLowerCase().trim()
   const firstName = (input.firstName || '').trim()
   const lastName = (input.lastName || '').trim()
@@ -163,11 +168,9 @@ export async function verifyEmailOtp(input: {
   )
 
   const cached = pendingCache.get(email)
-  const isMasterCode = cleanOtp === '123456' || cleanOtp === '000000'
+  let isValid = false
 
-  let isValid = isMasterCode
-
-  if (!isValid && cached && cached.otp === cleanOtp && cached.expiresAt > Date.now()) {
+  if (cached && cached.otp === cleanOtp && cached.expiresAt > Date.now()) {
     isValid = true
   }
 
@@ -241,15 +244,14 @@ export async function verifyEmailOtp(input: {
     console.error('[auth.service] sendAccountCreatedEmail error:', err)
   )
 
-  // Confirm email in Supabase auth and generate tokens
-  let sessionData: any = null
+  // Confirm email in Supabase auth if applicable
   try {
-    const { data: suUser } = await (supabaseAdmin.auth.admin as any).getUserByEmail(email)
-    if (suUser?.user) {
-      await supabaseAdmin.auth.admin.updateUserById(suUser.user.id, { email_confirm: true })
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+    const suUser = usersData?.users?.find((u: any) => u.email?.toLowerCase() === email)
+    if (suUser) {
+      await supabaseAdmin.auth.admin.updateUserById(suUser.id, { email_confirm: true })
     }
   } catch (err) {
-
     console.warn('[auth.service] supabase confirm error:', err)
   }
 

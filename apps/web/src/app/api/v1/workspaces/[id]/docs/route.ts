@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
-import { getAuthUser } from '@/server/utils/auth'
+import { getAuthUser, canUserAccessWorkspace } from '@/server/utils/auth'
 import { getWorkspaceDocs, upsertWorkspaceDoc } from '@/server/services/doc.service'
 
 export async function GET(
@@ -8,6 +8,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authUser = await getAuthUser(req)
+    if (!authUser) {
+      return apiError('Unauthorized', 401)
+    }
+
+    const hasAccess = await canUserAccessWorkspace(authUser.id, params.id)
+    if (!hasAccess) {
+      return apiError('Forbidden: Access denied to this workspace', 403)
+    }
+
     const docs = await getWorkspaceDocs(params.id)
     return apiSuccess(docs)
   } catch (err: any) {
@@ -21,6 +31,15 @@ export async function POST(
 ) {
   try {
     const authUser = await getAuthUser(req)
+    if (!authUser) {
+      return apiError('Unauthorized', 401)
+    }
+
+    const hasAccess = await canUserAccessWorkspace(authUser.id, params.id)
+    if (!hasAccess) {
+      return apiError('Forbidden: Access denied to this workspace', 403)
+    }
+
     const body = await req.json()
 
     if (!body.title || !body.title.trim()) {
@@ -29,7 +48,7 @@ export async function POST(
 
     const doc = await upsertWorkspaceDoc(params.id, {
       ...body,
-      authorName: body.authorName || authUser?.name || 'User',
+      authorName: body.authorName || authUser?.fullName || 'User',
       authorEmail: authUser?.email,
     })
 

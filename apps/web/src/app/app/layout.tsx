@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isChatRoute = pathname === '/app/messages' || pathname?.startsWith('/app/messages')
   const isSettingsRoute = pathname === '/app/settings' || pathname?.startsWith('/app/settings')
   const isFitScreenRoute = isChatRoute || isSettingsRoute
-  const { user, isAuthenticated, isLoading, loadUser } = useAuthStore()
+  const { user, isAuthenticated, isLoading, isLoggingOut, loadUser } = useAuthStore()
   const { fetchOrganizations, currentOrg, organizations } = useOrgStore()
   const { fetchWorkspaces, currentWorkspace } = useWorkspaceStore()
   const [commandOpen, setCommandOpen] = useState(false)
@@ -36,7 +36,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const hasPrefetchedRef = useRef(false)
 
   useEffect(() => {
-    if (!user || !user.id) return
+    // If logging out or not authenticated, ensure onboarding modal is closed
+    if (isLoggingOut || !isAuthenticated || !user || !user.id) {
+      setShowOnboarding(false)
+      return
+    }
 
     // If user has zero organizations, ALWAYS show onboarding create card!
     if (initialLoaded && organizations.length === 0) {
@@ -72,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (organizations.length > 0) {
       setShowOnboarding(false)
     }
-  }, [user, organizations.length, initialLoaded])
+  }, [user, organizations.length, initialLoaded, isAuthenticated, isLoggingOut])
 
   useEffect(() => {
     if (hasPrefetchedRef.current) return
@@ -163,13 +167,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  if (!initialLoaded && (!authChecked || isLoading)) {
+  if (isLoggingOut || (!initialLoaded && (!authChecked || isLoading))) {
     return <AppShellSkeleton />
   }
 
-  // If new user with no organizations or onboarding is needed, render ONLY the onboarding wizard directly!
+  // If user is unauthenticated or has logged out, NEVER show onboarding or any app UI.
+  // Instead, render the loading skeleton while redirecting to /login.
+  if (!isAuthenticated || !user) {
+    return <AppShellSkeleton />
+  }
+
+  // If authenticated user with no organizations or onboarding is needed, render ONLY the onboarding wizard directly!
   // Prevents any flashing of the main dashboard, sidebar, or header.
-  if (showOnboarding || organizations.length === 0) {
+  if (initialLoaded && isAuthenticated && user && (showOnboarding || organizations.length === 0)) {
     return (
       <div className="fixed inset-0 z-[100] h-screen w-screen bg-[#07080b] flex items-center justify-center p-4 sm:p-6 overflow-hidden animate-fade-in">
         <OnboardingWizardModal

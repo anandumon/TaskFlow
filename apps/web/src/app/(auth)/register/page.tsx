@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { TaskFlowLogo } from '@/components/brand/TaskFlowLogo'
 import { SocialAuthButtons } from '@/features/auth/components/SocialAuthButtons'
 import { AuthMarketingPanel } from '@/features/auth/components/AuthMarketingPanel'
 import { Eye, EyeOff, Loader2, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react'
@@ -145,7 +146,12 @@ function RegisterContent() {
       <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-8 max-w-xl mx-auto w-full">
         <div className="w-full space-y-5">
           {/* Header */}
-          <div className="space-y-1">
+          <div className="space-y-2">
+            <div className="lg:hidden mb-3">
+              <Link href="/">
+                <TaskFlowLogo variant="full" size="md" animated={true} />
+              </Link>
+            </div>
             <Link
               href="/login"
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group mb-1"

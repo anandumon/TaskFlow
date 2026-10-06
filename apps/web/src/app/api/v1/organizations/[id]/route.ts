@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
-import { getAuthUser } from '@/server/utils/auth'
+import { getAuthUser, canUserAccessOrganization, isUserAdmin } from '@/server/utils/auth'
 import { updateOrganization, deleteOrganization } from '@/server/services/organization.service'
 import { queryOne } from '@/server/db/postgres'
 
@@ -9,7 +9,20 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const org = await queryOne(`SELECT * FROM organizations WHERE id = $1`, [params.id])
+    const authUser = await getAuthUser(req)
+    if (!authUser) {
+      return apiError('Authentication required', 401, 'UNAUTHORIZED')
+    }
+
+    const hasAccess = await canUserAccessOrganization(authUser.id, params.id)
+    if (!hasAccess) {
+      return apiError('Forbidden: Access denied to this organization', 403)
+    }
+
+    const org = await queryOne(
+      `SELECT * FROM organizations WHERE id = $1 AND (deleted = false OR deleted IS NULL)`,
+      [params.id]
+    )
     if (!org) {
       return apiError('Organization not found', 404)
     }
@@ -27,6 +40,11 @@ export async function PATCH(
     const authUser = await getAuthUser(req)
     if (!authUser) {
       return apiError('Authentication required', 401, 'UNAUTHORIZED')
+    }
+
+    const isAdmin = await isUserAdmin(authUser.id, { orgId: params.id })
+    if (!isAdmin) {
+      return apiError('Forbidden: Only organization administrators can modify settings', 403)
     }
 
     const body = await req.json()

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
-import { getAuthUser, isUserAdmin } from '@/server/utils/auth'
+import { getAuthUser, canUserAccessWorkspace, isUserAdmin } from '@/server/utils/auth'
 import { getTaskById, updateTask, deleteTask } from '@/server/services/task.service'
 
 export async function GET(
@@ -8,8 +8,17 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getAuthUser(req)
+    if (!user) return apiError('Unauthorized', 401)
+
     const task = await getTaskById(params.id)
     if (!task) return apiError('Task not found', 404, 'NOT_FOUND')
+
+    const hasAccess = await canUserAccessWorkspace(user.id, task.workspaceId)
+    if (!hasAccess) {
+      return apiError('Forbidden: Access denied to this task', 403)
+    }
+
     return apiSuccess(task)
   } catch (err: any) {
     return apiError(err.message || 'Failed to fetch task', 500)
@@ -21,6 +30,17 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getAuthUser(req)
+    if (!user) return apiError('Unauthorized', 401)
+
+    const existingTask = await getTaskById(params.id)
+    if (!existingTask) return apiError('Task not found', 404, 'NOT_FOUND')
+
+    const hasAccess = await canUserAccessWorkspace(user.id, existingTask.workspaceId)
+    if (!hasAccess) {
+      return apiError('Forbidden: Access denied to this task', 403)
+    }
+
     const body = await req.json()
     const task = await updateTask(params.id, body)
     return apiSuccess(task)

@@ -8,6 +8,7 @@ import { SocialAuthButtons } from '@/features/auth/components/SocialAuthButtons'
 import { AuthMarketingPanel } from '@/features/auth/components/AuthMarketingPanel'
 import { Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
+import { TaskFlowLogo } from '@/components/brand/TaskFlowLogo'
 
 function LoginContent() {
   const router = useRouter()
@@ -107,7 +108,11 @@ function LoginContent() {
       }
 
       // 3. Valid credentials -> take inside
-      router.push('/app/home')
+      if (typeof window !== 'undefined') {
+        window.location.href = '/app/home'
+      } else {
+        router.push('/app/home')
+      }
     } catch (err: any) {
       const errMsg = err.message || ''
       if (errMsg.toLowerCase().includes('verify your email')) {
@@ -142,7 +147,12 @@ function LoginContent() {
       <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-8 max-w-xl mx-auto w-full">
         <div className="w-full space-y-5">
           {/* Header */}
-          <div className="space-y-1">
+          <div className="space-y-2">
+            <div className="lg:hidden mb-3">
+              <Link href="/">
+                <TaskFlowLogo variant="full" size="md" animated={true} />
+              </Link>
+            </div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
               Sign in to TaskFlow
             </h1>

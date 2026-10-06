@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import { useUserTheme } from '@/hooks/useUserTheme'
 import { UserGuideModal } from '@/components/user-guide-modal'
+import { TaskFlowLogo } from '@/components/brand/TaskFlowLogo'
 import { CreateOrganizationModal } from '@/components/create-organization-modal'
 import { CreateWorkspaceModal } from '@/components/create-workspace-modal'
 import { CreateChannelModal } from '@/features/chat/components/CreateChannelModal'
@@ -294,10 +295,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
             title={isLockedExpanded ? "Click to unlock sidebar" : "Click to lock sidebar open"}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-md shadow-primary/20 group-hover:scale-105 transition-transform shrink-0">
-                <Zap className="w-4 h-4" />
-              </div>
-              <span className="font-bold text-base tracking-tight text-foreground whitespace-nowrap">TaskFlow</span>
+              <TaskFlowLogo variant="full" size="sm" animated={true} />
             </div>
             <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
               {currentOrg?.plan || 'ENTERPRISE'}
@@ -415,10 +413,10 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               e.stopPropagation()
               setIsLockedExpanded(true)
             }}
-            className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-md shadow-primary/20 hover:scale-105 transition-transform cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-card hover:bg-muted border border-border/60 flex items-center justify-center p-1 shadow-sm hover:scale-105 transition-all cursor-pointer"
             title="TaskFlow"
           >
-            <Zap className="w-5 h-5" />
+            <TaskFlowLogo variant="icon" size="sm" animated={true} />
           </button>
 
           {/* Collapsed Org Icon Button */}
