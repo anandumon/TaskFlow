@@ -77,13 +77,17 @@ export function SocialAuthButtons({ mode = 'signup', email }: SocialAuthButtonsP
     }
   }
 
+  const handleRedirectToSupabaseGoogleOAuth = () => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dxrcfczdfstnymbeicmq.supabase.co'
+    const inviteToken = typeof window !== 'undefined' ? localStorage.getItem('tf_invite_token') : null
+    const redirectUrl = `${window.location.origin}/auth/callback${inviteToken ? `?invite_token=${encodeURIComponent(inviteToken)}` : ''}`
+    window.location.href = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+      redirectUrl
+    )}&prompt=select_account`
+  }
+
   const handleButtonClick = () => {
-    const cleanEmail = (email || '').trim().toLowerCase()
-    if (mode === 'signin' && cleanEmail && cleanEmail.includes('@') && cleanEmail.includes('.')) {
-      handleDirectGoogleLogin(cleanEmail).catch(() => {})
-      return
-    }
-    setIsGoogleModalOpen(true)
+    handleRedirectToSupabaseGoogleOAuth()
   }
 
   return (

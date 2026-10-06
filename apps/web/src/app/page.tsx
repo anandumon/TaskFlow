@@ -575,54 +575,90 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative z-10 pt-16 pb-20 md:pt-24 md:pb-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
-        {/* Announcement Pill */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-medium mb-8 hover:bg-[#00638E]/25 transition-all cursor-pointer shadow-sm">
-          <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-ping" />
-          <span className="font-semibold text-[#BFD8E3]">TaskFlow 2.0 Enterprise Release</span>
-          <span className="text-[#BFD8E3]/60">•</span>
-          <span>Next-gen agile execution & pipeline tracking</span>
-          <ChevronRight className="w-3 h-3 text-[#BFD8E3]" />
+      {/* Hero Section (Dedicated First Screen) */}
+      <section className="relative z-10 min-h-[calc(100vh-4rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col justify-between items-center py-10 sm:py-16 select-none">
+        <div /> {/* Top spacer for balanced vertical centering */}
+
+        <div className="flex flex-col items-center max-w-5xl">
+          {/* Announcement Pill */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-medium mb-8 hover:bg-[#00638E]/25 transition-all cursor-pointer shadow-sm">
+            <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-ping" />
+            <span className="font-semibold text-[#BFD8E3]">TaskFlow 2.0 Enterprise Release</span>
+            <span className="text-[#BFD8E3]/60">•</span>
+            <span>Next-gen agile execution & pipeline tracking</span>
+            <ChevronRight className="w-3 h-3 text-[#BFD8E3]" />
+          </div>
+
+          {/* Hero Title */}
+          <h1 className="max-w-4xl text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
+            High-Velocity Project Execution.{' '}
+            <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
+              Engineered for Modern Teams.
+            </span>
+          </h1>
+
+          {/* Hero Subtitle */}
+          <p className="max-w-2xl text-base sm:text-lg text-slate-300 font-normal leading-relaxed mb-10">
+            Streamline complex engineering workflows with zero friction. Plan multi-environment deliverables,
+            track sprint progress with subtask precision, attach mission-critical assets, and coordinate in real time.
+          </p>
+
+          {/* Feature Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-[#BFD8E3]" />
+              No credit card required
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-[#00638E]" />
+              Instant team onboarding
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-[#8CB9CC]" />
+              Sub-millisecond reactivity
+            </span>
+          </div>
         </div>
 
-        {/* Hero Title */}
-        <h1 className="max-w-4xl text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
-          High-Velocity Project Execution.{' '}
-          <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
-            Engineered for Modern Teams.
+        {/* Fun, Elegant Animated Scroll Down Indicator */}
+        <a
+          href="#views"
+          className="mt-6 flex flex-col items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-all group cursor-pointer"
+        >
+          <span className="text-[11px] uppercase tracking-widest text-[#8CB9CC] group-hover:text-white transition-colors flex items-center gap-1.5 font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-[#00638E] animate-pulse" />
+            Explore Interactive Workspace
           </span>
-        </h1>
-
-        {/* Hero Subtitle */}
-        <p className="max-w-2xl text-base sm:text-lg text-slate-300 font-normal leading-relaxed mb-10">
-          Streamline complex engineering workflows with zero friction. Plan multi-environment deliverables,
-          track sprint progress with subtask precision, attach mission-critical assets, and coordinate in real time.
-        </p>
-
-
-
-        {/* Feature Badges */}
-        <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
-          <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-[#BFD8E3]" />
-            No credit card required
-          </span>
-          <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-[#00638E]" />
-            Instant team onboarding
-          </span>
-          <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-[#8CB9CC]" />
-            Sub-millisecond reactivity
-          </span>
-        </div>
+          <div className="w-5 h-8 rounded-full border border-slate-700/80 group-hover:border-[#00638E] flex items-start justify-center p-1 transition-colors">
+            <div className="w-1.5 h-2 rounded-full bg-[#00638E] animate-bounce" />
+          </div>
+        </a>
       </section>
 
-      {/* Interactive Product Showcase */}
-      <section id="views" className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-        {/* Showcase Frame */}
-        <div className="rounded-3xl border border-[#2B2B2B] bg-[#141414]/95 backdrop-blur-2xl shadow-2xl shadow-[#000000]/90 p-4 sm:p-6 overflow-hidden">
+      {/* Interactive Product Showcase (Dedicated Separate Screen with Sticky Scrollable & Premium Animations) */}
+      <section id="views" className="relative z-10 min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 flex flex-col justify-center">
+        {/* Section Header */}
+        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-semibold">
+            <Layers className="w-3.5 h-3.5 text-[#00638E]" />
+            <span>Multi-Dimensional Workspace Engine</span>
+          </div>
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+            Fluid Agile Execution.{' '}
+            <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
+              Live In-Browser.
+            </span>
+          </h2>
+          <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
+            Drag cards across swimlanes, reorder columns, inspect tree hierarchies, and monitor sprint schedules with
+            zero reload delay.
+          </p>
+        </div>
+
+        {/* Sticky Showcase Container with Glowing Gradient Border & Fun Micro-Animations */}
+        <div className="sticky top-20 z-20 group/showcase">
+          <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-[#00638E]/60 via-[#2B2B2B] to-[#004A6B]/30 shadow-[0_0_50px_-10px_rgba(0,99,142,0.35)] transition-all duration-500 hover:shadow-[0_0_70px_-10px_rgba(0,99,142,0.5)]">
+            <div className="rounded-[23px] bg-[#0c0d12]/95 backdrop-blur-2xl shadow-2xl p-4 sm:p-6 overflow-hidden">
           {/* Top Bar with View Switchers */}
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#2B2B2B]/60">
             <div className="flex items-center gap-2">
@@ -1152,9 +1188,11 @@ export default function LandingPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
       {/* Universal Document Vault Section */}
       <section id="documents" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-[#2B2B2B]/60">
