@@ -19,7 +19,6 @@ import {
   FileText,
   PenTool,
   Video,
-  Calendar,
   FolderOpen,
   Camera,
   Mic,
@@ -31,7 +30,7 @@ export interface SlashCommand {
   id: string
   title: string
   subtitle?: string
-  category: 'TEXT' | 'INLINE' | 'GOOGLE & MEETINGS' | 'TOOLS'
+  category: 'TEXT' | 'INLINE' | 'INTEGRATIONS' | 'TOOLS'
   iconText?: string
   icon?: React.ReactNode
   action: () => void
@@ -48,8 +47,6 @@ interface SlashCommandPaletteProps {
   onOpenMentionDocs: () => void
   onOpenDoc?: () => void
   onOpenWhiteboard: () => void
-  onStartGoogleMeet: () => void
-  onStartGoogleCalendar: () => void
   onOpenGoogleDrive: () => void
   onStartZoomMeeting: () => void
   onStartRecordVideo: () => void
@@ -67,8 +64,6 @@ export function SlashCommandPalette({
   onOpenMentionDocs,
   onOpenDoc,
   onOpenWhiteboard,
-  onStartGoogleMeet,
-  onStartGoogleCalendar,
   onOpenGoogleDrive,
   onStartZoomMeeting,
   onStartRecordVideo,
@@ -259,32 +254,14 @@ export function SlashCommandPalette({
     [onOpenDoc, onOpenMentionDocs, onOpenWhiteboard]
   )
 
-  // 4. GOOGLE & MEETINGS
-  const googleCommands: SlashCommand[] = useMemo(
+  // 4. INTEGRATIONS
+  const integrationCommands: SlashCommand[] = useMemo(
     () => [
-      {
-        id: 'google-meet',
-        title: 'Google Meet',
-        subtitle: 'Start instant or scheduled video sync',
-        category: 'GOOGLE & MEETINGS',
-        icon: <Video className="w-3.5 h-3.5 text-emerald-500" />,
-        action: onStartGoogleMeet,
-        keywords: ['google meet', 'meet', 'video', 'call', 'conference', 'hangouts'],
-      },
-      {
-        id: 'google-calendar',
-        title: 'Google Calendar',
-        subtitle: 'Schedule a sprint event with team',
-        category: 'GOOGLE & MEETINGS',
-        icon: <Calendar className="w-3.5 h-3.5 text-blue-500" />,
-        action: onStartGoogleCalendar,
-        keywords: ['calendar', 'google calendar', 'event', 'schedule', 'invite'],
-      },
       {
         id: 'google-drive',
         title: 'Google Drive & Docs',
         subtitle: 'Attach Google Doc, Sheet, or Slide',
-        category: 'GOOGLE & MEETINGS',
+        category: 'INTEGRATIONS',
         icon: <FolderOpen className="w-3.5 h-3.5 text-amber-500" />,
         action: onOpenGoogleDrive,
         keywords: ['drive', 'google drive', 'docs', 'sheets', 'slides', 'cloud'],
@@ -293,13 +270,13 @@ export function SlashCommandPalette({
         id: 'zoom',
         title: 'Zoom Meeting',
         subtitle: 'Start instant Zoom conference',
-        category: 'GOOGLE & MEETINGS',
+        category: 'INTEGRATIONS',
         icon: <Video className="w-3.5 h-3.5 text-blue-500" />,
         action: onStartZoomMeeting,
         keywords: ['zoom', 'call', 'video'],
       },
     ],
-    [onStartGoogleMeet, onStartGoogleCalendar, onOpenGoogleDrive, onStartZoomMeeting]
+    [onOpenGoogleDrive, onStartZoomMeeting]
   )
 
   // 5. TOOLS & AI
@@ -338,8 +315,8 @@ export function SlashCommandPalette({
 
   // All commands flat
   const allCommands = useMemo(
-    () => [...textCol1, ...textCol2, ...inlineCol1, ...inlineCol2, ...googleCommands, ...toolCommands],
-    [textCol1, textCol2, inlineCol1, inlineCol2, googleCommands, toolCommands]
+    () => [...textCol1, ...textCol2, ...inlineCol1, ...inlineCol2, ...integrationCommands, ...toolCommands],
+    [textCol1, textCol2, inlineCol1, inlineCol2, integrationCommands, toolCommands]
   )
 
   const cleanQuery = searchQuery.replace(/^\//, '').toLowerCase().trim()
@@ -453,7 +430,7 @@ export function SlashCommandPalette({
             {filteredCommands.length === 0 ? (
               <div className="p-6 text-center text-muted-foreground">
                 <p className="font-semibold text-xs text-foreground">No commands found</p>
-                <p className="text-[11px] mt-0.5">Try typing /h1, /checklist, /meet, or /code</p>
+                <p className="text-[11px] mt-0.5">Try typing /h1, /checklist, /zoom, or /code</p>
               </div>
             ) : (
               filteredCommands.map((cmd, idx) => renderCommandItem(cmd, idx))
@@ -496,13 +473,13 @@ export function SlashCommandPalette({
               </div>
             </div>
 
-            {/* 3. GOOGLE & MEETINGS SECTION */}
+            {/* 3. INTEGRATIONS SECTION */}
             <div className="space-y-1.5">
               <div className="px-1 text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                GOOGLE &amp; MEETINGS
+                INTEGRATIONS
               </div>
               <div className="grid grid-cols-2 gap-1">
-                {googleCommands.map((cmd) => renderCommandItem(cmd, linearIndex++))}
+                {integrationCommands.map((cmd) => renderCommandItem(cmd, linearIndex++))}
               </div>
             </div>
 

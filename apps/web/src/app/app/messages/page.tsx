@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Hash,
   Plus,
@@ -28,7 +28,6 @@ import {
   Mic,
   Eye,
   EyeOff,
-  Calendar,
   FolderOpen,
   Maximize2,
   Copy,
@@ -56,6 +55,7 @@ import { useTaskStore } from '@/stores/task-store'
 import { useChatStore, ChatChannel, DMContact, ChatMessage } from '@/stores/chat-store'
 import { useDocStore } from '@/stores/doc-store'
 import { usePresenceStore } from '@/stores/presence-store'
+import { useCallStore } from '@/stores/call-store'
 import { apiClient } from '@/lib/api-client'
 import { Portal } from '@/components/ui/portal'
 import { CreateChannelModal } from '@/features/chat/components/CreateChannelModal'
@@ -64,18 +64,21 @@ import { ChatInputBar } from '@/features/chat/components/ChatInputBar'
 import { KryaWhiteboardModal } from '@/features/whiteboard/components/KryaWhiteboardModal'
 import { UserProfilePanel, ProfileTab } from '@/features/chat/components/UserProfilePanel'
 import { DocViewerModal } from '@/features/docs/components/DocViewerModal'
+import { FileViewerModal, FileToView } from '@/components/file-viewer-modal'
 
 export default function MessagesPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { user } = useAuthStore()
   const { currentOrg } = useOrgStore()
   const { currentWorkspace } = useWorkspaceStore()
   const { projects } = useProjectStore()
   const { tasks, loadTasks } = useTaskStore()
-  const { isUserOnline } = usePresenceStore()
+  const { isUserOnline, lastSync, onlineUserIds } = usePresenceStore()
 
   const [activeWhiteboard, setActiveWhiteboard] = useState<{ id: string; title: string } | null>(null)
   const [activeDocModal, setActiveDocModal] = useState<{ id: string; title: string } | null>(null)
+  const [activeFileToView, setActiveFileToView] = useState<FileToView | null>(null)
   const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({})
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false)
   const [profileInitialTab, setProfileInitialTab] = useState<ProfileTab>('activity')
@@ -130,16 +133,31 @@ export default function MessagesPage() {
       ? `DM with ${activeDMUser.name}`
       : '#General'
 
+    let deletedDocsSet = new Set<string>()
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('taskflow_deleted_docs')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) deletedDocsSet = new Set(parsed.map((s: string) => String(s).toLowerCase().trim()))
+        }
+      } catch {}
+    }
+
     messages.forEach((msg) => {
       const atts = msg.attachments || []
       atts.forEach((a: any) => {
         if (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)) {
           const docTitle = a.title || a.docId
+          const docId = a.docId || docTitle
           if (docTitle) {
+            if (deletedDocsSet.has(docTitle.toLowerCase().trim()) || (docId && deletedDocsSet.has(docId.toLowerCase().trim()))) {
+              return
+            }
             docStore.createDoc(docTitle, '', msg.senderName || 'User', activeLoc, {
               channelId: activeChannel?.id,
               recipientId: activeDMUser?.id,
-              docId: a.docId || docTitle,
+              docId,
             })
           }
         }
@@ -171,88 +189,6 @@ export default function MessagesPage() {
     await togglePinMessage(currentWorkspace.id, msg.id, nextPinned)
     setToastMessage(nextPinned ? 'Message pinned 📌' : 'Message unpinned')
     setTimeout(() => setToastMessage(null), 2500)
-  }
-
-  // Google Meet live URL editing state
-  const [updatingMeetMsg, setUpdatingMeetMsg] = useState<{
-    msgId: string
-    title: string
-    currentUrl: string
-    attachments: any[]
-  } | null>(null)
-  const [newMeetUrlInput, setNewMeetUrlInput] = useState('')
-  const [inlineMeetInput, setInlineMeetInput] = useState<{ [msgId: string]: string }>({})
-
-  const handleSaveMeetUrl = async () => {
-    if (!updatingMeetMsg || !currentWorkspace?.id || !newMeetUrlInput.trim()) return
-    let finalUrl = newMeetUrlInput.trim()
-    if (!/^https?:\/\//i.test(finalUrl)) {
-      finalUrl = `https://${finalUrl}`
-    }
-    const codeMatch = finalUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
-    const code = codeMatch ? codeMatch[1] : undefined
-
-    const updatedAttachments = (updatingMeetMsg.attachments || []).map((att: any) => {
-      if (att.type === 'meeting') {
-        return {
-          ...att,
-          link: finalUrl,
-          meetingId: code || att.meetingId,
-        }
-      }
-      return att
-    })
-
-    const origMsg = messages.find((m) => m.id === updatingMeetMsg.msgId)
-    await editMessage(
-      currentWorkspace.id,
-      updatingMeetMsg.msgId,
-      origMsg?.content || "Let's jump on Google Meet:",
-      updatedAttachments
-    )
-
-    setToastMessage('Google Meet link updated and synchronized!')
-    setTimeout(() => setToastMessage(null), 3000)
-    setUpdatingMeetMsg(null)
-    setNewMeetUrlInput('')
-  }
-
-  const handleSaveInlineMeetUrl = async (msgId: string, customUrl?: string) => {
-    const targetMsg = messages.find((m) => m.id === msgId)
-    if (!targetMsg || !currentWorkspace?.id) return
-    let url = (customUrl !== undefined ? customUrl : inlineMeetInput[msgId] || '').trim()
-    if (!url) return
-    if (!/^https?:\/\//i.test(url)) {
-      url = `https://${url}`
-    }
-    const codeMatch = url.match(/meet\.google\.com\/([a-z0-9-]+)/i)
-    const code = codeMatch ? codeMatch[1] : undefined
-
-    const updatedAttachments = (targetMsg.attachments || []).map((att: any) => {
-      if (att.type === 'meeting') {
-        return {
-          ...att,
-          link: url,
-          meetingId: code || att.meetingId,
-        }
-      }
-      return att
-    })
-
-    await editMessage(
-      currentWorkspace.id,
-      msgId,
-      targetMsg.content || "Let's jump on Google Meet:",
-      updatedAttachments
-    )
-
-    setInlineMeetInput((prev) => {
-      const copy = { ...prev }
-      delete copy[msgId]
-      return copy
-    })
-    setToastMessage('Google Meet link saved! Both host and attendee now share this room.')
-    setTimeout(() => setToastMessage(null), 3500)
   }
 
   const handleOpenDeleteDialog = (msg: ChatMessage) => {
@@ -442,14 +378,17 @@ export default function MessagesPage() {
       loadTasks(wsId)
     }
 
-    const mapMember = (m: any): DMContact => ({
-      id: m.userId || m.id,
-      name: m.name || m.displayName || m.email?.split('@')[0] || 'User',
-      email: m.email || '',
-      avatarUrl: m.avatarUrl || m.avatar_url,
-      role: m.role || m.roleName || m.role_name || 'Member',
-      isOnline: false,
-    })
+    const mapMember = (m: any): DMContact => {
+      const id = m.userId || m.id
+      return {
+        id,
+        name: m.name || m.displayName || m.email?.split('@')[0] || 'User',
+        email: m.email || '',
+        avatarUrl: m.avatarUrl || m.avatar_url,
+        role: m.role || m.roleName || m.role_name || 'Member',
+        isOnline: isUserOnline(id, m.email),
+      }
+    }
 
     const fetchAllMembers = async () => {
       try {
@@ -508,19 +447,63 @@ export default function MessagesPage() {
     fetchAllMembers()
   }, [currentWorkspace?.id, currentWorkspace?.organizationId, currentOrg?.id, fetchChannels, loadTasks, user?.id])
 
-  // 2. Handle URL Query Params (e.g. ?channel=xxx or ?dm=userId)
+  // Track organization / workspace changes to always default to the top channel when switching organizations
+  const prevOrgIdRef = useRef<string | undefined>(currentOrg?.id)
+  const prevWsIdRef = useRef<string | undefined>(currentWorkspace?.id)
+
+  useEffect(() => {
+    const orgSwitched = Boolean(prevOrgIdRef.current && prevOrgIdRef.current !== currentOrg?.id)
+    const wsSwitched = Boolean(prevWsIdRef.current && prevWsIdRef.current !== currentWorkspace?.id)
+
+    if (orgSwitched || wsSwitched) {
+      // Switched organization or workspace: clear active DM and open the top channel by default
+      setActiveDMUser(null)
+      if (channels && channels.length > 0) {
+        setActiveChannel(channels[0])
+      }
+      if (typeof window !== 'undefined' && (searchParams.get('dm') || searchParams.get('channel'))) {
+        router.replace('/app/messages')
+      }
+    }
+
+    prevOrgIdRef.current = currentOrg?.id
+    prevWsIdRef.current = currentWorkspace?.id
+  }, [currentOrg?.id, currentWorkspace?.id, channels, setActiveChannel, setActiveDMUser, router, searchParams])
+
+  // 2. Handle URL Query Params or default to top channel
   useEffect(() => {
     const channelParam = searchParams.get('channel')
     const dmParam = searchParams.get('dm')
 
     if (channelParam && channels.length > 0) {
       const found = channels.find((c) => c.id === channelParam || c.name.toLowerCase() === channelParam.toLowerCase())
-      if (found) setActiveChannel(found)
-    } else if (dmParam && workspaceMembers.length > 0) {
-      const found = workspaceMembers.find((m) => m.id === dmParam || m.email?.toLowerCase() === dmParam.toLowerCase())
-      if (found) setActiveDMUser(found)
+      if (found) {
+        setActiveChannel(found)
+        setActiveDMUser(null)
+        return
+      }
     }
-  }, [searchParams, channels, workspaceMembers, setActiveChannel, setActiveDMUser])
+
+    if (dmParam && workspaceMembers.length > 0) {
+      const found = workspaceMembers.find((m) => m.id === dmParam || m.email?.toLowerCase() === dmParam.toLowerCase())
+      if (found) {
+        setActiveDMUser({
+          ...found,
+          isOnline: isUserOnline(found.id, found.email) || Boolean(found.isOnline),
+        })
+        setActiveChannel(null)
+        return
+      }
+    }
+
+    // Default: If no active DM and either no activeChannel or activeChannel doesn't belong to current workspace, open top channel!
+    if (!activeDMUser && channels.length > 0) {
+      const isCurrentValid = activeChannel && channels.some((c) => c.id === activeChannel.id)
+      if (!isCurrentValid) {
+        setActiveChannel(channels[0])
+      }
+    }
+  }, [searchParams, channels, workspaceMembers, activeChannel, activeDMUser, setActiveChannel, setActiveDMUser])
 
   // 3. Fetch messages whenever active conversation changes
   useEffect(() => {
@@ -567,57 +550,45 @@ export default function MessagesPage() {
     }
   }
 
-  // Quick Start SyncUp (creates meeting invitation automatically)
-  const handleStartSyncUp = async () => {
-    if (!currentWorkspace?.id || !activeDMUser) return
-    const hostName = (user as any)?.name || user?.email?.split('@')[0] || 'User'
-    const hostEmail = user?.email || ''
-    const hostId = user?.id || ''
-
-    let realMeetUrl = ''
-    let realMeetCode = ''
-
-    // 1. Try to create real Google Meet conference via Google Calendar API
-    try {
-      const res = await fetch('/api/v1/calendar/meetings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `Google Meet with ${activeDMUser.name || 'team'}`,
-          startTime: new Date().toISOString(),
-          attendees: activeDMUser.email ? [activeDMUser.email] : [],
-        }),
-      })
-      const data = await res.json()
-      if (data?.data?.meetingUrl && data.data.meetingUrl.startsWith('http')) {
-        realMeetUrl = data.data.meetingUrl
-        const match = realMeetUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
-        realMeetCode = match ? match[1] : ''
-      }
-    } catch (err) {
-      console.warn('[SyncUp] Calendar API call failed:', err)
+  // Native Live Voice Call
+  const handleStartVoiceCall = () => {
+    if (useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
+      return
     }
-
-    try {
-      await sendMessage(currentWorkspace.id, {
+    if (activeDMUser) {
+      useCallStore.getState().openPreJoin({
+        callType: 'ONE_TO_ONE_VOICE',
         recipientId: activeDMUser.id,
-        content: "Let's jump on Google Meet:",
-        attachments: [
-          {
-            type: 'meeting',
-            platform: 'google-meet',
-            meetingId: realMeetCode,
-            link: realMeetUrl,
-            ownerId: hostId,
-            ownerName: hostName,
-            ownerEmail: hostEmail,
-            title: `Google Meet with ${activeDMUser.name || 'team'}`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
+        recipientName: activeDMUser.name,
+        recipientAvatar: activeDMUser.avatarUrl,
       })
-    } catch (err) {
-      console.error('SyncUp error:', err)
+    } else if (activeChannel) {
+      useCallStore.getState().openPreJoin({
+        callType: 'GROUP_VOICE',
+        channelId: activeChannel.id,
+        channelName: `#${activeChannel.name}`,
+      })
+    }
+  }
+
+  // Native Live Video Call
+  const handleStartVideoCall = () => {
+    if (useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
+      return
+    }
+    if (activeDMUser) {
+      useCallStore.getState().openPreJoin({
+        callType: 'ONE_TO_ONE_VIDEO',
+        recipientId: activeDMUser.id,
+        recipientName: activeDMUser.name,
+        recipientAvatar: activeDMUser.avatarUrl,
+      })
+    } else if (activeChannel) {
+      useCallStore.getState().openPreJoin({
+        callType: 'CHANNEL_CALL',
+        channelId: activeChannel.id,
+        channelName: `#${activeChannel.name}`,
+      })
     }
   }
 
@@ -666,7 +637,7 @@ export default function MessagesPage() {
         }))
     }
     return []
-  }, [workspaceMembers, user?.id, user?.email, isUserOnline])
+  }, [workspaceMembers, user?.id, user?.email, isUserOnline, lastSync, onlineUserIds])
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background animate-fade-in">
@@ -860,7 +831,10 @@ export default function MessagesPage() {
                       key={member.id}
                       type="button"
                       onClick={() => {
-                        setActiveDMUser(member)
+                        setActiveDMUser({
+                          ...member,
+                          isOnline: isUserOnline(member.id, member.email) || Boolean(member.isOnline),
+                        })
                         setMobileView('chat')
                       }}
                       className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer text-left ${
@@ -969,7 +943,11 @@ export default function MessagesPage() {
                     (activeDMUser.id === user.id ||
                       (activeDMUser.email && user.email && activeDMUser.email.toLowerCase() === user.email.toLowerCase()))
                 )
-                const isOnline = isYou || isUserOnline(activeDMUser.id, activeDMUser.email)
+                const isOnline =
+                  isYou ||
+                  isUserOnline(activeDMUser.id, activeDMUser.email) ||
+                  isUserOnline((activeDMUser as any).userId, activeDMUser.email) ||
+                  Boolean(activeDMUser.isOnline)
 
                 return (
                   <div
@@ -1095,16 +1073,6 @@ export default function MessagesPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setProfileInitialTab('calendar')
-                  setIsProfilePanelOpen(true)
-                }}
-                className="px-3 py-2 font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                Calendar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   setProfileInitialTab('tasks')
                   setIsProfilePanelOpen(true)
                 }}
@@ -1121,14 +1089,22 @@ export default function MessagesPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
               <button
                 type="button"
-                onClick={handleStartSyncUp}
-                className="p-1.5 rounded-lg hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
-                title="Start SyncUp"
+                onClick={handleStartVoiceCall}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer"
+                title="Start Live Voice Call"
               >
                 <PhoneCall className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleStartVideoCall}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer"
+                title="Start Live Video Call"
+              >
+                <Video className="w-3.5 h-3.5" />
               </button>
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/60 text-[11px] font-medium text-foreground">
                 <Sparkles className="w-3 h-3 text-purple-400" />
@@ -1206,7 +1182,6 @@ export default function MessagesPage() {
                     </p>
                   </div>
 
-                  {/* View Profile Button */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1218,44 +1193,6 @@ export default function MessagesPage() {
                     <User className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
                     <span>View Profile</span>
                   </button>
-
-                  {/* Action Cards: View Calendar & Start SyncUp */}
-                  <div className="w-full max-w-sm space-y-2.5 text-left">
-                    {/* View Calendar Card */}
-                    <div
-                      onClick={() => {
-                        setProfileInitialTab('calendar')
-                        setIsProfilePanelOpen(true)
-                      }}
-                      className="p-3.5 rounded-2xl border border-rose-900/30 bg-[#281313]/90 hover:bg-[#321717] flex items-center gap-3.5 cursor-pointer transition-all shadow-sm"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
-                        <Calendar className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-foreground">View Calendar</h4>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          Find time to meet or just grab some coffee
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Start SyncUp Card */}
-                    <div
-                      onClick={handleStartSyncUp}
-                      className="p-3.5 rounded-2xl border border-emerald-900/30 bg-[#0F261B]/90 hover:bg-[#143324] flex items-center gap-3.5 cursor-pointer transition-all shadow-sm"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                        <PhoneCall className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-foreground">Start SyncUp</h4>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          Jump on a voice call or video call
-                        </p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -1431,242 +1368,6 @@ export default function MessagesPage() {
                       {nonDocAttachments.length > 0 && (
                         <div className="space-y-2 pt-1">
                           {nonDocAttachments.map((att: any, aIdx: number) => {
-                            if (att.type === 'meeting') {
-                              const isOwner = Boolean(
-                                user && (
-                                  att.ownerId === user.id ||
-                                  (att.ownerEmail && user.email && att.ownerEmail.toLowerCase() === user.email.toLowerCase()) ||
-                                  msg.senderId === user.id
-                                )
-                              )
-                              const hostDisplay = att.ownerName || msg.senderName || 'Meeting Host'
-                              const hostEmailDisplay = att.ownerEmail || ''
-                              const hasValidLink = Boolean(
-                                att.link &&
-                                typeof att.link === 'string' &&
-                                att.link.startsWith('http') &&
-                                !att.link.endsWith('/new')
-                              )
-                              const sharedMeetUrl = hasValidLink ? att.link.trim() : ''
-                              const matchCode = sharedMeetUrl.match(/meet\.google\.com\/([a-z0-9-]+)/i)
-                              const cleanMeetId = matchCode ? matchCode[1] : (att.meetingId || '')
-
-                              // Target URL is the EXACT SAME room URL for both host and attendee
-                              const targetLaunchUrl = sharedMeetUrl
-
-                              if (!hasValidLink) {
-                                return (
-                                  <div key={aIdx}>
-                                    {isOwner ? (
-                                      <div className="p-3.5 rounded-2xl border bg-card border-amber-500/30 text-foreground shadow-md space-y-2.5">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-2.5">
-                                            <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
-                                              <Video className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                              <div className="font-bold text-xs flex items-center gap-1.5">
-                                                <span>{att.title || 'Google Meet Sync'}</span>
-                                                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">
-                                                  HOST SETUP REQUIRED
-                                                </span>
-                                              </div>
-                                              <p className="text-[11px] text-muted-foreground">
-                                                Host: <strong className="text-foreground">{hostDisplay}</strong> (You)
-                                              </p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                                          To ensure all attendees join your exact Google Meet room, start a meeting and paste your meeting link below:
-                                        </p>
-                                        <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
-                                          <a
-                                            href="https://meet.google.com/new"
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all shrink-0 cursor-pointer"
-                                          >
-                                            <ExternalLink className="w-3.5 h-3.5" />
-                                            <span>1. Start Meeting on Google Meet</span>
-                                          </a>
-                                          <div className="flex-1 flex items-center gap-1.5">
-                                            <input
-                                              type="text"
-                                              placeholder="2. Paste link (meet.google.com/xxx-yyyy-zzz)..."
-                                              value={inlineMeetInput[msg.id] ?? ''}
-                                              onChange={(e) => setInlineMeetInput((prev) => ({ ...prev, [msg.id]: e.target.value }))}
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                  e.preventDefault()
-                                                  handleSaveInlineMeetUrl(msg.id)
-                                                }
-                                              }}
-                                              className="flex-1 px-2.5 py-1.5 rounded-xl bg-muted/60 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => handleSaveInlineMeetUrl(msg.id)}
-                                              disabled={!inlineMeetInput[msg.id]?.trim()}
-                                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0"
-                                            >
-                                              Share
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="p-3.5 rounded-2xl border bg-card border-emerald-500/20 text-foreground shadow-md space-y-2">
-                                        <div className="flex items-center gap-2.5">
-                                          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                                            <Video className="w-4 h-4" />
-                                          </div>
-                                          <div>
-                                            <div className="font-bold text-xs flex items-center gap-1.5">
-                                              <span>{att.title || 'Google Meet Sync'}</span>
-                                              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30 flex items-center gap-1">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                                                WAITING FOR HOST
-                                              </span>
-                                            </div>
-                                            <p className="text-[11px] text-muted-foreground">
-                                              Host: <strong className="text-foreground">{hostDisplay}</strong>
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                          {hostDisplay} is setting up the Google Meet room. The join button will appear here in real time as soon as the host shares the link.
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              }
-
-                              return (
-                                <div
-                                  key={aIdx}
-                                  className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md ${
-                                    isMe
-                                      ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-100'
-                                      : 'bg-card border-emerald-500/20 text-foreground'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30 shadow-inner">
-                                      <Video className="w-5 h-5" />
-                                    </div>
-                                    <div className="min-w-0 truncate space-y-0.5">
-                                      <div className="font-bold text-xs truncate flex items-center gap-1.5">
-                                        <span>{att.title || 'Google Meet Sync'}</span>
-                                        <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
-                                          GOOGLE MEET
-                                        </span>
-                                      </div>
-                                      <div className="text-[11px] text-emerald-400/90 font-medium flex items-center gap-1 truncate">
-                                        <span>Host:</span>
-                                        <span className="font-bold text-foreground">{hostDisplay}</span>
-                                        {hostEmailDisplay && (
-                                          <span className="opacity-75 text-[10px]">({hostEmailDisplay})</span>
-                                        )}
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-                                        {cleanMeetId && <span>Room: {cleanMeetId}</span>}
-                                        {isOwner ? (
-                                          <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center gap-0.5">
-                                            (You are Host)
-                                          </span>
-                                        ) : (
-                                          <span className="text-[10px] text-emerald-400/80 font-medium inline-flex items-center gap-0.5">
-                                            (Shared Room Link)
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {isOwner && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setUpdatingMeetMsg({
-                                            msgId: msg.id,
-                                            title: att.title || 'Google Meet',
-                                            currentUrl: sharedMeetUrl,
-                                            attachments: msg.attachments || [],
-                                          })
-                                          setNewMeetUrlInput(sharedMeetUrl)
-                                        }}
-                                        className="px-2.5 py-1.5 rounded-xl border border-border bg-card/60 hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
-                                        title="Edit Google Meet Link"
-                                      >
-                                        <Edit3 className="w-3 h-3" />
-                                        <span>Edit Link</span>
-                                      </button>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (navigator.clipboard) {
-                                          navigator.clipboard.writeText(sharedMeetUrl)
-                                          setToastMessage('Shared Meet link copied to clipboard!')
-                                          setTimeout(() => setToastMessage(null), 2500)
-                                        }
-                                      }}
-                                      className="px-2.5 py-1.5 rounded-xl border border-border bg-card/60 hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
-                                      title="Copy Meet Link"
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                      <span>Copy</span>
-                                    </button>
-
-                                    <a
-                                      href={targetLaunchUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all hover:scale-[1.02]"
-                                    >
-                                      <Video className="w-3.5 h-3.5" />
-                                      <span>{isOwner ? 'Start Meeting (Host)' : 'Join Meeting'}</span>
-                                    </a>
-                                  </div>
-                                </div>
-                              )
-                            }
-
-                            if (att.type === 'calendar') {
-                              return (
-                                <div
-                                  key={aIdx}
-                                  className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
-                                    isMe
-                                      ? 'bg-white/10 border-white/20 text-white'
-                                      : 'bg-muted/50 border-border text-foreground'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                                      <Calendar className="w-4 h-4" />
-                                    </div>
-                                    <div className="min-w-0 truncate">
-                                      <div className="font-bold truncate">{att.title || 'Google Calendar Event'}</div>
-                                      <div className="text-[10px] opacity-75">{att.time || 'Scheduled Event'}</div>
-                                    </div>
-                                  </div>
-                                  <a
-                                    href={att.link || 'https://calendar.google.com'}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] shrink-0 transition-colors"
-                                  >
-                                    Open Calendar
-                                  </a>
-                                </div>
-                              )
-                            }
-
                             if (att.type === 'gdoc' || att.type === 'doc') {
                               return (
                                 <div
@@ -1855,14 +1556,42 @@ export default function MessagesPage() {
                               )
                             }
 
+                            const hasPreview = Boolean(att.dataUrl || att.url)
                             return (
                               <div
                                 key={aIdx}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border/60 bg-muted/30 text-[11px]"
+                                onClick={() => {
+                                  if (hasPreview) {
+                                    setActiveFileToView({
+                                      name: att.name || 'Document',
+                                      dataUrl: att.dataUrl || att.url,
+                                      size: typeof att.size === 'number' ? att.size : undefined,
+                                      type: att.type,
+                                    })
+                                  }
+                                }}
+                                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-border/60 bg-muted/30 text-[11px] ${
+                                  hasPreview
+                                    ? 'hover:bg-muted/70 hover:border-primary/50 cursor-pointer transition-all shadow-2xs group/att'
+                                    : ''
+                                }`}
+                                title={hasPreview ? `Click to view ${att.name || 'document'}` : undefined}
                               >
-                                <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
-                                <span className="truncate font-semibold">{att.name || 'Document'}</span>
-                                {att.size && <span className="opacity-70 text-[10px] shrink-0">({att.size})</span>}
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+                                  <span className="truncate font-semibold">{att.name || 'Document'}</span>
+                                  {att.size && (
+                                    <span className="opacity-70 text-[10px] shrink-0">
+                                      ({typeof att.size === 'number' ? `${Math.round(att.size / 1024)} KB` : att.size})
+                                    </span>
+                                  )}
+                                </div>
+                                {hasPreview && (
+                                  <span className="text-[10px] text-primary font-bold opacity-80 group-hover/att:opacity-100 shrink-0 flex items-center gap-1">
+                                    <Eye className="w-3 h-3" />
+                                    <span>View</span>
+                                  </span>
+                                )}
                               </div>
                             )
                           })}
@@ -2065,7 +1794,6 @@ export default function MessagesPage() {
           currentOrgId={currentOrg?.id}
           currentOrgName={currentOrg?.name}
           workspaceMembers={workspaceMembers}
-          onStartSyncUp={handleStartSyncUp}
         />
       )}
 
@@ -2089,7 +1817,10 @@ export default function MessagesPage() {
         members={displayedMembers}
         currentUserId={user?.id}
         onSelectMember={(m) => {
-          setActiveDMUser(m)
+          setActiveDMUser({
+            ...m,
+            isOnline: isUserOnline(m.id, m.email) || Boolean(m.isOnline),
+          })
         }}
       />
 
@@ -2334,61 +2065,12 @@ export default function MessagesPage() {
         </Portal>
       )}
 
-      {/* Modal: Edit Google Meet Link (Host Sync) */}
-      {updatingMeetMsg && (
-        <Portal>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-            <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                  <Video className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-foreground">Edit Google Meet Link</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Update the meeting URL for this invitation. All attendees will receive the updated link in real time.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Google Meet URL</label>
-                <input
-                  type="text"
-                  value={newMeetUrlInput}
-                  onChange={(e) => setNewMeetUrlInput(e.target.value)}
-                  placeholder="https://meet.google.com/xxx-yyyy-zzz"
-                  className="w-full px-3 py-2 rounded-xl bg-muted/50 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Paste your Google Meet room link or scheduled Google Calendar conference link.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUpdatingMeetMsg(null)
-                    setNewMeetUrlInput('')
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveMeetUrl}
-                  disabled={!newMeetUrlInput.trim()}
-                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
-                >
-                  Update & Sync
-                </button>
-              </div>
-            </div>
-          </div>
-        </Portal>
-      )}
+      {/* Universal File Viewer Modal */}
+      <FileViewerModal
+        file={activeFileToView}
+        isOpen={!!activeFileToView}
+        onClose={() => setActiveFileToView(null)}
+      />
     </div>
   )
 }

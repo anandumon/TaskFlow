@@ -23,7 +23,6 @@ import {
   Radio,
   ExternalLink,
   Film,
-  Calendar,
   Layers,
   StopCircle,
   FolderOpen,
@@ -241,74 +240,6 @@ export function ChatInputBar({
     inputRef.current?.focus()
   }
 
-  const addGoogleMeet = async () => {
-    const hostName = (user as any)?.name || user?.email?.split('@')[0] || 'Meeting Host'
-    const hostEmail = user?.email || ''
-    const hostId = user?.id || ''
-
-    // Try to create a REAL Google Meet room via Calendar API
-    // Fake random codes DON'T work — Google ignores them and creates separate rooms per user
-    let meetUrl = ''
-    let meetCode = ''
-
-    try {
-      const res = await fetch('/api/v1/calendar/meetings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `Google Meet with ${targetName}`,
-          startTime: new Date().toISOString(),
-          attendees: [],
-        }),
-      })
-      const data = await res.json()
-      if (data?.data?.meetingUrl && data.data.meetingUrl.startsWith('http')) {
-        meetUrl = data.data.meetingUrl
-        const match = meetUrl.match(/meet\.google\.com\/([a-z]+-[a-z]+-[a-z]+)/i)
-        meetCode = match ? match[1] : ''
-      }
-    } catch (err) {
-      console.warn('[addGoogleMeet] Calendar API failed, using paste-link flow:', err)
-    }
-
-    setStagedAttachments((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        type: 'meeting',
-        platform: 'Google Meet',
-        title: `Google Meet with ${targetName}`,
-        link: meetUrl,
-        meetingId: meetCode,
-        ownerId: hostId,
-        ownerName: hostName,
-        ownerEmail: hostEmail,
-        createdAt: new Date().toISOString(),
-      },
-    ])
-    setInputText((prev) => (prev ? prev : "Let's jump on Google Meet:"))
-    setIsMenuOpen(false)
-    inputRef.current?.focus()
-  }
-
-  const addGoogleCalendarEvent = () => {
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    setStagedAttachments((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        type: 'calendar',
-        platform: 'Google Calendar',
-        title: `Sprint Review Sync (${today})`,
-        time: '3:00 PM - 3:30 PM',
-        link: 'https://calendar.google.com',
-      },
-    ])
-    setInputText((prev) => (prev ? prev : 'Scheduled on Google Calendar:'))
-    setIsMenuOpen(false)
-    inputRef.current?.focus()
-  }
-
   const addAttachedDoc = (doc?: { id?: string; title: string; url?: string; type?: string }) => {
     const docTitle = doc?.title || 'Untitled'
     const docId = doc?.id || docTitle
@@ -500,8 +431,6 @@ export function ChatInputBar({
             >
               {att.type === 'meeting' ? (
                 <Video className="w-3.5 h-3.5 text-emerald-500" />
-              ) : att.type === 'calendar' ? (
-                <Calendar className="w-3.5 h-3.5 text-blue-500" />
               ) : att.type === 'gdoc' ? (
                 <FileText className="w-3.5 h-3.5 text-blue-500" />
               ) : att.type === 'whiteboard' ? (
@@ -587,8 +516,6 @@ export function ChatInputBar({
             setIsResourceMentionOpen(true)
           }}
           onOpenWhiteboard={addWhiteboard}
-          onStartGoogleMeet={addGoogleMeet}
-          onStartGoogleCalendar={addGoogleCalendarEvent}
           onOpenGoogleDrive={() => addAttachedDoc()}
           onStartZoomMeeting={addZoomMeeting}
           onStartRecordVideo={() => setIsRecordingVideo(true)}
@@ -637,8 +564,6 @@ export function ChatInputBar({
             setInputText((prev) => `@${agent.name} `)
             inputRef.current?.focus()
           }}
-          onStartGoogleMeet={addGoogleMeet}
-          onStartGoogleCalendar={addGoogleCalendarEvent}
           onOpenGoogleDrive={() => addAttachedDoc()}
           onOpenDoc={() => addDoc()}
         />
@@ -922,25 +847,6 @@ export function ChatInputBar({
 
                   <div className="my-1 border-t border-border/50" />
 
-                  {/* Google Workspace Actions */}
-                  <button
-                    type="button"
-                    onClick={addGoogleMeet}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <Video className="w-4 h-4 text-emerald-500" />
-                    <span>Start Google Meet</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={addGoogleCalendarEvent}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    <span>Schedule on Google Calendar</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => addDoc()}
@@ -1062,7 +968,7 @@ export function ChatInputBar({
                       'Summarize today’s sprint blockers',
                       'Draft a friendly greeting to the team',
                       'Create a status report checklist',
-                      'Schedule a Google Meet standup',
+                      'Draft a project standup update',
                     ].map((prompt) => (
                       <button
                         key={prompt}
@@ -1097,7 +1003,7 @@ export function ChatInputBar({
                   ? 'bg-primary/15 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
-              title="Mention people, tasks, docs, meetings (@)"
+              title="Mention people, tasks, docs (@)"
             >
               <AtSign className="w-4 h-4 text-indigo-400" />
             </button>
@@ -1161,16 +1067,6 @@ export function ChatInputBar({
               title="Insert emoji"
             >
               <Smile className="w-4 h-4 text-amber-400" />
-            </button>
-
-            {/* Video / Google Meet shortcut button */}
-            <button
-              type="button"
-              onClick={addGoogleMeet}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              title="Start Google Meet"
-            >
-              <Video className="w-4 h-4 text-emerald-400" />
             </button>
 
             {/* Checklist shortcut button */}

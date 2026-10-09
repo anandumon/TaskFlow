@@ -35,7 +35,7 @@ export default function TaskDetailsPage() {
   const router = useRouter()
   const taskId = params.id as string
 
-  const { currentWorkspace } = useWorkspaceStore()
+  const { currentWorkspace, members: workspaceMembers, fetchMembers: fetchWorkspaceMembers } = useWorkspaceStore()
   const { currentOrg, members: orgMembers } = useOrgStore()
   const { user } = useAuthStore()
   const {
@@ -60,8 +60,9 @@ export default function TaskDetailsPage() {
     if (currentWorkspace?.id) {
       loadTasks(currentWorkspace.id)
       loadProjects(currentWorkspace.id)
+      fetchWorkspaceMembers(currentWorkspace.id).catch(() => {})
     }
-  }, [currentWorkspace?.id, loadTasks, loadProjects])
+  }, [currentWorkspace?.id, loadTasks, loadProjects, fetchWorkspaceMembers])
 
   const task = tasks.find((t) => t.id === taskId)
   const project = projects.find((p) => p.id === task?.projectId)
@@ -308,28 +309,56 @@ export default function TaskDetailsPage() {
     'You'
   )
 
-  const availableUsers: AssignableUser[] = (orgMembers || []).map((m: any) => {
-    const name = getFirstName(m.firstName || m.name || m.displayName || m.email?.split('@')[0] || 'Member')
-    return {
-      id: m.userId || m.id,
-      name,
-      email: m.email,
-      initials: getInitials(name),
-      color: getAvatarColor(name),
-      role: m.role,
-    }
-  })
+  const availableUsers: AssignableUser[] = useMemo(() => {
+    const userMap = new Map<string, AssignableUser>()
 
-  if (user && !availableUsers.some((u) => u.id === user.id || u.name.toLowerCase() === currentUserName.toLowerCase())) {
-    availableUsers.unshift({
-      id: user.id,
-      name: currentUserName,
-      email: user.email,
-      initials: getInitials(currentUserName),
-      color: getAvatarColor(currentUserName),
-      role: 'You',
+    // 1. Add workspace members (users who have direct access to this workspace)
+    ;(workspaceMembers || []).forEach((m: any) => {
+      const name = getFirstName(m.displayName || m.name || m.firstName || m.email?.split('@')[0] || 'Member')
+      const id = String(m.userId || m.id)
+      userMap.set(id, {
+        id,
+        name,
+        email: m.email,
+        initials: getInitials(name),
+        color: getAvatarColor(name),
+        role: m.role || 'Member',
+      })
     })
-  }
+
+    // 2. Add organization members
+    ;(orgMembers || []).forEach((m: any) => {
+      const id = String(m.userId || m.id)
+      if (!userMap.has(id)) {
+        const name = getFirstName(m.firstName || m.name || m.displayName || m.email?.split('@')[0] || 'Member')
+        userMap.set(id, {
+          id,
+          name,
+          email: m.email,
+          initials: getInitials(name),
+          color: getAvatarColor(name),
+          role: m.role || 'Member',
+        })
+      }
+    })
+
+    // 3. Ensure current user is in the list
+    if (user) {
+      const uid = String(user.id)
+      if (!userMap.has(uid)) {
+        userMap.set(uid, {
+          id: uid,
+          name: currentUserName,
+          email: user.email,
+          initials: getInitials(currentUserName),
+          color: getAvatarColor(currentUserName),
+          role: 'You',
+        })
+      }
+    }
+
+    return Array.from(userMap.values())
+  }, [workspaceMembers, orgMembers, user, currentUserName])
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">

@@ -93,6 +93,7 @@ interface StatusStore {
   selectedTemplate: Record<string, string>
   progressIconsEnabled: boolean
   getStatuses: (workspaceId: string) => CustomStatus[]
+  fetchWorkspaceStatuses: (workspaceId: string) => Promise<CustomStatus[]>
   setStatuses: (workspaceId: string, statuses: CustomStatus[]) => void
   reorderStatuses: (workspaceId: string, statuses: CustomStatus[]) => void
   addStatus: (workspaceId: string, category: StatusCategory, name: string, color?: string) => void
@@ -124,6 +125,37 @@ export const useStatusStore = create<StatusStore>()(
         return DEFAULT_STATUSES
       },
 
+      fetchWorkspaceStatuses: async (workspaceId: string) => {
+        try {
+          const token =
+            typeof window !== 'undefined'
+              ? localStorage.getItem('accessToken') ||
+                localStorage.getItem('token') ||
+                localStorage.getItem('taskflow_token')
+              : null
+
+          const res = await fetch(`/api/v1/workspaces/${workspaceId}/statuses`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          if (res.ok) {
+            const json = await res.json()
+            if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
+              const loaded = sortStatusesByStructure(json.data)
+              set((state) => ({
+                workspaceStatuses: {
+                  ...state.workspaceStatuses,
+                  [workspaceId]: loaded,
+                },
+              }))
+              return loaded
+            }
+          }
+        } catch (err) {
+          console.warn('[status-store] Failed to fetch statuses:', err)
+        }
+        return get().getStatuses(workspaceId)
+      },
+
       setStatuses: (workspaceId: string, statuses: CustomStatus[]) => {
         const reindexed = sortStatusesByStructure(statuses).map((s, idx) => ({ ...s, order: idx }))
         set((state) => ({
@@ -132,6 +164,22 @@ export const useStatusStore = create<StatusStore>()(
             [workspaceId]: reindexed,
           },
         }))
+
+        // Sync to backend DB asynchronously
+        if (typeof window !== 'undefined') {
+          const token =
+            localStorage.getItem('accessToken') ||
+            localStorage.getItem('token') ||
+            localStorage.getItem('taskflow_token')
+          fetch(`/api/v1/workspaces/${workspaceId}/statuses`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ statuses: reindexed }),
+          }).catch(() => {})
+        }
       },
 
       reorderStatuses: (workspaceId: string, statuses: CustomStatus[]) => {

@@ -94,15 +94,20 @@ export function TaskSubtasksCard({
   availableUsers = [],
   currentUserName = 'You',
 }: TaskSubtasksCardProps) {
+  const getTodayStr = () => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  }
+
   // Add Subtask Form State (Title, Description, Category, Assigned To, Assigned By, Due Date)
   const [isAddingSubtask, setIsAddingSubtask] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
   const [newCategory, setNewCategory] = useState('Feature')
   const [newCustomCategory, setNewCustomCategory] = useState('')
-  const [newAssignee, setNewAssignee] = useState(currentUserName)
-  const [newAssignedBy, setNewAssignedBy] = useState(currentUserName)
-  const [newDueDate, setNewDueDate] = useState('')
+  const [newAssignee, setNewAssignee] = useState(currentUserName || availableUsers[0]?.name || 'You')
+  const [newAssignedBy, setNewAssignedBy] = useState(currentUserName || availableUsers[0]?.name || 'You')
+  const [newDueDate, setNewDueDate] = useState(getTodayStr())
 
   // Subtask Deep-Dive Inspection Modal State
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
@@ -170,16 +175,16 @@ export function TaskSubtasksCard({
       category: finalCategory,
       assigneeName: newAssignee,
       assignedByName: newAssignedBy,
-      dueDate: newDueDate,
+      dueDate: newDueDate || getTodayStr(),
     })
 
     setNewTitle('')
     setNewDescription('')
     setNewCategory('Feature')
     setNewCustomCategory('')
-    setNewAssignee(currentUserName)
-    setNewAssignedBy(currentUserName)
-    setNewDueDate('')
+    setNewAssignee(currentUserName || availableUsers[0]?.name || 'You')
+    setNewAssignedBy(currentUserName || availableUsers[0]?.name || 'You')
+    setNewDueDate(getTodayStr())
     setIsAddingSubtask(false)
   }
 
@@ -419,19 +424,24 @@ export function TaskSubtasksCard({
               <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
                 <User className="w-3 h-3 text-primary" /> Assigned To
               </label>
-              <input
-                type="text"
-                list="subtask-assignees-list"
+              <select
                 value={newAssignee}
                 onChange={(e) => setNewAssignee(e.target.value)}
-                placeholder="Assignee name..."
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <datalist id="subtask-assignees-list">
-                {availableUsers.map((u) => (
-                  <option key={u.id} value={u.name} />
-                ))}
-              </datalist>
+                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                {availableUsers.length > 0 ? (
+                  availableUsers.map((u) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name} {u.role && u.role !== 'Member' ? `(${u.role})` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <option value={currentUserName}>{currentUserName}</option>
+                )}
+                {newAssignee && !availableUsers.some((u) => u.name.toLowerCase() === newAssignee.toLowerCase()) && (
+                  <option value={newAssignee}>{newAssignee}</option>
+                )}
+              </select>
             </div>
 
             {/* Assigned By */}
@@ -439,19 +449,24 @@ export function TaskSubtasksCard({
               <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
                 <UserCheck className="w-3 h-3 text-primary" /> Assigned By
               </label>
-              <input
-                type="text"
-                list="subtask-assigner-list"
+              <select
                 value={newAssignedBy}
                 onChange={(e) => setNewAssignedBy(e.target.value)}
-                placeholder="Assigner name..."
-                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <datalist id="subtask-assigner-list">
-                {availableUsers.map((u) => (
-                  <option key={u.id} value={u.name} />
-                ))}
-              </datalist>
+                className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                {availableUsers.length > 0 ? (
+                  availableUsers.map((u) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name} {u.role && u.role !== 'Member' ? `(${u.role})` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <option value={currentUserName}>{currentUserName}</option>
+                )}
+                {newAssignedBy && !availableUsers.some((u) => u.name.toLowerCase() === newAssignedBy.toLowerCase()) && (
+                  <option value={newAssignedBy}>{newAssignedBy}</option>
+                )}
+              </select>
             </div>
 
             {/* Due Date */}

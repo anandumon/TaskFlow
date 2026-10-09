@@ -80,9 +80,9 @@ export function AuthMarketingPanel({ variant = 'signup' }: AuthMarketingPanelPro
     },
     {
       icon: Calendar,
-      tag: 'YOUR CONNECTIONS',
-      title: 'Tasks, teams, & calendars together',
-      desc: 'Unified 2-way sync with your Google and Outlook schedules.',
+      tag: 'YOUR TIMELINE',
+      title: 'Tasks, teams, & milestones together',
+      desc: 'Unified schedule with your tasks, deadlines, and project milestones.',
       color: 'text-sky-400',
       bg: 'bg-sky-400/10',
       borderHover: 'hover:border-sky-400/40',

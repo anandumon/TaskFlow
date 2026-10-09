@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   FileText,
   Star,
@@ -36,6 +37,7 @@ import {
   ExternalLink,
   ChevronDown,
   Lock,
+  AlertTriangle,
 } from 'lucide-react'
 import { useDocStore, DocItem, SubPageItem } from '@/stores/doc-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -76,6 +78,20 @@ export function DocViewerModal({
   const [content, setContent] = useState('')
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Track initial/saved values to detect unsaved changes accurately
+  const initialTitleRef = useRef<string>(docTitle || 'demo')
+  const initialContentRef = useRef<string>('')
+  const initialProtectedRef = useRef<boolean>(false)
+  const initialPublicRef = useRef<boolean>(false)
+  const initialWikiRef = useRef<boolean>(false)
+
+  // Modals state for user prompt
+  const [showClosePrompt, setShowClosePrompt] = useState(false)
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
+  const [renameInput, setRenameInput] = useState('')
+  const [showShareModal, setShowShareModal] = useState(false)
 
   // UI Panels state (matching Screenshot 5)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -98,6 +114,10 @@ export function DocViewerModal({
 
   const isDeletingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -143,41 +163,154 @@ export function DocViewerModal({
         if (sub) {
           setTitle(sub.title)
           setContent(sub.content || '')
+          initialTitleRef.current = sub.title
+          initialContentRef.current = sub.content || ''
           return
         }
       }
 
       setTitle(doc.title)
       setContent(doc.content || '')
+      initialTitleRef.current = doc.title
+      initialContentRef.current = doc.content || ''
+      initialProtectedRef.current = !!doc.isProtected
+      initialPublicRef.current = !!doc.isPublic
+      initialWikiRef.current = !!doc.isWiki
     }
   }, [isOpen, docId, docTitle, docs, getDoc, createDoc, user, activeSubpageId])
 
-  // Auto-save debounced effect on title or content change
-  useEffect(() => {
-    if (!currentDoc || isDeletingRef.current) return
+  // Detect whether current form has unsaved modifications
+  const hasUnsavedChanges =
+    title.trim() !== (initialTitleRef.current || '').trim() ||
+    content !== initialContentRef.current ||
+    isProtected !== initialProtectedRef.current ||
+    isPublic !== initialPublicRef.current ||
+    isWiki !== initialWikiRef.current
+
+  // Check if a document with the candidate title exists in local store or remote DB
+  const checkDuplicateTitle = async (candidateTitle: string): Promise<boolean> => {
+    const clean = candidateTitle.trim().toLowerCase()
+    if (!clean) return false
+
+    // 1. Check local docs in store
+    const allDocs = useDocStore.getState().docs || []
+    const hasLocal = allDocs.some(
+      (d) =>
+        d &&
+        d.id !== (currentDoc?.id || docId) &&
+        (d.title || '').trim().toLowerCase() === clean
+    )
+    if (hasLocal) return true
+
+    // 2. Check remote database for current workspace
+    const wsId = currentWorkspace?.id
+    if (wsId && typeof window !== 'undefined') {
+      try {
+        const token =
+          localStorage.getItem('accessToken') ||
+          localStorage.getItem('token') ||
+          localStorage.getItem('taskflow_token')
+        const res = await fetch(`/api/v1/workspaces/${wsId}/docs`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (res.ok) {
+          const json = await res.json()
+          const sDocs = json?.data || []
+          const hasServer = sDocs.some(
+            (d: any) =>
+              d &&
+              d.id !== (currentDoc?.id || docId) &&
+              (d.title || '').trim().toLowerCase() === clean
+          )
+          if (hasServer) return true
+        }
+      } catch (err) {
+        console.warn('[DocViewer] remote dup check failed:', err)
+      }
+    }
+
+    return false
+  }
+
+  // Explicit Save to Docs
+  const handleSaveToDocs = async (overrideTitle?: string): Promise<boolean> => {
+    const finalTitle = (overrideTitle || title).trim() || 'Untitled Doc'
+
+    // Check duplicate name in DB/Store
+    const isDup = await checkDuplicateTitle(finalTitle)
+    if (isDup) {
+      setRenameInput(`${finalTitle} (Copy)`)
+      setDuplicateWarning(
+        `A document named "${finalTitle}" already exists in this workspace. Please choose a unique name.`
+      )
+      return false
+    }
 
     setAutoSaveStatus('saving')
-    const timer = setTimeout(() => {
-      if (activeSubpageId) {
+    try {
+      if (activeSubpageId && currentDoc) {
         updateSubpage(currentDoc.id, activeSubpageId, {
-          title: title.trim() || 'Untitled Page',
+          title: finalTitle,
           content,
         })
-      } else {
+      } else if (currentDoc) {
         updateDoc(currentDoc.id, {
-          title: title.trim() || 'Untitled Doc',
+          title: finalTitle,
           content,
           isProtected,
           isPublic,
           isWiki,
         })
+      } else {
+        const author = user?.displayName || user?.firstName || 'User'
+        const created = createDoc(finalTitle, content, author, 'Team Space', { docId })
+        setCurrentDoc(created)
       }
-      setAutoSaveStatus('saved')
-      setTimeout(() => setAutoSaveStatus('idle'), 2000)
-    }, 500)
 
-    return () => clearTimeout(timer)
-  }, [title, content, isProtected, isPublic, isWiki, activeSubpageId, currentDoc, updateDoc, updateSubpage])
+      initialTitleRef.current = finalTitle
+      initialContentRef.current = content
+      initialProtectedRef.current = isProtected
+      initialPublicRef.current = isPublic
+      initialWikiRef.current = isWiki
+
+      setAutoSaveStatus('saved')
+      showToast(`Saved "${finalTitle}" to Docs successfully!`)
+      setTimeout(() => setAutoSaveStatus('idle'), 2500)
+      return true
+    } catch {
+      setAutoSaveStatus('idle')
+      showToast('Failed to save document.')
+      return false
+    }
+  }
+
+  const handleAttemptClose = () => {
+    if (hasUnsavedChanges) {
+      setShowClosePrompt(true)
+    } else {
+      onClose()
+    }
+  }
+
+  const handleShareDoc = async () => {
+    const success = await handleSaveToDocs()
+    if (!success) return
+
+    if (currentDoc) {
+      updateDoc(currentDoc.id, { isPublic: true })
+      setIsPublic(true)
+    }
+
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/app/docs/${currentDoc?.id || docId}`
+      : ''
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl)
+    }
+    showToast('Document saved & share link copied to clipboard!')
+    setShowShareModal(true)
+  }
 
   if (!isOpen) return null
 
@@ -245,8 +378,11 @@ export function DocViewerModal({
 
   const activeSubpages = currentDoc?.subpages || []
 
-  return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-[#0b0c10] text-[#e1e4ea] animate-fade-in select-none">
+  if (!isOpen) return null
+  if (!isMounted || typeof document === 'undefined') return null
+
+  const modalContent = (
+    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] flex flex-col bg-[#0b0c10] text-[#e1e4ea] animate-fade-in select-none">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-zinc-800 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 flex items-center gap-2 animate-slide-down">
@@ -256,20 +392,20 @@ export function DocViewerModal({
       )}
 
       {/* TOP HEADER BAR (Matching Screenshot 5) */}
-      <div className="h-12 border-b border-white/10 px-4 flex items-center justify-between shrink-0 bg-[#0e0f14] select-none">
+      <div className="h-14 border-b border-white/10 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-[#0e0f14] select-none shadow-md">
         {/* Left: Sidebar toggle, Breadcrumbs */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             title={isSidebarOpen ? 'Hide doc pages' : 'Show doc pages'}
           >
             {isSidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </button>
 
           <div className="flex items-center gap-2 text-xs font-medium text-zinc-400">
-            <span className="hover:text-white transition-colors cursor-pointer" onClick={onClose}>
+            <span className="hover:text-white transition-colors cursor-pointer" onClick={handleAttemptClose}>
               Docs
             </span>
             <span>/</span>
@@ -302,7 +438,7 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={handleCreateSubpage}
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 text-xs font-medium transition-colors"
+            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 text-xs font-medium transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add page</span>
@@ -326,7 +462,7 @@ export function DocViewerModal({
               setContent((prev) => (prev ? prev + aiSnippet : aiSnippet.trimStart()))
               showToast('Generated AI insights')
             }}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 text-xs font-medium transition-all cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
             <span>Imagine</span>
@@ -334,7 +470,7 @@ export function DocViewerModal({
         </div>
 
         {/* Right: Actions, Settings drawer toggle, Close */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {autoSaveStatus === 'saving' && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-medium animate-pulse">
               <Loader2 className="w-2.5 h-2.5 animate-spin" /> Saving...
@@ -346,51 +482,33 @@ export function DocViewerModal({
             </span>
           )}
 
+          {/* Save to Docs Button */}
           <button
             type="button"
-            onClick={() => {
-              if (currentDoc) {
-                if (activeSubpageId) {
-                  updateSubpage(currentDoc.id, activeSubpageId, {
-                    title: title.trim() || 'Untitled Page',
-                    content,
-                  })
-                } else {
-                  updateDoc(currentDoc.id, {
-                    title: title.trim() || 'Untitled Doc',
-                    content,
-                  })
-                }
-                setAutoSaveStatus('saved')
-                showToast(`Saved "${title}" to Docs`)
-              }
-            }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+            onClick={() => handleSaveToDocs()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
             title="Save changes to TaskFlow Docs"
           >
             <Check className="w-3.5 h-3.5" />
             <span>Save to Docs</span>
           </button>
 
+          {/* Share Button */}
           <button
             type="button"
-            onClick={() => {
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(window.location.href)
-                showToast('Doc link copied to clipboard!')
-              }
-            }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-medium transition-colors"
+            onClick={handleShareDoc}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-medium transition-colors cursor-pointer"
+            title="Save changes and share document"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Share</span>
           </button>
 
-          {/* Settings button opens Settings Flyout Drawer (Screenshot 5 bottom-right) */}
+          {/* Settings button */}
           <button
             type="button"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className={`p-1.5 rounded-lg transition-colors ${
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
               isSettingsOpen ? 'bg-primary/20 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/10'
             }`}
             title="Doc settings"
@@ -398,10 +516,11 @@ export function DocViewerModal({
             <MoreHorizontal className="w-4 h-4" />
           </button>
 
+          {/* Close button */}
           <button
             type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1"
+            onClick={handleAttemptClose}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1 cursor-pointer"
             title="Close document"
           >
             <X className="w-4 h-4" />
@@ -969,6 +1088,184 @@ export function DocViewerModal({
           </div>
         </div>
       )}
+
+      {/* Unsaved Changes Close Confirmation Modal */}
+      {showClosePrompt && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowClosePrompt(false)}>
+          <div className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Save Changes?</h3>
+                <p className="text-xs text-zinc-400">Unsaved document modifications</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              You have unsaved changes in <strong className="text-white">"{title || 'Untitled Doc'}"</strong>. Do you want to save them before closing?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowClosePrompt(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowClosePrompt(false)
+                  onClose()
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+              >
+                Discard & Close
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const success = await handleSaveToDocs()
+                  if (success) {
+                    setShowClosePrompt(false)
+                    onClose()
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Save & Close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Document Name Warning Modal */}
+      {duplicateWarning && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in" onClick={() => setDuplicateWarning(null)}>
+          <div className="bg-[#181920] border border-amber-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Document Name Already Exists</h3>
+                <p className="text-xs text-amber-400/90 font-medium">Please enter a unique name</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              A document with the name <strong className="text-white">"{title}"</strong> already exists in this workspace. Please enter a different name for your document to save:
+            </p>
+
+            <div className="space-y-1.5">
+              <input
+                type="text"
+                value={renameInput}
+                onChange={(e) => setRenameInput(e.target.value)}
+                placeholder="Enter new document name..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-xs text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setDuplicateWarning(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!renameInput.trim() || renameInput.trim().toLowerCase() === title.trim().toLowerCase()}
+                onClick={async () => {
+                  const newT = renameInput.trim()
+                  setTitle(newT)
+                  setDuplicateWarning(null)
+                  setTimeout(() => {
+                    handleSaveToDocs(newT)
+                  }, 50)
+                }}
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+              >
+                Rename & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Document Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-[190] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowShareModal(false)}>
+          <div className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Share Document</h3>
+                  <p className="text-xs text-zinc-400">"{title || 'Untitled Doc'}"</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300">
+              Your document has been saved with the latest changes and is ready to share.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-zinc-400">Share Link</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={typeof window !== 'undefined' ? `${window.location.origin}/app/docs/${currentDoc?.id || docId}` : ''}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-300 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/app/docs/${currentDoc?.id || docId}`
+                    navigator.clipboard?.writeText(url)
+                    showToast('Link copied to clipboard!')
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }

@@ -20,8 +20,10 @@ import {
   Loader2,
   Shield,
   FileCheck,
+  Eye,
 } from 'lucide-react'
 import { TaskAttachment } from '@/stores/task-store'
+import { FileViewerModal } from '@/components/file-viewer-modal'
 
 interface TaskDescriptionCardProps {
   description?: string
@@ -45,6 +47,7 @@ export function TaskDescriptionCard({
   const [isSavingDesc, setIsSavingDesc] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [activeFileToView, setActiveFileToView] = useState<TaskAttachment | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Sync state if props change when not actively editing
@@ -352,15 +355,19 @@ export function TaskDescriptionCard({
                     key={att.id}
                     className="p-3 rounded-2xl bg-background/90 border border-border/80 hover:border-primary/40 transition-all flex items-center justify-between gap-3 shadow-2xs group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 rounded-xl bg-muted/60 shrink-0">
+                    <div
+                      onClick={() => setActiveFileToView(att)}
+                      className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                      title={`Click to open and view ${att.name}`}
+                    >
+                      <div className="p-2 rounded-xl bg-muted/60 shrink-0 group-hover:scale-105 transition-transform">
                         {icon}
                       </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className="font-bold text-xs text-foreground truncate max-w-[170px]"
+                            className="font-bold text-xs text-foreground truncate max-w-[170px] group-hover:text-primary transition-colors"
                             title={att.name}
                           >
                             {att.name}
@@ -376,8 +383,18 @@ export function TaskDescriptionCard({
                       </div>
                     </div>
 
-                    {/* Download and Delete Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
+                    {/* View, Download, and Delete Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFileToView(att)}
+                        className="px-2.5 py-1.5 rounded-xl bg-muted/70 hover:bg-muted text-foreground transition-all text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer border border-border/60 hover:border-primary/40"
+                        title={`Open and view ${att.name}`}
+                      >
+                        <Eye className="w-3.5 h-3.5 text-primary" />
+                        <span className="hidden sm:inline">Open</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleDownload(att)}
@@ -406,6 +423,13 @@ export function TaskDescriptionCard({
           )}
         </div>
       </div>
+
+      {/* Interactive Universal File Viewer Modal */}
+      <FileViewerModal
+        file={activeFileToView}
+        isOpen={!!activeFileToView}
+        onClose={() => setActiveFileToView(null)}
+      />
     </div>
   )
 }

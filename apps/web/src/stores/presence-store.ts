@@ -35,10 +35,11 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
         onlineEmails: string[]
       }>(url)
 
-      if (res?.data) {
+      const payload = (res?.data as any)?.data || res?.data
+      if (payload) {
         set({
-          onlineUserIds: res.data.onlineUserIds || [],
-          onlineEmails: (res.data.onlineEmails || []).map((e) => e.toLowerCase()),
+          onlineUserIds: payload.onlineUserIds || [],
+          onlineEmails: (payload.onlineEmails || []).map((e: string) => String(e).toLowerCase().trim()),
           lastSync: Date.now(),
           isInitialized: true,
         })
@@ -51,10 +52,17 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   sendHeartbeat: async (data = {}) => {
     try {
       const currentUser = useAuthStore.getState().user
+      const displayName =
+        (currentUser as any)?.name ||
+        currentUser?.displayName ||
+        `${currentUser?.firstName || ''} ${currentUser?.lastName || ''}`.trim() ||
+        currentUser?.email?.split('@')[0] ||
+        'User'
+
       const payload = {
         userId: data.userId || currentUser?.id,
         email: currentUser?.email,
-        name: (currentUser as any)?.name,
+        name: displayName,
         workspaceId: data.workspaceId,
         status: data.status || 'online',
       }
@@ -66,10 +74,11 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
         onlineEmails: string[]
       }>('/api/v1/presence', payload)
 
-      if (res?.data) {
+      const payloadData = (res?.data as any)?.data || res?.data
+      if (payloadData) {
         set({
-          onlineUserIds: res.data.onlineUserIds || [],
-          onlineEmails: (res.data.onlineEmails || []).map((e) => e.toLowerCase()),
+          onlineUserIds: payloadData.onlineUserIds || [],
+          onlineEmails: (payloadData.onlineEmails || []).map((e: string) => String(e).toLowerCase().trim()),
           lastSync: Date.now(),
           isInitialized: true,
         })
@@ -85,15 +94,18 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     // If matching current logged in user, they are always online
     if (
       currentUser &&
-      ((userId && currentUser.id === userId) ||
-        (email && currentUser.email?.toLowerCase() === email.toLowerCase()))
+      ((userId && (currentUser.id === userId || currentUser.id?.toLowerCase() === userId.toLowerCase())) ||
+        (email && currentUser.email?.toLowerCase().trim() === email.toLowerCase().trim()))
     ) {
       return true
     }
 
     const { onlineUserIds, onlineEmails } = get()
-    if (userId && onlineUserIds.includes(userId)) return true
-    if (email && onlineEmails.includes(email.toLowerCase())) return true
+    const cleanId = userId?.toLowerCase().trim()
+    const cleanEmail = email?.toLowerCase().trim()
+
+    if (cleanId && onlineUserIds.some((id) => id.toLowerCase().trim() === cleanId)) return true
+    if (cleanEmail && onlineEmails.some((e) => e.toLowerCase().trim() === cleanEmail)) return true
 
     return false
   },

@@ -8,7 +8,6 @@ import {
   Bot,
   FolderOpen,
   Video,
-  Calendar,
   Sparkles,
   Plus,
   ArrowUpRight,
@@ -47,13 +46,11 @@ export interface ResourceMentionPaletteProps {
   onSelectTask: (task: { id: string; title: string }) => void
   onSelectDoc: (doc: { id: string; title: string; url?: string; type?: string }) => void
   onSelectAgent: (agent: { id: string; name: string; description: string }) => void
-  onStartGoogleMeet: () => void
-  onStartGoogleCalendar: () => void
   onOpenGoogleDrive: () => void
   onOpenDoc?: () => void
 }
 
-type TabKey = 'all' | 'tasks' | 'docs' | 'agents' | 'people' | 'teams' | 'drive' | 'meet' | 'calendar'
+type TabKey = 'all' | 'tasks' | 'docs' | 'agents' | 'people' | 'teams' | 'drive'
 
 interface ServiceGroupItem {
   id: string
@@ -171,8 +168,6 @@ export function ResourceMentionPalette({
   onSelectTask,
   onSelectDoc,
   onSelectAgent,
-  onStartGoogleMeet,
-  onStartGoogleCalendar,
   onOpenGoogleDrive,
   onOpenDoc,
 }: ResourceMentionPaletteProps) {
@@ -423,7 +418,7 @@ export function ResourceMentionPalette({
       ref={containerRef}
       className="absolute bottom-full left-2 mb-2 w-84 sm:w-96 max-h-[460px] bg-card/95 backdrop-blur-xl border border-border/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-50 animate-scale-in select-none text-xs"
     >
-      {/* ── TOP TAB NAVIGATION BAR (All | Tasks | Docs | Agents | People | Teams | Drive | Meet) ── */}
+      {/* ── TOP TAB NAVIGATION BAR (All | Tasks | Docs | Agents | People | Teams | Drive) ── */}
       <div className="px-2 pt-2 pb-1.5 border-b border-border/60 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar shrink-0 bg-muted/20">
         <div className="flex items-center gap-1">
           <button
@@ -512,18 +507,6 @@ export function ResourceMentionPalette({
           >
             <FolderOpen className="w-3.5 h-3.5" />
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onStartGoogleMeet()
-              onClose()
-            }}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors cursor-pointer"
-            title="Start Google Meet"
-          >
-            <Video className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 
@@ -532,33 +515,6 @@ export function ResourceMentionPalette({
         {/* TAB 1: ALL */}
         {activeTab === 'all' && (
           <div className="space-y-3">
-            {/* Quick Actions Bar */}
-            <div className="flex items-center gap-1.5 px-1 py-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  onStartGoogleMeet()
-                  onClose()
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] transition-all cursor-pointer border border-emerald-500/20"
-              >
-                <Video className="w-3.5 h-3.5" />
-                <span>Google Meet</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  onStartGoogleCalendar()
-                  onClose()
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold text-[11px] transition-all cursor-pointer border border-blue-500/20"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Schedule</span>
-              </button>
-            </div>
-
             {/* People Preview */}
             <div className="space-y-1">
               <div className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">

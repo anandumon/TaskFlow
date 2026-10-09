@@ -712,4 +712,80 @@ CREATE INDEX IF NOT EXISTS idx_meeting_start_time ON public.meeting(start_time);
 CREATE INDEX IF NOT EXISTS idx_meeting_external_event ON public.meeting(external_event_id);
 CREATE INDEX IF NOT EXISTS idx_event_mapping_lookup ON public.calendar_event_mapping(taskflow_resource_type, taskflow_resource_id);
 
+-- ── 45. Live Voice & Video Calling Subsystem ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS call_sessions (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    organization_id         UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    channel_id              UUID REFERENCES chat_channels(id) ON DELETE SET NULL,
+    conversation_id         VARCHAR(255),
+    room_name               VARCHAR(100) NOT NULL UNIQUE,
+    call_type               VARCHAR(30) NOT NULL CHECK (call_type IN ('ONE_TO_ONE_VOICE', 'ONE_TO_ONE_VIDEO', 'GROUP_VOICE', 'GROUP_VIDEO', 'CHANNEL_CALL')),
+    status                  VARCHAR(30) NOT NULL DEFAULT 'CREATED' CHECK (status IN ('CREATED', 'RINGING', 'ACTIVE', 'ENDING', 'ENDED', 'CANCELLED', 'DECLINED', 'MISSED', 'EXPIRED')),
+    created_by              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    started_at              TIMESTAMP WITH TIME ZONE,
+    ended_at                TIMESTAMP WITH TIME ZONE,
+    ended_by                UUID REFERENCES users(id) ON DELETE SET NULL,
+    max_participants        INTEGER NOT NULL DEFAULT 2,
+    current_participants    INTEGER NOT NULL DEFAULT 0,
+    encryption_enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+    is_e2ee                 BOOLEAN NOT NULL DEFAULT TRUE,
+    encryption_key_version  INTEGER NOT NULL DEFAULT 1,
+    e2ee_key                TEXT, -- Encrypted/ephemeral key stored securely for authorized distribution
+    created_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_sessions_ws ON call_sessions(workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_call_sessions_channel ON call_sessions(channel_id) WHERE channel_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_call_sessions_dm ON call_sessions(conversation_id) WHERE conversation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_call_sessions_room ON call_sessions(room_name);
+
+CREATE TABLE IF NOT EXISTS call_participants (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    call_session_id         UUID NOT NULL REFERENCES call_sessions(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id               VARCHAR(100),
+    role                    VARCHAR(20) NOT NULL DEFAULT 'PARTICIPANT' CHECK (role IN ('HOST', 'CO_HOST', 'MODERATOR', 'PARTICIPANT', 'VIEWER')),
+    status                  VARCHAR(20) NOT NULL DEFAULT 'INVITED' CHECK (status IN ('INVITED', 'RINGING', 'ACCEPTED', 'JOINED', 'LEFT', 'DECLINED', 'REMOVED', 'MISSED')),
+    can_publish             BOOLEAN NOT NULL DEFAULT TRUE,
+    can_subscribe           BOOLEAN NOT NULL DEFAULT TRUE,
+    can_screen_share        BOOLEAN NOT NULL DEFAULT TRUE,
+    is_muted                BOOLEAN NOT NULL DEFAULT FALSE,
+    is_video_off            BOOLEAN NOT NULL DEFAULT FALSE,
+    joined_at               TIMESTAMP WITH TIME ZONE,
+    left_at                 TIMESTAMP WITH TIME ZONE,
+    created_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_call_participant_session UNIQUE(call_session_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_participants_user ON call_participants(user_id, status);
+
+CREATE TABLE IF NOT EXISTS call_device_sessions (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    call_session_id         UUID NOT NULL REFERENCES call_sessions(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id               VARCHAR(100) NOT NULL,
+    browser_info            VARCHAR(255),
+    platform_info           VARCHAR(100),
+    is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+    joined_at               TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    left_at                 TIMESTAMP WITH TIME ZONE,
+    created_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_device_sessions ON call_device_sessions(call_session_id, user_id);
+
+CREATE TABLE IF NOT EXISTS call_events (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    call_session_id         UUID NOT NULL REFERENCES call_sessions(id) ON DELETE CASCADE,
+    user_id                 UUID REFERENCES users(id) ON DELETE SET NULL,
+    event_type              VARCHAR(50) NOT NULL,
+    metadata                JSONB DEFAULT '{}',
+    created_at              TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_events_session ON call_events(call_session_id, created_at);
+
 

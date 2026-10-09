@@ -20,7 +20,6 @@ import {
   Lock,
   KeyRound,
   X,
-  Calendar,
   Upload,
   Camera,
   Loader2,
@@ -31,7 +30,6 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
-import { CalendarIntegrationPanel } from '@/features/calendar/components/CalendarIntegrationPanel'
 import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
@@ -55,18 +53,52 @@ export default function SettingsPage() {
       (currentOrg as any)?.role === 'ADMIN')
   )
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'calendar'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'privacy'>('profile')
+
+  // Privacy & Realtime Media Terms State
+  const [hasAcceptedPrivacyTerms, setHasAcceptedPrivacyTerms] = useState(false)
+  const [acceptedAtTimestamp, setAcceptedAtTimestamp] = useState<string | null>(null)
+  const [isAcceptingTerms, setIsAcceptingTerms] = useState(false)
+  const [privacyAgreedCheck, setPrivacyAgreedCheck] = useState(false)
+
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        const stored = localStorage.getItem(`taskflow_privacy_terms_${user.id}`)
+        if (stored) {
+          setHasAcceptedPrivacyTerms(true)
+          setAcceptedAtTimestamp(stored)
+          setPrivacyAgreedCheck(true)
+        }
+      } catch {}
+    }
+  }, [user?.id])
+
+  const handleAcceptPrivacyTerms = () => {
+    if (!user?.id) return
+    setIsAcceptingTerms(true)
+    const now = new Date().toISOString()
+    try {
+      localStorage.setItem(`taskflow_privacy_terms_${user.id}`, now)
+      setHasAcceptedPrivacyTerms(true)
+      setAcceptedAtTimestamp(now)
+      setPrivacyAgreedCheck(true)
+      showToast('✓ Privacy Policy & E2EE Media Terms accepted!')
+    } finally {
+      setIsAcceptingTerms(false)
+    }
+  }
 
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'calendar') {
-      setActiveTab('calendar')
-    } else if (tab === 'appearance' || tab === 'theme') {
+    if (tab === 'appearance' || tab === 'theme') {
       setActiveTab('appearance')
     } else if (tab === 'organization' || tab === 'org') {
       setActiveTab('organization')
     } else if (tab === 'workspace') {
       setActiveTab('workspace')
+    } else if (tab === 'privacy' || tab === 'terms' || tab === 'legal') {
+      setActiveTab('privacy')
     }
   }, [searchParams])
 
@@ -702,7 +734,7 @@ export default function SettingsPage() {
     { id: 'appearance', label: 'Appearance & Theme', icon: Palette },
     { id: 'organization', label: 'Organization', icon: Building2 },
     { id: 'workspace', label: 'Workspace', icon: Briefcase },
-    { id: 'calendar', label: 'Calendar & Sync', icon: Calendar },
+    { id: 'privacy', label: 'Privacy & Terms', icon: ShieldCheck },
   ]
 
   // Show skeleton only on initial load (no org data cached yet)
@@ -1370,10 +1402,129 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Calendar Tab */}
-      {activeTab === 'calendar' && (
-        <div className="max-w-4xl space-y-6">
-          <CalendarIntegrationPanel onSuccess={showToast} />
+      {/* Privacy, Media Terms & E2EE Compliance Tab */}
+      {activeTab === 'privacy' && (
+        <div className="max-w-4xl space-y-6 animate-fade-in pb-8">
+          {/* Header Card */}
+          <div className="p-6 rounded-3xl bg-card/70 backdrop-blur-xl border border-border/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                  Privacy Policy, Realtime Media Terms & Legal Compliance
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Peer-to-peer (P2P) WebRTC communication, zero-knowledge architecture, and legal terms.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {hasAcceptedPrivacyTerms ? (
+                <div className="px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Legally Accepted</span>
+                </div>
+              ) : (
+                <div className="px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Action Required</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Legal Term Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Card 1: P2P WebRTC & Encryption */}
+            <div className="p-5 rounded-2xl bg-card/50 border border-border/70 space-y-2.5">
+              <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider">
+                <Lock className="w-4 h-4" />
+                <span>1. Peer-to-Peer & DTLS-SRTP Encryption</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                TaskFlow employs direct Peer-to-Peer (P2P) WebRTC protocols for all 1-to-1 audio and video communications. Media packets are encrypted in transit using industry-standard DTLS-SRTP (AES-GCM-256). Media streams flow directly between participants' browsers without intermediate server decryption.
+              </p>
+            </div>
+
+            {/* Card 2: Zero-Knowledge & No-Recording */}
+            <div className="p-5 rounded-2xl bg-card/50 border border-border/70 space-y-2.5">
+              <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4" />
+                <span>2. Zero-Knowledge & No-Recording Guarantee</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                TaskFlow operates a strict zero-knowledge policy for live voice and video sessions. Neither TaskFlow, workspace administrators, nor external third parties record, store, or monitor your live audio or video streams. All session keys are ephemeral and discarded immediately when the call ends.
+              </p>
+            </div>
+
+            {/* Card 3: Camera, Microphone & Device Permissions */}
+            <div className="p-5 rounded-2xl bg-card/50 border border-border/70 space-y-2.5">
+              <div className="flex items-center gap-2 text-purple-500 font-bold text-xs uppercase tracking-wider">
+                <Camera className="w-4 h-4" />
+                <span>3. Hardware & Device Permissions</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Camera, microphone, and screen-sharing permissions are requested only upon initiating or answering a call. You maintain complete control to mute audio or disable camera at any time. Device hardware access terminates automatically the moment the call disconnects.
+              </p>
+            </div>
+
+            {/* Card 4: Legal Safe Harbor & Enterprise Compliance */}
+            <div className="p-5 rounded-2xl bg-card/50 border border-border/70 space-y-2.5">
+              <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4" />
+                <span>4. GDPR, CCPA & Compliance Statement</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                We strictly adhere to GDPR Article 6 & 9 data minimization standards and CCPA consumer privacy mandates. Only non-content technical metadata (timestamps, call duration, participant IDs) is recorded for audit logging, security diagnostics, and billing verification.
+              </p>
+            </div>
+          </div>
+
+          {/* Interactive User Acceptance Box */}
+          <div className="p-6 rounded-3xl bg-card/70 backdrop-blur-xl border border-border/80 shadow-sm space-y-5">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="privacy-terms-checkbox"
+                checked={privacyAgreedCheck}
+                onChange={(e) => setPrivacyAgreedCheck(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="privacy-terms-checkbox" className="text-xs text-foreground leading-relaxed cursor-pointer select-none">
+                <span className="font-bold">Affirmative Legal Consent:</span> I have read, understood, and agree to the TaskFlow Privacy Policy, Realtime P2P Media Communications Terms, and Data Protection Agreement. I consent to encrypted peer-to-peer data transfer for voice and video calling.
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-border/60">
+              <div className="text-xs text-muted-foreground">
+                {hasAcceptedPrivacyTerms && acceptedAtTimestamp ? (
+                  <span className="text-emerald-500 font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Accepted on {new Date(acceptedAtTimestamp).toLocaleString()}
+                  </span>
+                ) : (
+                  <span>Status: Pending user acceptance</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAcceptPrivacyTerms}
+                disabled={!privacyAgreedCheck || hasAcceptedPrivacyTerms || isAcceptingTerms}
+                className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              >
+                {isAcceptingTerms ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                <span>{hasAcceptedPrivacyTerms ? 'Terms Accepted & Safe' : 'Accept Privacy & Media Terms'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
       </div>

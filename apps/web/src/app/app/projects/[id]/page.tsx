@@ -48,6 +48,7 @@ import {
   Upload,
   Camera,
   Save,
+  FileText,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -66,6 +67,8 @@ import { getFirstName } from '@/lib/utils'
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 import { ProjectDetailsSkeleton } from '@/components/loading'
+import { ProjectFilesView } from '@/features/projects/components/ProjectFilesView'
+import { extractProjectFiles, ProjectFileItem } from '@/lib/project-files'
 import {
   isBugTask,
   isFeatureTask,
@@ -96,6 +99,7 @@ export default function ProjectDetailsPage() {
   const { currentWorkspace } = useWorkspaceStore()
   const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, deleteTask, toggleSubtask } = useTaskStore()
   const { projects, loadProjects, updateProject, isLoading: isProjectsLoading } = useProjectStore()
+  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses, fetchWorkspaceStatuses } = useStatusStore()
 
   // Edit Project State
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
@@ -106,8 +110,8 @@ export default function ProjectDetailsPage() {
   const [editProjectEnvs, setEditProjectEnvs] = useState<string[]>([])
   const [isUpdatingProject, setIsUpdatingProject] = useState(false)
 
-  // View mode: default to 'grid' matching Screenshot 4
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree' | 'board'>('grid')
+  // View mode: default to 'grid' matching Screenshot 4, supports files tab
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree' | 'board' | 'files'>('grid')
   const [activeCategoryTab, setActiveCategoryTab] = useState<'all' | 'bugs' | 'features'>('all')
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>('all')
   const [filterTag, setFilterTag] = useState<string>('all')
@@ -115,7 +119,7 @@ export default function ProjectDetailsPage() {
   const [sortBy, setSortBy] = useState<'custom' | 'assignee' | 'due' | 'priority' | 'status' | 'title'>('custom')
 
   const { user } = useAuthStore()
-  const { members: orgMembers } = useOrgStore()
+  const { currentOrg, members: orgMembers } = useOrgStore()
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const currentUserName = getFirstName(user?.firstName || user?.displayName || user?.email?.split('@')[0] || 'You')
@@ -267,8 +271,9 @@ export default function ProjectDetailsPage() {
     if (currentWorkspace?.id) {
       loadTasks(currentWorkspace.id)
       loadProjects(currentWorkspace.id)
+      fetchWorkspaceStatuses(currentWorkspace.id)
     }
-  }, [currentWorkspace?.id, loadTasks, loadProjects])
+  }, [currentWorkspace?.id, loadTasks, loadProjects, fetchWorkspaceStatuses])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -347,6 +352,50 @@ export default function ProjectDetailsPage() {
   // Bug & Feature tasks strictly scoped to this project using unified categorization
   const bugTasks = useMemo(() => projectTasks.filter(isBugTask), [projectTasks])
   const featureTasks = useMemo(() => projectTasks.filter(isFeatureTask), [projectTasks])
+
+  // Project files state, sync & permissions
+  const [projectFilesVersion, setProjectFilesVersion] = useState(0)
+  useEffect(() => {
+    const handleFilesChange = () => setProjectFilesVersion((v) => v + 1)
+    window.addEventListener('taskflow_project_files_updated', handleFilesChange)
+    return () => window.removeEventListener('taskflow_project_files_updated', handleFilesChange)
+  }, [])
+
+  const projectFiles: ProjectFileItem[] = useMemo(() => {
+    if (!project) return []
+    return extractProjectFiles(project, tasks)
+  }, [project, tasks, projectFilesVersion])
+
+  const canManageFiles = useMemo(() => {
+    if (!user) return false
+    // 1. Org Owner
+    if (currentOrg?.ownerId && currentOrg.ownerId === user.id) return true
+
+    // 2. Org Admin or Owner
+    const orgMember = orgMembers?.find((m: any) =>
+      m.userId === user.id || m.id === user.id || (m.email && m.email.toLowerCase() === user.email?.toLowerCase())
+    )
+    if (orgMember) {
+      const r = (orgMember.role || '').toLowerCase()
+      if (r === 'owner' || r === 'admin' || r === 'manager' || r === 'editor' || r === 'lead') return true
+      if (r === 'viewer' || r === 'guest') return false
+    }
+
+    // 3. Workspace member role check
+    const wsMembers = (currentWorkspace as any)?.members || []
+    const wsMember = wsMembers.find((m: any) =>
+      m.userId === user.id || m.id === user.id || (m.email && m.email.toLowerCase() === user.email?.toLowerCase())
+    )
+    if (wsMember) {
+      const r = (wsMember.role || '').toLowerCase()
+      if (r === 'viewer' || r === 'guest') return false
+    }
+
+    // 4. Project creator
+    if ((project as any)?.createdBy && (project as any).createdBy === user.id) return true
+
+    return true
+  }, [user, currentOrg?.ownerId, orgMembers, currentWorkspace, project])
 
   // Load and sync custom drag-and-drop order for project deliverable cards
   useEffect(() => {
@@ -440,11 +489,37 @@ export default function ProjectDetailsPage() {
   }, [availableUsers, currentUserName])
 
   const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses } = useStatusStore()
-  const workspaceStatuses = useMemo(
-    () => getStatuses(currentWorkspace?.id || 'default'),
-    [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses]
-  )
+  const workspaceStatuses = useMemo(() => {
+    const list = [...getStatuses(currentWorkspace?.id || 'default')]
+    const seen = new Set(list.map((s) => s.id))
+
+    const getStatusMeta = (id: string) => {
+      if (id === 'on_hold_9074' || id.includes('on_hold')) return { name: 'ON HOLD', color: '#87909e', order: 1 }
+      if (id === 'in_dev_7722' || id === 'in_dev') return { name: 'IN DEV', color: '#0ea5e9', order: 4 }
+      if (id === 'in_uat_3343' || id.includes('uat')) return { name: 'IN UAT', color: '#06b6d4', order: 5 }
+      if (id === 'in_sit_2471' || id.includes('sit')) return { name: 'IN SIT', color: '#3b82f6', order: 6 }
+      if (id === 'release_5155' || id.includes('release')) return { name: 'RELEASE', color: '#6366f1', order: 7 }
+      const clean = id.replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase()
+      return { name: clean, color: '#0284c7', order: 99 }
+    }
+
+    projectTasks.forEach((t) => {
+      if (t.status && !seen.has(t.status)) {
+        if (t.status === 'in_dev' && (seen.has('in_dev_7722') || list.some((s) => s.id === 'in_dev_7722'))) return
+        seen.add(t.status)
+        const meta = getStatusMeta(t.status)
+        list.push({
+          id: t.status,
+          name: meta.name,
+          color: meta.color,
+          category: 'ACTIVE',
+          order: meta.order,
+        })
+      }
+    })
+
+    return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  }, [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses, projectTasks])
 
   const columns = useMemo(
     () =>
@@ -1222,6 +1297,23 @@ export default function ProjectDetailsPage() {
               >
                 <Columns className="w-3.5 h-3.5 text-primary" /> Board
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('files')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  viewMode === 'files'
+                    ? 'bg-card text-foreground border border-border shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Project Documents & Files"
+              >
+                <FileText className="w-3.5 h-3.5 text-primary" /> Files
+                {projectFiles.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
+                    {projectFiles.length}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Dispatch Due Alerts: Date Selector + Dispatch Action */}
@@ -1274,74 +1366,76 @@ export default function ProjectDetailsPage() {
         {/* ========================================================================= */}
         {/* STATUS HORIZONTAL TABS: Matching My Tasks & Board Structure (Screenshot 4) */}
         {/* ========================================================================= */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setSelectedStatusTab('all')}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragOverStatusId('all')
-            }}
-            onDragLeave={() => setDragOverStatusId(null)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-              dragOverStatusId === 'all' ? 'ring-2 ring-primary scale-105' : ''
-            } ${
-              selectedStatusTab === 'all'
-                ? 'bg-primary text-primary-foreground shadow-md border border-primary'
-                : 'bg-card hover:bg-accent text-foreground border border-border'
-            }`}
-          >
-            <span>All Tasks</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+        {viewMode !== 'files' && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setSelectedStatusTab('all')}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOverStatusId('all')
+              }}
+              onDragLeave={() => setDragOverStatusId(null)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                dragOverStatusId === 'all' ? 'ring-2 ring-primary scale-105' : ''
+              } ${
                 selectedStatusTab === 'all'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-muted text-muted-foreground border border-border'
+                  ? 'bg-primary text-primary-foreground shadow-md border border-primary'
+                  : 'bg-card hover:bg-accent text-foreground border border-border'
               }`}
             >
-              {projectTasks.length}
-            </span>
-          </button>
-
-          {workspaceStatuses.map((st) => {
-            const count = projectTasks.filter(
-              (t) => t.status === st.id || (st.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
-            ).length
-            const isActive = selectedStatusTab === st.id
-            const isDragOver = dragOverStatusId === st.id
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => setSelectedStatusTab(st.id)}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOverStatusId(st.id)
-                }}
-                onDragLeave={() => setDragOverStatusId(null)}
-                onDrop={(e) => handleDropOnStatusTab(e, st.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-                  isDragOver ? 'ring-2 ring-primary scale-105 bg-primary/20 shadow-md' : ''
-                } ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-md border border-primary'
-                    : 'bg-card hover:bg-accent text-foreground border border-border'
+              <span>All Tasks</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  selectedStatusTab === 'all'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-muted text-muted-foreground border border-border'
                 }`}
-                title={`Drop task card here to move deliverable to ${st.name}`}
               >
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.color }} />
-                <span>{st.name}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground border border-border'
+                {projectTasks.length}
+              </span>
+            </button>
+
+            {workspaceStatuses.map((st) => {
+              const count = projectTasks.filter(
+                (t) => t.status === st.id || (st.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
+              ).length
+              const isActive = selectedStatusTab === st.id
+              const isDragOver = dragOverStatusId === st.id
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setSelectedStatusTab(st.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setDragOverStatusId(st.id)
+                  }}
+                  onDragLeave={() => setDragOverStatusId(null)}
+                  onDrop={(e) => handleDropOnStatusTab(e, st.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    isDragOver ? 'ring-2 ring-primary scale-105 bg-primary/20 shadow-md' : ''
+                  } ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-md border border-primary'
+                      : 'bg-card hover:bg-accent text-foreground border border-border'
                   }`}
+                  title={`Drop task card here to move deliverable to ${st.name}`}
                 >
-                  {count}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.color }} />
+                  <span>{st.name}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground border border-border'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* VIEW MODE 1: MINIMAL SPACIOUS LIQUID GLASS GRID VIEW (Screenshot 4)       */}
@@ -2118,6 +2212,27 @@ export default function ProjectDetailsPage() {
               )
             })}
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW MODE 5: PROJECT FILES & DOCUMENTS                                    */}
+        {/* ========================================================================= */}
+        {viewMode === 'files' && project && (
+          <ProjectFilesView
+            project={project}
+            files={projectFiles}
+            tasks={projectTasks}
+            canManageFiles={canManageFiles}
+            onUpdateTask={updateTask}
+            onFilesChanged={() => {
+              if (currentWorkspace?.id) {
+                loadTasks(currentWorkspace.id)
+              }
+            }}
+            onNavigateToTask={(taskId) => {
+              router.push(`/app/tasks/${taskId}`)
+            }}
+          />
         )}
 
         {/* ========================================================================= */}

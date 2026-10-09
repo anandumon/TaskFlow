@@ -25,8 +25,8 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPresence.__taskflowPresence = presenceRegistry
 }
 
-// Consider users online if heartbeat was within the last 45 seconds
-const ONLINE_TTL_MS = 45000
+// Consider users online if heartbeat was within the last 120 seconds (accommodates background tab throttling)
+const ONLINE_TTL_MS = 120000
 
 export function recordHeartbeat(
   userId: string,

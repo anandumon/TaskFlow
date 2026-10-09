@@ -53,6 +53,38 @@ interface DocStore {
 }
 
 const STORAGE_KEY = 'taskflow_user_docs'
+const DELETED_KEY = 'taskflow_deleted_docs'
+const INITIALIZED_KEY = 'taskflow_docs_initialized'
+
+const getDeletedDocIds = (): Set<string> => {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(DELETED_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return new Set(parsed.map((s: string) => String(s).toLowerCase().trim()))
+    }
+  } catch {}
+  return new Set()
+}
+
+const addDeletedDocId = (idOrTitle: string) => {
+  if (typeof window === 'undefined' || !idOrTitle) return
+  try {
+    const set = getDeletedDocIds()
+    set.add(idOrTitle.toLowerCase().trim())
+    localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)))
+  } catch {}
+}
+
+const removeDeletedDocId = (idOrTitle: string) => {
+  if (typeof window === 'undefined' || !idOrTitle) return
+  try {
+    const set = getDeletedDocIds()
+    set.delete(idOrTitle.toLowerCase().trim())
+    localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set)))
+  } catch {}
+}
 
 const getActiveWorkspaceId = (): string | null => {
   if (typeof window === 'undefined') return null
@@ -149,19 +181,28 @@ export const useDocStore = create<DocStore>((set, get) => ({
   loadDocs: async (workspaceId?: string) => {
     if (typeof window === 'undefined') return
     const wsId = workspaceId || getActiveWorkspaceId()
+    const deletedSet = getDeletedDocIds()
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
+      const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true'
       let localDocs: DocItem[] = []
+
       if (stored !== null) {
         const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          localDocs = parsed.filter((d: any) => d && typeof d === 'object' && d.id && d.title)
+        if (Array.isArray(parsed)) {
+          localDocs = parsed
+            .filter((d: any) => d && typeof d === 'object' && d.id && d.title)
+            .filter((d: any) => !deletedSet.has(d.id.toLowerCase()) && !deletedSet.has(d.title.toLowerCase().trim()))
         }
       }
 
-      if (localDocs.length === 0) {
-        localDocs = DEFAULT_STARTER_DOCS
+      // ONLY seed starter docs if user has NEVER visited/initialized before
+      if (!isInitialized && stored === null) {
+        localDocs = DEFAULT_STARTER_DOCS.filter(
+          (d) => !deletedSet.has(d.id.toLowerCase()) && !deletedSet.has(d.title.toLowerCase().trim())
+        )
         localStorage.setItem(STORAGE_KEY, JSON.stringify(localDocs))
+        localStorage.setItem(INITIALIZED_KEY, 'true')
       }
 
       set({ docs: localDocs })
@@ -175,12 +216,21 @@ export const useDocStore = create<DocStore>((set, get) => ({
           if (res.ok) {
             const json = await res.json()
             const serverDocs: DocItem[] = json?.data || []
-            if (Array.isArray(serverDocs) && serverDocs.length > 0) {
-              // Merge server docs with local docs (server docs take precedence)
+            if (Array.isArray(serverDocs)) {
+              const activeServerDocs = serverDocs.filter(
+                (d) => d && d.id && d.title && !deletedSet.has(d.id.toLowerCase()) && !deletedSet.has(d.title.toLowerCase().trim())
+              )
+              // Merge server docs with local docs (server docs take precedence, but skip deleted ones)
               const mergedMap = new Map<string, DocItem>()
-              localDocs.forEach((d) => mergedMap.set(d.id, d))
-              serverDocs.forEach((d) => mergedMap.set(d.id, d))
-              const merged = Array.from(mergedMap.values()).filter((d) => d && d.id && d.title)
+              localDocs.forEach((d) => {
+                if (!deletedSet.has(d.id.toLowerCase()) && !deletedSet.has(d.title.toLowerCase().trim())) {
+                  mergedMap.set(d.id, d)
+                }
+              })
+              activeServerDocs.forEach((d) => {
+                mergedMap.set(d.id, d)
+              })
+              const merged = Array.from(mergedMap.values())
               localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
               set({ docs: merged })
             }
@@ -191,7 +241,6 @@ export const useDocStore = create<DocStore>((set, get) => ({
       }
     } catch (e) {
       console.error('Failed to load docs from storage', e)
-      set({ docs: DEFAULT_STARTER_DOCS })
     }
   },
 
@@ -227,6 +276,13 @@ export const useDocStore = create<DocStore>((set, get) => ({
       .replace(/-+/g, '-')
       .slice(0, 30) || 'doc'
     const id = extra?.docId || `${cleanId}-${Date.now().toString(36)}`
+
+    // Unblock this document from deleted cache
+    removeDeletedDocId(id)
+    removeDeletedDocId(trimmedTitle)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(INITIALIZED_KEY, 'true')
+    }
     
     const newDoc: DocItem = {
       id,
@@ -272,6 +328,11 @@ export const useDocStore = create<DocStore>((set, get) => ({
   },
 
   updateDoc: (id, updates) => {
+    if (updates.title) {
+      removeDeletedDocId(updates.title)
+    }
+    removeDeletedDocId(id)
+
     set((state) => {
       const updated = state.docs.map((d) => {
         if (d && d.id === id) {
@@ -315,7 +376,20 @@ export const useDocStore = create<DocStore>((set, get) => ({
     const cleanId = (id || '').trim()
     if (!cleanId) return
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(INITIALIZED_KEY, 'true')
+    }
+    addDeletedDocId(cleanId)
+
     set((state) => {
+      const targetDoc = state.docs.find(
+        (d) => d && (d.id === cleanId || (d.title || '').toLowerCase() === cleanId.toLowerCase())
+      )
+      if (targetDoc) {
+        if (targetDoc.id) addDeletedDocId(targetDoc.id)
+        if (targetDoc.title) addDeletedDocId(targetDoc.title)
+      }
+
       const updated = state.docs.filter(
         (d) => d && d.id !== cleanId && (d.title || '').toLowerCase() !== cleanId.toLowerCase()
       )
@@ -327,7 +401,8 @@ export const useDocStore = create<DocStore>((set, get) => ({
       // Async delete from DB
       const wsId = workspaceId || getActiveWorkspaceId()
       if (wsId && typeof window !== 'undefined') {
-        fetch(`/api/v1/workspaces/${wsId}/docs/${encodeURIComponent(cleanId)}`, {
+        const idToDelete = targetDoc?.id || cleanId
+        fetch(`/api/v1/workspaces/${wsId}/docs/${encodeURIComponent(idToDelete)}`, {
           method: 'DELETE',
           headers: getAuthHeaders(),
         }).catch((err) => console.warn('[docStore] async deleteDoc from db error:', err))

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getAuthUser } from '@/server/utils/auth'
 import { chatEventEmitter, ChatRealtimeEvent } from '@/server/events/chat-events'
+import { callEventEmitter } from '@/server/events/call-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,30 @@ export async function GET(
 
         chatEventEmitter.on('chat_event', onChatEvent)
 
+        // Event listener for call broadcasts
+        const onCallEvent = (event: any) => {
+          // Direct 1-to-1 call: deliver if current user is either recipient or caller
+          if (event.recipientId && currentUserId) {
+            const isParticipant =
+              event.recipientId === currentUserId || event.callerId === currentUserId
+            if (!isParticipant) return
+          } else if (event.workspaceId !== workspaceId) {
+            return
+          }
+
+          try {
+            const eventPayload = {
+              ...event,
+              callEventType: event.type,
+              event: event.type,
+              type: 'call_event',
+            }
+            const dataString = `data: ${JSON.stringify(eventPayload)}\n\n`
+            controller.enqueue(encoder.encode(dataString))
+          } catch (err) {}
+        }
+        callEventEmitter.on('call_event', onCallEvent)
+
         // Keep-alive heartbeat comment every 15 seconds to prevent timeout
         const heartbeat = setInterval(() => {
           try {
@@ -74,6 +99,7 @@ export async function GET(
         req.signal.addEventListener('abort', () => {
           clearInterval(heartbeat)
           chatEventEmitter.off('chat_event', onChatEvent)
+          callEventEmitter.off('call_event', onCallEvent)
           try {
             controller.close()
           } catch {}

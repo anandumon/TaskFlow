@@ -166,9 +166,7 @@ export function StylishDatePicker({
             {formatDisplay(value)}
           </span>
         </div>
-        <span className="text-[10px] text-primary/90 font-bold px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 shrink-0">
-          Due Date
-        </span>
+        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
       </button>
 
       {/* Floating Stylish Calendar Popover */}

@@ -4,7 +4,6 @@ import React, { useState, useMemo } from 'react'
 import {
   X,
   MessageSquare,
-  Calendar,
   CheckSquare,
   Mail,
   Plus,
@@ -19,7 +18,6 @@ import {
   Network,
   UserCheck,
   Info,
-  CalendarDays,
   Shield,
   Activity as ActivityIcon,
   RotateCcw,
@@ -45,11 +43,9 @@ export interface UserProfilePanelProps {
   currentOrgId?: string
   currentOrgName?: string
   workspaceMembers?: any[]
-  onOpenCalendar?: () => void
-  onStartSyncUp?: () => void
 }
 
-export type ProfileTab = 'activity' | 'tasks' | 'comments' | 'org_chart' | 'calendar'
+export type ProfileTab = 'activity' | 'tasks' | 'comments' | 'org_chart'
 
 export function UserProfilePanel({
   isOpen,
@@ -62,14 +58,14 @@ export function UserProfilePanel({
   currentOrgId,
   currentOrgName,
   workspaceMembers = [],
-  onOpenCalendar,
-  onStartSyncUp,
 }: UserProfilePanelProps) {
-  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab)
+  const [activeTab, setActiveTab] = useState<ProfileTab>(
+    initialTab === ('calendar' as any) ? 'activity' : initialTab
+  )
 
   React.useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab)
+      setActiveTab(initialTab === ('calendar' as any) ? 'activity' : initialTab)
     }
   }, [initialTab, isOpen])
   const [description, setDescription] = useState('')
@@ -91,10 +87,6 @@ export function UserProfilePanel({
   // Comments search & filter
   const [commentSearch, setCommentSearch] = useState('')
   const [showResolvedComments, setShowResolvedComments] = useState(false)
-
-  // Calendar connected states
-  const [googleConnected, setGoogleConnected] = useState(false)
-  const [outlookConnected, setOutlookConnected] = useState(false)
 
   const { isUserOnline } = usePresenceStore()
 
@@ -287,17 +279,6 @@ export function UserProfilePanel({
           }`}
         >
           Org Chart
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('calendar')}
-          className={`px-3 py-2.5 font-medium whitespace-nowrap transition-colors relative cursor-pointer ${
-            activeTab === 'calendar'
-              ? 'text-foreground font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Calendar
         </button>
       </div>
 
@@ -724,103 +705,6 @@ export function UserProfilePanel({
                 <span>Explore</span>
                 <ExternalLink className="w-3 h-3" />
               </Link>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════ TAB 5: CALENDAR ══════════════ */}
-        {activeTab === 'calendar' && (
-          <div className="space-y-5">
-            {/* Header: No upcoming time off & Add time off */}
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <span>No upcoming time off</span>
-                <Info className="w-3.5 h-3.5" />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setTimeOffSuccess(true)
-                  setTimeout(() => setTimeOffSuccess(false), 3000)
-                }}
-                className="flex items-center gap-1 font-semibold text-foreground hover:text-primary transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add time off</span>
-              </button>
-            </div>
-
-            {/* Empty state illustration with dark calendar icon */}
-            <div className="p-6 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-muted/30 border border-border/50 flex items-center justify-center text-muted-foreground relative">
-                <CalendarDays className="w-8 h-8 stroke-[1.5]" />
-                <Search className="w-3.5 h-3.5 text-muted-foreground absolute -bottom-1 -right-1 bg-card rounded-full p-0.5" />
-              </div>
-              <p className="text-xs text-muted-foreground max-w-[260px] leading-relaxed">
-                Connect your calendar to view upcoming events and join your next call
-              </p>
-            </div>
-
-            {/* Calendar Integration Connect Buttons matching Image 5 */}
-            <div className="space-y-2.5">
-              {/* Google Calendar */}
-              <div className="p-3 rounded-2xl border border-border/60 bg-card/40 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center">
-                    <svg className="w-5 h-5" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-xs font-semibold text-foreground">Google Calendar</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setGoogleConnected(!googleConnected)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
-                    googleConnected
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                      : 'border-border bg-background hover:bg-accent text-foreground'
-                  }`}
-                >
-                  {googleConnected ? 'Connected' : 'Connect'}
-                </button>
-              </div>
-
-              {/* Microsoft Outlook */}
-              <div className="p-3 rounded-2xl border border-border/60 bg-card/40 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center bg-[#0078D4] text-white font-bold text-xs">
-                    O
-                  </div>
-                  <span className="text-xs font-semibold text-foreground">Microsoft Outlook</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOutlookConnected(!outlookConnected)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
-                    outlookConnected
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                      : 'border-border bg-background hover:bg-accent text-foreground'
-                  }`}
-                >
-                  {outlookConnected ? 'Connected' : 'Connect'}
-                </button>
-              </div>
             </div>
           </div>
         )}

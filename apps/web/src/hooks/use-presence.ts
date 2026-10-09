@@ -17,10 +17,11 @@ export function usePresence() {
     sendHeartbeat({ workspaceId: currentWorkspace?.id })
     fetchPresence(currentWorkspace?.id)
 
-    // 2. Periodic heartbeat every 15 seconds
+    // 2. Periodic heartbeat & sync every 10 seconds
     const interval = setInterval(() => {
       sendHeartbeat({ workspaceId: currentWorkspace?.id })
-    }, 15000)
+      fetchPresence(currentWorkspace?.id)
+    }, 10000)
 
     // 3. Tab visibility listener: immediately update heartbeat when user switches back to tab
     const handleVisibilityChange = () => {
@@ -31,21 +32,9 @@ export function usePresence() {
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // 4. Send offline on window unload
-    const handleBeforeUnload = () => {
-      if (user?.id) {
-        navigator.sendBeacon?.(
-          '/api/v1/presence',
-          JSON.stringify({ userId: user.id, status: 'offline' })
-        )
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
     return () => {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   }, [user?.id, currentWorkspace?.id, sendHeartbeat, fetchPresence])
 

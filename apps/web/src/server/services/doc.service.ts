@@ -165,9 +165,9 @@ export async function deleteWorkspaceDoc(workspaceId: string, docId: string): Pr
       // 1. Delete from workspace_documents
       await query(
         `DELETE FROM workspace_documents 
-         WHERE (id = $1 OR title ILIKE $1 OR title ILIKE $2) 
-           AND (workspace_id = $3 OR workspace_id IS NULL)`,
-        [cleanDocId, `%${cleanDocId}%`, workspaceId]
+         WHERE (id = $1 OR LOWER(TRIM(title)) = LOWER(TRIM($1))) 
+           AND (workspace_id = $2 OR workspace_id IS NULL)`,
+        [cleanDocId, workspaceId]
       )
 
       // 2. Also delete/clean from chat_messages table if attached
@@ -184,8 +184,8 @@ export async function deleteWorkspaceDoc(workspaceId: string, docId: string): Pr
     } else {
       await query(
         `DELETE FROM workspace_documents 
-         WHERE id = $1 OR title ILIKE $1 OR title ILIKE $2`,
-        [cleanDocId, `%${cleanDocId}%`]
+         WHERE id = $1 OR LOWER(TRIM(title)) = LOWER(TRIM($1))`,
+        [cleanDocId]
       )
 
       await query(

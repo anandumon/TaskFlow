@@ -48,6 +48,13 @@ export function useChatRealtime() {
         if (user?.id) params.set('userId', user.id)
         if (activeChannel?.id) params.set('channelId', activeChannel.id)
         if (activeDMUser?.id) params.set('recipientId', activeDMUser.id)
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('accessToken') ||
+              localStorage.getItem('token') ||
+              localStorage.getItem('taskflow_token')
+            : null
+        if (token) params.set('token', token)
 
         const streamUrl = `/api/v1/workspaces/${wsId}/messages/stream?${params.toString()}`
         eventSource = new EventSource(streamUrl)
@@ -112,6 +119,48 @@ export function useChatRealtime() {
               case 'pin_message': {
                 const msg = payload.data
                 if (msg) receivePinMessage(msg)
+                break
+              }
+
+              case 'call_event':
+              case 'call_incoming':
+              case 'call_accepted':
+              case 'call_declined':
+              case 'call_ended': {
+                if (typeof window !== 'undefined') {
+                  const { useCallStore } = require('@/stores/call-store')
+                  const callStore = useCallStore.getState()
+                  const eventType = payload.callEventType || payload.event || payload.type || ''
+
+                  if (eventType === 'call_incoming' || payload.data?.caller) {
+                    const { callSession, caller } = payload.data || {}
+                    const myId = userRef.current?.id
+                    if (callSession && caller && caller.id !== myId) {
+                      if (!payload.recipientId || payload.recipientId === myId) {
+                        callStore.setIncomingCall({ callSession, caller })
+                      }
+                    }
+                  } else if (eventType === 'call_accepted') {
+                    if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
+                      callStore.setActiveCall(payload.data?.callSession || { ...callStore.activeCall, status: 'ACTIVE' })
+                    }
+                  } else if (eventType === 'call_declined') {
+                    if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
+                      callStore.setErrorMessage('Call declined by user')
+                      callStore.endActiveCall()
+                    }
+                    if (callStore.incomingCall && callStore.incomingCall.callSession.id === payload.callId) {
+                      callStore.setIncomingCall(null)
+                    }
+                  } else if (eventType === 'call_ended') {
+                    if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
+                      callStore.endActiveCall()
+                    }
+                    if (callStore.incomingCall && callStore.incomingCall.callSession.id === payload.callId) {
+                      callStore.setIncomingCall(null)
+                    }
+                  }
+                }
                 break
               }
             }

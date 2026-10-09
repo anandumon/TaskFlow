@@ -15,6 +15,7 @@ import { useChatRealtime } from '@/hooks/use-chat-realtime'
 
 import { useProjectStore } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
+import { CallProvider } from '@/features/calls/components/CallProvider'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   usePresence()
@@ -25,7 +26,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isSettingsRoute = pathname === '/app/settings' || pathname?.startsWith('/app/settings')
   const isFitScreenRoute = isChatRoute || isSettingsRoute
   const { user, isAuthenticated, isLoading, isLoggingOut, loadUser } = useAuthStore()
-  const { fetchOrganizations, currentOrg, organizations } = useOrgStore()
+  const { fetchOrganizations, currentOrg, organizations, isSwitchingOrg } = useOrgStore()
   const { fetchWorkspaces, currentWorkspace } = useWorkspaceStore()
   const [commandOpen, setCommandOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -167,7 +168,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  if (isLoggingOut || (!initialLoaded && (!authChecked || isLoading))) {
+  if (isLoggingOut || (!initialLoaded && (!authChecked || isLoading)) || isSwitchingOrg) {
     return <AppShellSkeleton />
   }
 
@@ -224,6 +225,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} />
+      <CallProvider />
     </div>
   )
 }
