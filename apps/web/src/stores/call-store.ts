@@ -97,6 +97,8 @@ interface CallState {
   clearError: () => void
 }
 
+export const handledCallIds = new Set<string>()
+
 export const useCallStore = create<CallState>((set, get) => ({
   activeCall: null,
   incomingCall: null,
@@ -235,11 +237,14 @@ export const useCallStore = create<CallState>((set, get) => ({
     const { incomingCall, isCallStarting, activeCall } = get()
     if (!incomingCall || isCallStarting || activeCall) return false
 
+    const { callSession } = incomingCall
+    // Permanently mark this call ID as handled so it never pops up again
+    handledCallIds.add(callSession.id)
+
     // Immediately clear incomingCall and lock with isCallStarting
     set({ incomingCall: null, isCallStarting: true })
 
     try {
-      const { callSession } = incomingCall
       const token =
         localStorage.getItem('accessToken') ||
         localStorage.getItem('token') ||
@@ -311,8 +316,13 @@ export const useCallStore = create<CallState>((set, get) => ({
     const { incomingCall } = get()
     if (!incomingCall) return
 
+    const { callSession } = incomingCall
+    // Permanently mark this call ID as handled so it never pops up again
+    handledCallIds.add(callSession.id)
+
+    set({ incomingCall: null })
+
     try {
-      const { callSession } = incomingCall
       const token =
         localStorage.getItem('accessToken') ||
         localStorage.getItem('token') ||
@@ -329,16 +339,17 @@ export const useCallStore = create<CallState>((set, get) => ({
           body: JSON.stringify({ action: 'DECLINE' }),
         }
       )
-
-      set({ incomingCall: null })
     } catch (err) {
       console.error('[call-store] decline error:', err)
-      set({ incomingCall: null })
     }
   },
 
   endActiveCall: async () => {
     const { activeCall, localStream } = get()
+    if (activeCall?.id) {
+      handledCallIds.add(activeCall.id)
+    }
+
     if (localStream) {
       try {
         localStream.getTracks().forEach((track) => track.stop())
@@ -392,11 +403,23 @@ export const useCallStore = create<CallState>((set, get) => ({
   toggleMinimize: () => set((state) => ({ isMinimized: !state.isMinimized })),
   toggleIncomingMinimize: () => set((state) => ({ isIncomingMinimized: !state.isIncomingMinimized })),
 
-  setIncomingCall: (incoming) =>
+  setIncomingCall: (incoming) => {
+    if (incoming) {
+      const callId = incoming.callSession?.id
+      // Prevent showing duplicate call notifications if call was already handled or call is starting/active
+      if (callId && handledCallIds.has(callId)) {
+        return
+      }
+      const current = get()
+      if (current.isCallStarting || current.activeCall?.id === callId) {
+        return
+      }
+    }
     set({
       incomingCall: incoming,
-      isIncomingMinimized: incoming ? false : false,
-    }),
+      isIncomingMinimized: false,
+    })
+  },
   setActiveCall: (call) => set({ activeCall: call }),
   setLocalStream: (stream) => set({ localStream: stream }),
   setLiveKitCredentials: (token, serverUrl, roomName, e2eeKey) =>

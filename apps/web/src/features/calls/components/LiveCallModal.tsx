@@ -89,17 +89,54 @@ export function LiveCallModal() {
     authHeaders,
   })
 
-  const localVideoRef = useStreamRef<HTMLVideoElement>(localStream)
-  const remoteVideoRef = useStreamRef<HTMLVideoElement>(remoteStream)
-  const remoteAudioRef = useStreamRef<HTMLAudioElement>(remoteStream)
-  const screenVideoRef = useStreamRef<HTMLVideoElement>(screenStream)
+  const [remoteVideoPlaying, setRemoteVideoPlaying] = useState(false)
+  const screenStreamRef = useRef<MediaStream | null>(null)
+
+  const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
+  const screenVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  // Continuously attach media streams to elements
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      attachStreamToElement(remoteVideoRef.current, remoteStream)
+    }
+    if (remoteAudioRef.current) {
+      attachStreamToElement(remoteAudioRef.current, remoteStream)
+    }
+  }, [remoteStream])
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      attachStreamToElement(localVideoRef.current, localStream)
+    }
+  }, [localStream])
+
+  useEffect(() => {
+    if (screenVideoRef.current) {
+      attachStreamToElement(screenVideoRef.current, screenStream)
+    }
+  }, [screenStream])
+
+  // When unminimizing / restoring, re-verify and ensure playback is active
+  useEffect(() => {
+    if (!isMinimized) {
+      if (remoteVideoRef.current) attachStreamToElement(remoteVideoRef.current, remoteStream)
+      if (localVideoRef.current) attachStreamToElement(localVideoRef.current, localStream)
+      if (remoteAudioRef.current) attachStreamToElement(remoteAudioRef.current, remoteStream)
+    }
+  }, [isMinimized, remoteStream, localStream])
 
   const unlockAudio = useCallback(() => {
     if (remoteAudioRef.current && remoteAudioRef.current.paused) {
       remoteAudioRef.current.play().catch(() => {})
     }
+    if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+      remoteVideoRef.current.play().catch(() => {})
+    }
     resumeAudio()
-  }, [resumeAudio, remoteAudioRef])
+  }, [resumeAudio])
 
   // 45s ringing timer for caller: auto-cancels if not answered
   useEffect(() => {
@@ -128,19 +165,55 @@ export function LiveCallModal() {
   // Screen share handler with WebRTC sender replacement
   useEffect(() => {
     if (!isScreenSharing) {
-      if (screenStream) {
-        screenStream.getTracks().forEach((t) => t.stop())
-        setScreenStream(null)
-      }
-      // Restore camera track to peer connection if active
       const pc = peerConnectionRef.current
-      if (pc && localStreamRef.current) {
-        const camTrack = localStreamRef.current.getVideoTracks()[0]
-        const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video')
-        if (videoSender && camTrack) {
-          videoSender.replaceTrack(camTrack).catch(() => {})
+      const currentScreen = screenStreamRef.current || screenStream
+
+      const restoreCamera = async () => {
+        let camTrack = localStreamRef.current?.getVideoTracks().find((t) => t.readyState === 'live')
+
+        // If local camera track was lost, re-acquire if not intentionally muted
+        if (!camTrack && !localVideoOff && !isVoiceOnly) {
+          try {
+            const camStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+              audio: false,
+            })
+            const freshTrack = camStream.getVideoTracks()[0]
+            if (freshTrack) {
+              camTrack = freshTrack
+              if (localStreamRef.current) {
+                localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current?.removeTrack(t))
+                localStreamRef.current.addTrack(freshTrack)
+              }
+            }
+          } catch (e) {
+            console.warn('[LiveCallModal] Re-acquire camera track warning:', e)
+          }
+        }
+
+        if (pc) {
+          const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video' || (s.track === null && !s.dtmf))
+          if (videoSender) {
+            await videoSender.replaceTrack(camTrack || null).catch((err) => {
+              console.warn('[LiveCallModal] replaceTrack camera error:', err)
+            })
+          }
+        }
+
+        // Clean up screen stream tracks AFTER replacing track on peer connection
+        if (currentScreen) {
+          currentScreen.getTracks().forEach((t) => t.stop())
+        }
+        screenStreamRef.current = null
+        setScreenStream(null)
+
+        // Ensure local video element displays local camera stream
+        if (localVideoRef.current && localStreamRef.current) {
+          attachStreamToElement(localVideoRef.current, localStreamRef.current)
         }
       }
+
+      restoreCamera()
       return
     }
 
@@ -148,65 +221,39 @@ export function LiveCallModal() {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
-          audio: true,
+          audio: false, // Keep mic audio 100% steady and untouched
         })
+        screenStreamRef.current = stream
         setScreenStream(stream)
 
-        // Replace video track in WebRTC peer connection
         const screenTrack = stream.getVideoTracks()[0]
         const pc = peerConnectionRef.current
         if (pc && screenTrack) {
-          const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video')
+          const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video' || (s.track === null && !s.dtmf))
           if (videoSender) {
-            videoSender.replaceTrack(screenTrack).catch(() => {})
+            await videoSender.replaceTrack(screenTrack).catch((err) => {
+              console.warn('[LiveCallModal] replaceTrack screen error:', err)
+            })
           }
         }
 
-        // Add screen audio track if available
-        const screenAudio = stream.getAudioTracks()[0]
-        if (pc && screenAudio) {
-          pc.addTrack(screenAudio, stream)
-        }
-
         screenTrack.onended = () => {
-          toggleScreenShare()
+          if (useCallStore.getState().isScreenSharing) {
+            toggleScreenShare()
+          }
         }
       } catch (err) {
-        console.warn('[LiveCall] Screen share error or cancelled:', err)
-        toggleScreenShare()
+        console.warn('[LiveCallModal] Screen share cancelled or error:', err)
+        if (useCallStore.getState().isScreenSharing) {
+          toggleScreenShare()
+        }
       }
     }
 
     startScreen()
-  }, [isScreenSharing, toggleScreenShare, localStreamRef, peerConnectionRef])
+  }, [isScreenSharing, toggleScreenShare, localStreamRef, peerConnectionRef, localVideoOff, isVoiceOnly])
 
   if (!isMounted || !isLiveCallOpen || !activeCall) return null
-
-  // When minimized, only render the hidden audio element so remote audio keeps playing
-  // The MinimizedCallBar (rendered separately) provides the minimized UI
-  if (isMinimized) {
-    return (
-      <audio
-        ref={(el) => {
-          // Callback ref: runs when element mounts/unmounts
-          // This handles the case where stream ref hasn't changed but element is new
-          remoteAudioRef.current = el as HTMLAudioElement | null
-          attachStreamToElement(el, remoteStream)
-        }}
-        autoPlay
-        playsInline
-        style={{
-          position: 'fixed',
-          top: -9999,
-          left: -9999,
-          width: 1,
-          height: 1,
-          opacity: 0,
-          pointerEvents: 'none',
-        }}
-      />
-    )
-  }
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -220,11 +267,18 @@ export function LiveCallModal() {
   const modalContent = (
     <div
       onClick={unlockAudio}
-      className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99990] bg-[#090a10] text-[#e1e4ea] flex flex-col select-none animate-fade-in overflow-hidden cursor-default"
+      className={
+        isMinimized
+          ? 'fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none overflow-hidden select-none'
+          : 'fixed inset-0 top-0 left-0 w-screen h-screen z-[99990] bg-[#090a10] text-[#e1e4ea] flex flex-col select-none animate-fade-in overflow-hidden cursor-default'
+      }
     >
-      {/* Unmuted Dedicated Remote Audio Player - positioned offscreen without display:none so browser audio never throttles */}
+      {/* Unmuted Dedicated Remote Audio Player - stays continuously mounted offscreen so remote voice never halts or glitches */}
       <audio
-        ref={remoteAudioRef}
+        ref={(el) => {
+          remoteAudioRef.current = el
+          attachStreamToElement(el, remoteStream)
+        }}
         autoPlay
         playsInline
         style={{
@@ -378,16 +432,22 @@ export function LiveCallModal() {
             <div className="w-full h-full max-w-5xl rounded-3xl overflow-hidden bg-[#111218] border border-white/10 flex items-center justify-center relative shadow-2xl">
               {/* Remote Video Feed (muted so audio plays from dedicated audio element without doubling) */}
               <video
-                ref={remoteVideoRef}
+                ref={(el) => {
+                  remoteVideoRef.current = el
+                  attachStreamToElement(el, remoteStream)
+                }}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full object-contain ${hasRemoteVideo ? 'block' : 'hidden'}`}
+                onPlay={() => setRemoteVideoPlaying(true)}
+                onPlaying={() => setRemoteVideoPlaying(true)}
+                onLoadedMetadata={() => setRemoteVideoPlaying(true)}
+                className="w-full h-full object-contain"
               />
 
               {/* Remote Avatar Fallback only when remote camera is off or not yet streaming */}
-              {!hasRemoteVideo && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3 pointer-events-none">
+              {!hasRemoteVideo && !remoteVideoPlaying && (
+                <div className="absolute inset-0 bg-[#111218] flex flex-col items-center justify-center space-y-3 pointer-events-none">
                   <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border-2 border-emerald-400/30 flex items-center justify-center text-white text-4xl font-extrabold shadow-2xl">
                     {(remoteParticipant?.name || activeCall.createdByName || 'U').charAt(0).toUpperCase()}
                   </div>
@@ -402,7 +462,10 @@ export function LiveCallModal() {
             <div className="w-full h-full rounded-3xl overflow-hidden bg-black flex items-center justify-center relative border border-emerald-500/30">
               {/* Presenting user's own screen stream */}
               <video
-                ref={screenVideoRef}
+                ref={(el) => {
+                  screenVideoRef.current = el
+                  attachStreamToElement(el, screenStream)
+                }}
                 autoPlay
                 playsInline
                 muted
@@ -440,7 +503,10 @@ export function LiveCallModal() {
             >
               {!localVideoOff ? (
                 <video
-                  ref={localVideoRef}
+                  ref={(el) => {
+                    localVideoRef.current = el
+                    attachStreamToElement(el, localStream)
+                  }}
                   autoPlay
                   playsInline
                   muted

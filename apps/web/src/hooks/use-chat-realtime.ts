@@ -128,7 +128,7 @@ export function useChatRealtime() {
               case 'call_declined':
               case 'call_ended': {
                 if (typeof window !== 'undefined') {
-                  const { useCallStore } = require('@/stores/call-store')
+                  const { useCallStore, handledCallIds } = require('@/stores/call-store')
                   const callStore = useCallStore.getState()
                   const eventType = payload.callEventType || payload.event || payload.type || ''
 
@@ -137,7 +137,13 @@ export function useChatRealtime() {
                     const myId = userRef.current?.id
                     if (callSession && caller && caller.id !== myId) {
                       if (!payload.recipientId || payload.recipientId === myId) {
-                        callStore.setIncomingCall({ callSession, caller })
+                        if (
+                          !handledCallIds.has(callSession.id) &&
+                          !callStore.isCallStarting &&
+                          callStore.activeCall?.id !== callSession.id
+                        ) {
+                          callStore.setIncomingCall({ callSession, caller })
+                        }
                       }
                     }
                   } else if (eventType === 'call_accepted') {

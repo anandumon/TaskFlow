@@ -5,7 +5,7 @@ import { PreJoinModal } from './PreJoinModal'
 import { IncomingCallModal } from './IncomingCallModal'
 import { LiveCallModal } from './LiveCallModal'
 import { MinimizedCallBar } from './MinimizedCallBar'
-import { useCallStore } from '@/stores/call-store'
+import { useCallStore, handledCallIds } from '@/stores/call-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTermsStore } from '@/stores/terms-store'
@@ -48,8 +48,10 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
               localStorage.getItem('taskflow_token')
             : null
 
+        const callStore = useCallStore.getState()
+
         // 1. Check for incoming calls where current user is ringing
-        if (!activeCallRef.current) {
+        if (!activeCallRef.current && !callStore.isCallStarting) {
           const res = await fetch(`/api/v1/workspaces/${wsId}/calls?incoming=true`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           })
@@ -57,8 +59,19 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
             const json = await res.json()
             const inc = json?.data
             if (inc && inc.callSession && inc.caller) {
+              const callId = inc.callSession.id
+              const currentActiveCall = useCallStore.getState().activeCall
+              if (
+                handledCallIds.has(callId) ||
+                currentActiveCall?.id === callId ||
+                useCallStore.getState().isCallStarting
+              ) {
+                return
+              }
+
               const termsStatus = useTermsStore.getState().status
               if (termsStatus === 'DECLINED') {
+                handledCallIds.add(callId)
                 // User has declined terms: auto-reject call and inform caller
                 fetch(`/api/v1/workspaces/${wsId}/calls/${inc.callSession.id}/participants/${userId}`, {
                   method: 'PATCH',

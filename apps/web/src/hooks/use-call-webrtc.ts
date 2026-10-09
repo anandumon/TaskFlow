@@ -36,36 +36,6 @@ export interface UseCallWebRTCResult {
  * Attaches a MediaStream to a video or audio element ref and keeps it attached across renders.
  * Re-attaches when either the stream OR the element changes (handles minimize/restore remounting).
  */
-export function useStreamRef<T extends HTMLVideoElement | HTMLAudioElement>(
-  stream: MediaStream | null
-): React.MutableRefObject<T | null> {
-  const ref = useRef<T | null>(null)
-  const streamRef = useRef(stream)
-  streamRef.current = stream
-
-  // Re-attach whenever the stream changes
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-
-    if (el.srcObject !== stream) {
-      el.srcObject = stream
-    }
-
-    if (stream && el.paused) {
-      el.play().catch((err) => {
-        console.warn('[useStreamRef] Play deferred:', err?.name || err)
-      })
-    }
-  }, [stream])
-
-  return ref
-}
-
-/**
- * Helper: attach stream to an element after mount (call this in a ref callback).
- * Used by LiveCallModal to handle the minimize/restore element remount edge case.
- */
 export function attachStreamToElement(
   el: HTMLVideoElement | HTMLAudioElement | null,
   stream: MediaStream | null
@@ -74,9 +44,35 @@ export function attachStreamToElement(
   if (el.srcObject !== stream) {
     el.srcObject = stream
   }
-  if (stream && el.paused) {
-    el.play().catch(() => {})
+  if (stream) {
+    const playPromise = el.play()
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        // Autoplay may need user gesture
+        console.warn('[attachStreamToElement] Play deferred:', err?.name || err)
+      })
+    }
   }
+}
+
+/**
+ * Attaches a MediaStream to a video or audio element ref and keeps it attached across renders.
+ * Re-attaches when either the stream OR the element changes (handles minimize/restore remounting).
+ */
+export function useStreamRef<T extends HTMLVideoElement | HTMLAudioElement>(
+  stream: MediaStream | null
+): React.MutableRefObject<T | null> {
+  const ref = useRef<T | null>(null)
+
+  // Re-attach whenever the stream changes
+  useEffect(() => {
+    const el = ref.current
+    if (el) {
+      attachStreamToElement(el, stream)
+    }
+  }, [stream])
+
+  return ref
 }
 
 
