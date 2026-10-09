@@ -16,6 +16,8 @@ import { useChatRealtime } from '@/hooks/use-chat-realtime'
 import { useProjectStore } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
 import { CallProvider } from '@/features/calls/components/CallProvider'
+import { TermsAndConditionsModal } from '@/components/terms-modal'
+import { useTermsStore } from '@/stores/terms-store'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   usePresence()
@@ -33,6 +35,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+
+  const { isModalOpen: isTermsModalOpen, openModal: openTermsModal, fetchTermsStatus } = useTermsStore()
+
+  useEffect(() => {
+    if (!user?.id || !isAuthenticated || isLoggingOut) return
+    fetchTermsStatus(user.id).then((status) => {
+      if (status === 'PENDING') {
+        openTermsModal()
+      }
+    })
+  }, [user?.id, isAuthenticated, isLoggingOut, fetchTermsStatus, openTermsModal])
 
   const hasPrefetchedRef = useRef(false)
 
@@ -226,6 +239,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <CommandPalette isOpen={commandOpen} onClose={() => setCommandOpen(false)} />
       <CallProvider />
+      <TermsAndConditionsModal isOpen={isTermsModalOpen} />
     </div>
   )
 }

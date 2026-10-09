@@ -8,6 +8,7 @@ import { MinimizedCallBar } from './MinimizedCallBar'
 import { useCallStore } from '@/stores/call-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { useTermsStore } from '@/stores/terms-store'
 
 export function CallProvider({ children }: { children?: React.ReactNode }) {
   const { user } = useAuthStore()
@@ -56,7 +57,19 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
             const json = await res.json()
             const inc = json?.data
             if (inc && inc.callSession && inc.caller) {
-              if (
+              const termsStatus = useTermsStore.getState().status
+              if (termsStatus === 'DECLINED') {
+                // User has declined terms: auto-reject call and inform caller
+                fetch(`/api/v1/workspaces/${wsId}/calls/${inc.callSession.id}/participants/${userId}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({ action: 'DECLINE' }),
+                }).catch(() => {})
+                setIncomingCall(null)
+              } else if (
                 !incomingCallRef.current ||
                 incomingCallRef.current.callSession.id !== inc.callSession.id
               ) {

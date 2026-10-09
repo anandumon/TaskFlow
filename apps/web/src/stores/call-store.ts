@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useTermsStore } from './terms-store'
 
 export type CallType =
   | 'ONE_TO_ONE_VOICE'
@@ -118,6 +119,16 @@ export const useCallStore = create<CallState>((set, get) => ({
 
   openPreJoin: (options) => {
     if (get().activeCall || get().isCallStarting) return
+    const termsStatus = useTermsStore.getState().status
+    if (termsStatus === 'DECLINED') {
+      set({
+        isPreJoinOpen: true,
+        preJoinOptions: options,
+        errorMessage: 'You have declined the Terms and Conditions. Voice and video calling features are disabled until you accept them in Settings.',
+        localVideoOff: true,
+      })
+      return
+    }
     set({
       isPreJoinOpen: true,
       preJoinOptions: options,
@@ -134,6 +145,12 @@ export const useCallStore = create<CallState>((set, get) => ({
     if (get().isCallStarting || get().activeCall) return false
     const { preJoinOptions } = get()
     if (!preJoinOptions) return false
+
+    const termsStatus = useTermsStore.getState().status
+    if (termsStatus === 'DECLINED') {
+      set({ errorMessage: 'You have declined the Terms and Conditions. Voice and video calling features are disabled until you accept them in Settings.' })
+      return false
+    }
 
     set({ isCallStarting: true })
     try {

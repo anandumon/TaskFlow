@@ -183,6 +183,8 @@ export default function ProjectDetailsPage() {
   const [editCustomTag, setEditCustomTag] = useState('')
   const [editTag, setEditTag] = useState('')
   const [editAssignee, setEditAssignee] = useState('')
+  const [editAssignedBy, setEditAssignedBy] = useState('')
+  const [editProgress, setEditProgress] = useState(0)
   const [editDue, setEditDue] = useState('')
   const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium')
   const [editStatus, setEditStatus] = useState<TaskStatus>('todo')
@@ -858,7 +860,9 @@ export default function ProjectDetailsPage() {
       await updateTask(editingTask.id, {
         title: editTitle.trim(),
         tag: finalTag,
-        assigneeName: getFirstName(editAssignee),
+        assigneeName: getFirstName(editAssignee || currentUserName),
+        reviewerName: getFirstName(editAssignedBy || currentUserName),
+        progress: editProgress,
         dueDate: editDue,
         priority: editPriority,
         status: editStatus,
@@ -913,6 +917,8 @@ export default function ProjectDetailsPage() {
       setEditTag(catValue)
     }
     setEditAssignee(getFirstName(t.assigneeName || 'You'))
+    setEditAssignedBy(getFirstName(t.reviewerName || currentUserName))
+    setEditProgress(t.progress !== undefined && t.progress !== null ? t.progress : calculateTaskProgress(t))
     setEditDue(t.dueDate || new Date().toISOString().split('T')[0])
     setEditPriority(t.priority)
     setEditStatus(t.status)
@@ -2463,64 +2469,116 @@ export default function ProjectDetailsPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
-                      <select
-                        value={editCategory}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          setEditCategory(val)
-                          if (val === 'custom') {
-                            setEditTag(editCustomTag.trim() || 'Custom')
-                          } else {
-                            setEditTag(val)
-                          }
-                        }}
-                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                      >
-                        {DELIVERABLE_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat} className="bg-background text-foreground">
-                            {cat}
-                          </option>
-                        ))}
-                        <option value="custom" className="bg-background text-foreground">
-                          Custom...
+                  {/* Category / Tag */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Category / Tag</label>
+                    <select
+                      value={editCategory}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setEditCategory(val)
+                        if (val === 'custom') {
+                          setEditTag(editCustomTag.trim() || 'Custom')
+                        } else {
+                          setEditTag(val)
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      {DELIVERABLE_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat} className="bg-background text-foreground">
+                          {cat}
                         </option>
-                      </select>
+                      ))}
+                      <option value="custom" className="bg-background text-foreground">
+                        Custom...
+                      </option>
+                    </select>
 
-                      {editCategory === 'custom' && (
-                        <div className="pt-1.5 animate-fade-in">
-                          <input
-                            type="text"
-                            placeholder="Enter custom category / tag..."
-                            value={editCustomTag}
-                            onChange={(e) => {
-                              setEditCustomTag(e.target.value)
-                              setEditTag(e.target.value.trim() || 'Custom')
-                            }}
-                            className="w-full px-3 py-2 rounded-xl bg-background border border-primary/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            autoFocus
-                          />
-                        </div>
-                      )}
+                    {editCategory === 'custom' && (
+                      <div className="pt-1.5 animate-fade-in">
+                        <input
+                          type="text"
+                          placeholder="Enter custom category / tag..."
+                          value={editCustomTag}
+                          onChange={(e) => {
+                            setEditCustomTag(e.target.value)
+                            setEditTag(e.target.value.trim() || 'Custom')
+                          }}
+                          className="w-full px-3 py-2 rounded-xl bg-background border border-primary/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                          autoFocus
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assignee & Assigned By Dropdowns */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <UserSelect
+                      label="Assignee"
+                      icon={User}
+                      value={editAssignee}
+                      onChange={setEditAssignee}
+                      users={availableUsers}
+                      placeholder="Select assignee..."
+                    />
+                    <UserSelect
+                      label="Assigned By"
+                      icon={UserCheck}
+                      value={editAssignedBy}
+                      onChange={setEditAssignedBy}
+                      users={availableUsers}
+                      placeholder="Select assigner..."
+                    />
+                  </div>
+
+                  {/* Task Progress Control */}
+                  <div className="p-3.5 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-primary" /> Task Progress
+                      </span>
+                      <span className="font-bold text-primary px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs shadow-xs">
+                        {editProgress}%
+                      </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Assignee</label>
+                    {/* Interactive Slider */}
+                    <div className="relative w-full h-6 flex items-center select-none group">
+                      <div className="absolute inset-x-0 h-2.5 rounded-full bg-muted overflow-hidden border border-border">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 via-primary to-indigo-500 rounded-full transition-all duration-150 relative"
+                          style={{ width: `${editProgress}%` }}
+                        />
+                      </div>
                       <input
-                        type="text"
-                        list="edit-assignee-options"
-                        value={editAssignee}
-                        onChange={(e) => setEditAssignee(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                        placeholder="Assignee name..."
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        value={editProgress}
+                        onChange={(e) => setEditProgress(parseInt(e.target.value, 10))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        aria-label="Deliverable progress percentage"
                       />
-                      <datalist id="edit-assignee-options">
-                        {availableAssignees.map((name) => (
-                          <option key={name} value={name} />
-                        ))}
-                      </datalist>
+                    </div>
+
+                    {/* Quick percentage buttons */}
+                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                      {[0, 25, 50, 75, 100].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setEditProgress(preset)}
+                          className={`flex-1 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                            editProgress === preset
+                              ? 'bg-primary text-primary-foreground border-primary font-bold shadow-xs'
+                              : 'bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {preset}%
+                        </button>
+                      ))}
                     </div>
                   </div>
 

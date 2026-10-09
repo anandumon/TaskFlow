@@ -28,12 +28,16 @@ import {
   AlertTriangle,
   Pencil,
   ExternalLink,
+  PhoneOff,
+  FileText,
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { ThemeSettingsView } from '@/features/theme/components/ThemeSettingsView'
 import { useProjectStore, Project } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
 import { SettingsSkeleton } from '@/components/loading'
+import { useTermsStore } from '@/stores/terms-store'
+import { TermsAndConditionsModal } from '@/components/terms-modal'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
@@ -55,37 +59,45 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'organization' | 'workspace' | 'privacy'>('profile')
 
-  // Privacy & Realtime Media Terms State
-  const [hasAcceptedPrivacyTerms, setHasAcceptedPrivacyTerms] = useState(false)
-  const [acceptedAtTimestamp, setAcceptedAtTimestamp] = useState<string | null>(null)
-  const [isAcceptingTerms, setIsAcceptingTerms] = useState(false)
+  // Terms & Conditions State
+  const {
+    status: termsStatus,
+    acceptedAt: termsAcceptedAt,
+    declinedAt: termsDeclinedAt,
+    acceptTerms,
+    declineTerms,
+    fetchTermsStatus,
+    isLoading: isTermsLoading,
+  } = useTermsStore()
+
+  const [isReadingTermsModalOpen, setIsReadingTermsModalOpen] = useState(false)
   const [privacyAgreedCheck, setPrivacyAgreedCheck] = useState(false)
 
   useEffect(() => {
     if (user?.id) {
-      try {
-        const stored = localStorage.getItem(`taskflow_privacy_terms_${user.id}`)
-        if (stored) {
-          setHasAcceptedPrivacyTerms(true)
-          setAcceptedAtTimestamp(stored)
+      fetchTermsStatus(user.id).then((st) => {
+        if (st === 'ACCEPTED') {
           setPrivacyAgreedCheck(true)
         }
-      } catch {}
+      })
     }
-  }, [user?.id])
+  }, [user?.id, fetchTermsStatus])
 
-  const handleAcceptPrivacyTerms = () => {
+  const handleAcceptPrivacyTerms = async () => {
     if (!user?.id) return
-    setIsAcceptingTerms(true)
-    const now = new Date().toISOString()
-    try {
-      localStorage.setItem(`taskflow_privacy_terms_${user.id}`, now)
-      setHasAcceptedPrivacyTerms(true)
-      setAcceptedAtTimestamp(now)
+    const ok = await acceptTerms(user.id)
+    if (ok) {
       setPrivacyAgreedCheck(true)
-      showToast('✓ Privacy Policy & E2EE Media Terms accepted!')
-    } finally {
-      setIsAcceptingTerms(false)
+      showToast('✓ Terms and Conditions accepted! Calling features enabled.')
+    }
+  }
+
+  const handleDeclinePrivacyTerms = async () => {
+    if (!user?.id) return
+    const ok = await declineTerms(user.id)
+    if (ok) {
+      setPrivacyAgreedCheck(false)
+      showToast('⚠️ Terms declined. Calling features disabled.')
     }
   }
 
@@ -1422,10 +1434,15 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {hasAcceptedPrivacyTerms ? (
+              {termsStatus === 'ACCEPTED' ? (
                 <div className="px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center gap-1.5 shadow-xs">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Legally Accepted</span>
+                </div>
+              ) : termsStatus === 'DECLINED' ? (
+                <div className="px-3.5 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <PhoneOff className="w-4 h-4" />
+                  <span>Terms Declined (Calling Disabled)</span>
                 </div>
               ) : (
                 <div className="px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center gap-1.5 shadow-xs">
@@ -1435,6 +1452,61 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+
+          {/* Declined State Alert Callout */}
+          {termsStatus === 'DECLINED' && (
+            <div className="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 space-y-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-rose-500">
+                <PhoneOff className="w-5 h-5 shrink-0" />
+                <span>Voice & Video Calling Features are Currently Disabled</span>
+              </div>
+              <p className="text-xs text-foreground/80 leading-relaxed">
+                You previously declined the Terms and Conditions. In this state, you cannot make or receive voice or video calls, and other workspace members who attempt to call you will be notified that you have declined calling features. You can review the terms below and click <strong>Accept Terms</strong> to immediately restore calling access.
+              </p>
+              <div className="pt-1 flex items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={isTermsLoading}
+                  onClick={handleAcceptPrivacyTerms}
+                  className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isTermsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  <span>Accept Terms & Enable Calling</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReadingTermsModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span>Read Full Agreement</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Accepted State Notification Banner */}
+          {termsStatus === 'ACCEPTED' && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                <div>
+                  <div className="font-bold text-xs text-foreground">Terms and Conditions Active & Compliant</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Accepted on {termsAcceptedAt ? new Date(termsAcceptedAt).toLocaleString() : 'Record confirmed'}. Full platform features and P2P encrypted calling are active.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReadingTermsModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-muted transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <FileText className="w-4 h-4 text-primary" />
+                <span>Read Terms Document</span>
+              </button>
+            </div>
+          )}
 
           {/* Legal Term Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1489,9 +1561,10 @@ export default function SettingsPage() {
               <input
                 type="checkbox"
                 id="privacy-terms-checkbox"
-                checked={privacyAgreedCheck}
+                checked={privacyAgreedCheck || termsStatus === 'ACCEPTED'}
                 onChange={(e) => setPrivacyAgreedCheck(e.target.checked)}
-                className="mt-1 w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                disabled={termsStatus === 'ACCEPTED'}
+                className="mt-1 w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer disabled:cursor-default"
               />
               <label htmlFor="privacy-terms-checkbox" className="text-xs text-foreground leading-relaxed cursor-pointer select-none">
                 <span className="font-bold">Affirmative Legal Consent:</span> I have read, understood, and agree to the TaskFlow Privacy Policy, Realtime P2P Media Communications Terms, and Data Protection Agreement. I consent to encrypted peer-to-peer data transfer for voice and video calling.
@@ -1500,31 +1573,56 @@ export default function SettingsPage() {
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-border/60">
               <div className="text-xs text-muted-foreground">
-                {hasAcceptedPrivacyTerms && acceptedAtTimestamp ? (
+                {termsStatus === 'ACCEPTED' ? (
                   <span className="text-emerald-500 font-semibold flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" />
-                    Accepted on {new Date(acceptedAtTimestamp).toLocaleString()}
+                    Accepted on {termsAcceptedAt ? new Date(termsAcceptedAt).toLocaleString() : 'Record confirmed'}
+                  </span>
+                ) : termsStatus === 'DECLINED' ? (
+                  <span className="text-rose-500 font-semibold flex items-center gap-1.5">
+                    <PhoneOff className="w-4 h-4" />
+                    Declined on {termsDeclinedAt ? new Date(termsDeclinedAt).toLocaleString() : 'Record updated'} &bull; Calling disabled
                   </span>
                 ) : (
                   <span>Status: Pending user acceptance</span>
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={handleAcceptPrivacyTerms}
-                disabled={!privacyAgreedCheck || hasAcceptedPrivacyTerms || isAcceptingTerms}
-                className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-              >
-                {isAcceptingTerms ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4" />
+              <div className="flex items-center gap-2">
+                {termsStatus !== 'DECLINED' && termsStatus !== 'ACCEPTED' && (
+                  <button
+                    type="button"
+                    onClick={handleDeclinePrivacyTerms}
+                    disabled={isTermsLoading}
+                    className="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/30 text-xs font-semibold hover:bg-rose-500/20 transition-all cursor-pointer"
+                  >
+                    Decline Terms
+                  </button>
                 )}
-                <span>{hasAcceptedPrivacyTerms ? 'Terms Accepted & Safe' : 'Accept Privacy & Media Terms'}</span>
-              </button>
+
+                <button
+                  type="button"
+                  onClick={handleAcceptPrivacyTerms}
+                  disabled={termsStatus === 'ACCEPTED' || isTermsLoading}
+                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  {isTermsLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  <span>{termsStatus === 'ACCEPTED' ? 'Terms Accepted & Active' : 'Accept Terms & Enable Calling'}</span>
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Reader Modal */}
+          <TermsAndConditionsModal
+            isOpen={isReadingTermsModalOpen}
+            onClose={() => setIsReadingTermsModalOpen(false)}
+            readOnly={true}
+          />
         </div>
       )}
       </div>

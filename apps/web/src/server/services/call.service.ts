@@ -220,7 +220,22 @@ export async function createCall(
     isE2EE?: boolean
   }
 ): Promise<{ success: boolean; callSession?: CallSessionDto; error?: string; code?: string }> {
-  // 1. Caller Online Check
+  // 1. Caller Terms & Conditions Check: Ensure caller has not declined terms
+  try {
+    const callerTerms = await queryOne(
+      `SELECT status FROM user_terms_acceptance WHERE user_id = $1 LIMIT 1`,
+      [caller.id]
+    )
+    if (callerTerms && callerTerms.status === 'DECLINED') {
+      return {
+        success: false,
+        error: 'You have declined the Terms and Conditions. Voice and video calling features are disabled until you accept them in Settings.',
+        code: 'CALLER_TERMS_DECLINED',
+      }
+    }
+  } catch {}
+
+  // 2. Caller Online Check
   // Note: we ensure caller is marked online in registry
   if (!isUserOnline(caller.id)) {
     // If presence registry doesn't have it yet, allow if authenticated, but record presence
@@ -234,7 +249,7 @@ export async function createCall(
     })
   }
 
-  // 2. Online Presence Check for 1-on-1 Calls: Recipient MUST be online!
+  // 3. Online Presence & Terms Check for 1-on-1 Calls: Recipient MUST have accepted terms!
   const isOneToOne =
     options.callType === 'ONE_TO_ONE_VOICE' || options.callType === 'ONE_TO_ONE_VIDEO'
 
@@ -251,6 +266,22 @@ export async function createCall(
     if (recipientCanonicalId === caller.id) {
       return { success: false, error: 'Cannot call yourself', code: 'SELF_CALL' }
     }
+
+    // Check if recipient has declined Terms & Conditions
+    try {
+      const recipientTerms = await queryOne(
+        `SELECT status FROM user_terms_acceptance WHERE user_id = $1 OR user_id = $2 LIMIT 1`,
+        [recipientCanonicalId, options.recipientId]
+      )
+      if (recipientTerms && recipientTerms.status === 'DECLINED') {
+        const nameToShow = resolvedRecipient?.name || 'This user'
+        return {
+          success: false,
+          error: `${nameToShow} has declined the Terms and Conditions and cannot participate in voice or video calls.`,
+          code: 'RECIPIENT_TERMS_DECLINED',
+        }
+      }
+    } catch {}
 
     // Check if recipient is online in presence registry (checking canonical ID, original recipientId, and email)
     let recipientOnline =
@@ -666,6 +697,19 @@ export async function generateLiveKitToken(
   )
   if (!participant && session.created_by !== user.id) {
     throw new Error('Unauthorized: User is not a participant of this call')
+  }
+
+  // Terms & Conditions guard
+  try {
+    const terms = await queryOne(
+      `SELECT status FROM user_terms_acceptance WHERE user_id = $1 LIMIT 1`,
+      [user.id]
+    )
+    if (terms && terms.status === 'DECLINED') {
+      throw new Error('You have declined the Terms and Conditions. Voice and video calling features are disabled until you accept them in Settings.')
+    }
+  } catch (err: any) {
+    if (err.message?.includes('declined the Terms and Conditions')) throw err
   }
 
   const apiKey = process.env.LIVEKIT_API_KEY
