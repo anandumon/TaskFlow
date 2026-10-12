@@ -35,8 +35,11 @@ export default function CalendarPage() {
   const { projects, loadProjects } = useProjectStore()
   const { connections, unifiedEvents, fetchConnections, fetchUnifiedEvents } = useCalendarStore()
 
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1)) // Sep 2026
-  const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate()) // Defaults to 1 (Today)
+  const [currentDate, setCurrentDate] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+  const [selectedDay, setSelectedDay] = useState<number>(() => new Date().getDate())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)

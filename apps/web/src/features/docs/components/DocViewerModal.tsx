@@ -382,30 +382,30 @@ export function DocViewerModal({
   if (!isMounted || typeof document === 'undefined') return null
 
   const modalContent = (
-    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] flex flex-col bg-[#0b0c10] text-[#e1e4ea] animate-fade-in select-none">
+    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] flex flex-col bg-background text-foreground animate-fade-in select-none">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-zinc-800 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 flex items-center gap-2 animate-slide-down">
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-card text-foreground text-xs font-semibold shadow-2xl border border-border flex items-center gap-2 animate-slide-down">
+          <Check className="w-3.5 h-3.5 text-emerald-500" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* TOP HEADER BAR (Matching Screenshot 5) */}
-      <div className="h-14 border-b border-white/10 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-[#0e0f14] select-none shadow-md">
+      <div className="h-14 border-b border-border px-4 sm:px-6 flex items-center justify-between shrink-0 bg-card select-none shadow-xs">
         {/* Left: Sidebar toggle, Breadcrumbs */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             title={isSidebarOpen ? 'Hide doc pages' : 'Show doc pages'}
           >
             {isSidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </button>
 
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-400">
-            <span className="hover:text-white transition-colors cursor-pointer" onClick={handleAttemptClose}>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="hover:text-foreground transition-colors cursor-pointer" onClick={handleAttemptClose}>
               Docs
             </span>
             <span>/</span>

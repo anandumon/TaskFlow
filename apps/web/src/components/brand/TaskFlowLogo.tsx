@@ -189,16 +189,18 @@ export function TaskFlowLogo({
       {/* ── Wordmark Typography ("TaskFlow" Refined Serif) ───── */}
       {variant !== 'icon' && (
         <span
-          className={`font-serif font-bold tracking-tight whitespace-nowrap transition-colors duration-200 select-none ${dimensions.textClass} ${textClassName}`}
+          className={`font-serif font-bold tracking-tight whitespace-nowrap transition-colors duration-200 select-none ${dimensions.textClass} ${
+            colorScheme === 'dark' ? 'text-white' : colorScheme === 'light' ? 'text-slate-900' : 'text-foreground'
+          } ${textClassName}`}
           style={{
             fontFamily: "'Playfair Display', 'Cormorant Garamond', 'Cinzel', Georgia, 'Times New Roman', serif",
             letterSpacing: '-0.02em',
           }}
         >
-          <span className="text-foreground transition-colors group-hover:text-primary">
+          <span className="transition-colors group-hover:text-primary">
             Task
           </span>
-          <span className="text-foreground transition-colors group-hover:text-primary">
+          <span className="transition-colors group-hover:text-primary">
             Flow
           </span>
         </span>

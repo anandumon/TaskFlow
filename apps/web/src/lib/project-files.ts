@@ -89,17 +89,19 @@ export function extractProjectFiles(
   const projectTasks = tasks.filter((t) => t.projectId === project.id)
 
   for (const task of projectTasks) {
-    // Top-level task attachments
+    // Top-level task attachments from task.attachments or task.filesChanged
     let taskAttachments: TaskAttachment[] = []
-    if (task.attachments) {
-      if (typeof task.attachments === 'string') {
+    const rawAtt = (task as any).attachments || task.filesChanged
+    if (rawAtt) {
+      if (typeof rawAtt === 'string') {
         try {
-          taskAttachments = JSON.parse(task.attachments)
+          const parsed = JSON.parse(rawAtt)
+          if (Array.isArray(parsed)) taskAttachments = parsed
         } catch {
           taskAttachments = []
         }
-      } else if (Array.isArray(task.attachments)) {
-        taskAttachments = task.attachments
+      } else if (Array.isArray(rawAtt)) {
+        taskAttachments = rawAtt
       }
     }
 

@@ -391,32 +391,32 @@ export default function DocsPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-[#0e0f14] text-[#e1e4ea] select-none p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+    <div className="flex-1 flex flex-col min-h-screen bg-background text-foreground select-none p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-zinc-800 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 flex items-center gap-2 animate-slide-down">
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-card text-foreground text-xs font-semibold shadow-2xl border border-border flex items-center gap-2 animate-slide-down">
+          <Check className="w-3.5 h-3.5 text-emerald-500" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* TOP HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/80">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-sky-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-sm">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-sky-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-500 shadow-xs">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Docs</h1>
-                <span className="px-2 py-0.5 rounded-full bg-white/10 text-zinc-300 text-[11px] font-semibold border border-white/10">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">Docs</h1>
+                <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[11px] font-semibold border border-border">
                   {docs.length}
                 </span>
               </div>
             </div>
           </div>
-          <p className="text-xs text-zinc-400 pl-11">
+          <p className="text-xs text-muted-foreground pl-11">
             Knowledge base, technical specifications, and team documentation
           </p>
         </div>
@@ -424,14 +424,14 @@ export default function DocsPage() {
         {/* Header Right Actions */}
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
           {/* View Toggle */}
-          <div className="flex items-center p-0.5 rounded-xl bg-white/5 border border-white/10">
+          <div className="flex items-center p-0.5 rounded-xl bg-muted/60 border border-border">
             <button
               type="button"
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
                 viewMode === 'table'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
               title="Table View"
             >
@@ -442,8 +442,8 @@ export default function DocsPage() {
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
                 viewMode === 'grid'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
               title="Card Grid View"
             >
@@ -455,42 +455,42 @@ export default function DocsPage() {
           <button
             type="button"
             onClick={() => showToast('Import feature: select markdown or PDF files')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 border border-white/10 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer shadow-xs"
           >
-            <Upload className="w-3.5 h-3.5 text-zinc-400" />
+            <Upload className="w-3.5 h-3.5 text-muted-foreground" />
             <span>Import</span>
           </button>
 
           {/* New Doc Button with Dropdown */}
           <div className="relative" ref={newDocMenuRef}>
-            <div className="inline-flex rounded-xl shadow-lg shadow-primary/20 overflow-hidden">
+            <div className="inline-flex rounded-xl shadow-lg shadow-emerald-500/10 overflow-hidden">
               <button
                 type="button"
                 onClick={() => handleCreateNewDoc()}
-                className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 text-xs font-bold transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
               >
-                <Plus className="w-4 h-4 text-zinc-950 stroke-[2.5]" />
+                <Plus className="w-4 h-4 text-white stroke-[2.5]" />
                 <span>New Doc</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsNewDocMenuOpen((prev) => !prev)}
-                className="px-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 transition-colors border-l border-emerald-400/30 cursor-pointer flex items-center justify-center"
+                className="px-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors border-l border-emerald-400/30 cursor-pointer flex items-center justify-center"
                 title="Templates & Presets"
               >
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-950" />
+                <ChevronDown className="w-3.5 h-3.5 text-white" />
               </button>
             </div>
 
             {/* New Doc Preset Menu */}
             {isNewDocMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#181922] border border-white/15 shadow-2xl p-2 z-[100] space-y-1 animate-scale-in">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-card border border-border shadow-2xl p-2 z-[100] space-y-1 animate-scale-in">
                 <button
                   type="button"
                   onClick={() => handleCreateNewDoc('Untitled Doc')}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-zinc-200 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
-                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <FileText className="w-4 h-4 text-emerald-500" />
                   <span>Blank Document</span>
                 </button>
                 <button
@@ -502,9 +502,9 @@ export default function DocsPage() {
                       'Engineering Space'
                     )
                   }
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-zinc-200 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <Sparkles className="w-4 h-4 text-purple-500" />
                   <span>Architecture Spec</span>
                 </button>
                 <button
@@ -516,9 +516,9 @@ export default function DocsPage() {
                       'Product Roadmap'
                     )
                   }
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-zinc-200 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
-                  <Folder className="w-4 h-4 text-sky-400" />
+                  <Folder className="w-4 h-4 text-sky-500" />
                   <span>Product Roadmap</span>
                 </button>
                 <button
@@ -530,9 +530,9 @@ export default function DocsPage() {
                       'Engineering Space'
                     )
                   }
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-zinc-200 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
-                  <BookOpen className="w-4 h-4 text-amber-400" />
+                  <BookOpen className="w-4 h-4 text-amber-500" />
                   <span>Decision Record (ADR)</span>
                 </button>
               </div>
@@ -543,53 +543,53 @@ export default function DocsPage() {
 
       {/* METRICS SUMMARY STRIP */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="p-3.5 rounded-2xl bg-[#13141c] border border-white/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
             <FileText className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-zinc-400">Total All Docs</p>
-            <p className="text-base font-bold text-white">{stats.total}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Total All Docs</p>
+            <p className="text-base font-bold text-foreground">{stats.total}</p>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#13141c] border border-white/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-500 flex items-center justify-center shrink-0">
             <Folder className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-zinc-400">Project Files</p>
-            <p className="text-base font-bold text-purple-400">{stats.projectFilesCount}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Project Files</p>
+            <p className="text-base font-bold text-purple-500">{stats.projectFilesCount}</p>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#13141c] border border-white/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
             <Star className="w-4 h-4 fill-current" />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-zinc-400">Favorites</p>
-            <p className="text-base font-bold text-white">{stats.starred}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Favorites</p>
+            <p className="text-base font-bold text-foreground">{stats.starred}</p>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#13141c] border border-white/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-500 flex items-center justify-center shrink-0">
             <Folder className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-zinc-400">Team Spaces</p>
-            <p className="text-base font-bold text-white">{stats.spacesCount}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">Team Spaces</p>
+            <p className="text-base font-bold text-foreground">{stats.spacesCount}</p>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#13141c] border border-white/5 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/80 flex items-center gap-3 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
             <Clock className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-zinc-400">Latest Update</p>
-            <p className="text-xs font-bold text-white truncate max-w-[120px] sm:max-w-[150px]">
+            <p className="text-[11px] font-medium text-muted-foreground">Latest Update</p>
+            <p className="text-xs font-bold text-foreground truncate max-w-[120px] sm:max-w-[150px]">
               {stats.lastUpdatedTitle}
             </p>
           </div>
@@ -601,14 +601,14 @@ export default function DocsPage() {
         {/* Left Side: Segmented Filter Tabs & Space Filter */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Segmented View Tabs */}
-          <div className="flex items-center p-1 rounded-xl bg-white/5 border border-white/10 text-xs">
+          <div className="flex items-center p-1 rounded-xl bg-muted/50 border border-border text-xs">
             <button
               type="button"
               onClick={() => setActiveTab('all')}
               className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                 activeTab === 'all'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               All ({stats.total})
@@ -618,8 +618,8 @@ export default function DocsPage() {
               onClick={() => setActiveTab('docs')}
               className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                 activeTab === 'docs'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Team Docs ({stats.docCount})
@@ -629,14 +629,14 @@ export default function DocsPage() {
               onClick={() => setActiveTab('projects')}
               className={`px-3 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'projects'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Folder className="w-3 h-3 text-purple-400" />
+              <Folder className="w-3 h-3 text-purple-500" />
               <span>Project Files</span>
               {stats.projectFilesCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-400/20 text-purple-300 font-bold">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-300 font-bold">
                   {stats.projectFilesCount}
                 </span>
               )}
@@ -646,14 +646,14 @@ export default function DocsPage() {
               onClick={() => setActiveTab('starred')}
               className={`px-3 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
                 activeTab === 'starred'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Star className="w-3 h-3 text-amber-400 fill-current" />
+              <Star className="w-3 h-3 text-amber-500 fill-current" />
               <span>Favorites</span>
               {stats.starred > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 font-bold">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 font-bold">
                   {stats.starred}
                 </span>
               )}
@@ -663,8 +663,8 @@ export default function DocsPage() {
               onClick={() => setActiveTab('recent')}
               className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                 activeTab === 'recent'
-                  ? 'bg-white/15 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-background text-foreground shadow-xs border border-border/60'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Recent
@@ -677,18 +677,18 @@ export default function DocsPage() {
               <select
                 value={selectedSpace}
                 onChange={(e) => setSelectedSpace(e.target.value)}
-                className="appearance-none bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl pl-3 pr-8 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-white/20 font-medium cursor-pointer"
+                className="appearance-none bg-card hover:bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer shadow-xs"
               >
-                <option value="ALL" className="bg-[#181922] text-zinc-200">
+                <option value="ALL" className="bg-card text-foreground">
                   All Spaces
                 </option>
                 {availableSpaces.map((space) => (
-                  <option key={space} value={space} className="bg-[#181922] text-zinc-200">
+                  <option key={space} value={space} className="bg-card text-foreground">
                     {space}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           )}
 
@@ -697,37 +697,37 @@ export default function DocsPage() {
             <select
               value={activeSort}
               onChange={(e) => setActiveSort(e.target.value as any)}
-              className="appearance-none bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl pl-3 pr-8 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-white/20 font-medium cursor-pointer"
+              className="appearance-none bg-card hover:bg-muted/50 border border-border rounded-xl pl-3 pr-8 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer shadow-xs"
             >
-              <option value="updated" className="bg-[#181922] text-zinc-200">
+              <option value="updated" className="bg-card text-foreground">
                 Sort: Last Updated
               </option>
-              <option value="created" className="bg-[#181922] text-zinc-200">
+              <option value="created" className="bg-card text-foreground">
                 Sort: Date Created
               </option>
-              <option value="name" className="bg-[#181922] text-zinc-200">
+              <option value="name" className="bg-card text-foreground">
                 Sort: Title (A-Z)
               </option>
             </select>
-            <ArrowUpDown className="w-3 h-3 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ArrowUpDown className="w-3 h-3 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
         {/* Right Side: Search Input */}
         <div className="relative w-full md:w-72">
-          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
             placeholder="Search docs by title, space, or tag..."
-            className="bg-white/5 border border-white/10 rounded-xl pl-9 pr-8 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/25 w-full transition-all"
+            className="bg-card border border-border rounded-xl pl-9 pr-8 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full transition-all shadow-xs"
           />
           {searchFilter && (
             <button
               type="button"
               onClick={() => setSearchFilter('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-zinc-400 hover:text-white"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground"
             >
               <X className="w-3 h-3" />
             </button>
@@ -737,9 +737,9 @@ export default function DocsPage() {
 
       {/* BULK ACTION BAR (Floating when items selected) */}
       {selectedDocIds.length > 0 && (
-        <div className="p-2.5 px-4 rounded-2xl bg-[#161722] border border-indigo-500/30 shadow-xl flex items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200">
-            <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[11px] font-bold">
+        <div className="p-2.5 px-4 rounded-2xl bg-card border border-primary/40 shadow-xl flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[11px] font-bold">
               {selectedDocIds.length}
             </span>
             <span>of {filteredDocs.length} documents selected</span>
@@ -749,16 +749,16 @@ export default function DocsPage() {
             <button
               type="button"
               onClick={handleBulkStar}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-muted/60 hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer border border-border"
             >
-              <Star className="w-3.5 h-3.5 text-amber-400" />
+              <Star className="w-3.5 h-3.5 text-amber-500" />
               <span>Star</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsBulkDeleting(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete ({selectedDocIds.length})</span>
@@ -767,7 +767,7 @@ export default function DocsPage() {
             <button
               type="button"
               onClick={() => setSelectedDocIds([])}
-              className="p-1 rounded-lg text-zinc-400 hover:text-white transition-colors"
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
               title="Clear selection"
             >
               <X className="w-4 h-4" />
@@ -778,10 +778,10 @@ export default function DocsPage() {
 
       {/* VIEW 1: DATA TABLE VIEW */}
       {viewMode === 'table' && (
-        <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#111218] shadow-xl">
+        <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-white/10 bg-white/[0.02] text-zinc-400 font-medium">
+              <thead className="border-b border-border bg-muted/30 text-muted-foreground font-medium">
                 <tr>
                   <th className="py-3 px-4 w-10">
                     <input
@@ -793,15 +793,15 @@ export default function DocsPage() {
                       title={isAllSelected ? 'Deselect all' : 'Select all'}
                     />
                   </th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Name</th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Space</th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Tags</th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Author</th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Date updated</th>
-                  <th className="py-3 px-4 font-semibold text-zinc-300">Date viewed</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Name</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Space</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Tags</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Author</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Date updated</th>
+                  <th className="py-3 px-4 font-semibold text-foreground">Date viewed</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-border/60">
                 {filteredDocs.length > 0 || filteredProjectFiles.length > 0 ? (
                   <>
                     {/* 1. Regular Team Docs */}
@@ -813,7 +813,7 @@ export default function DocsPage() {
                         <tr
                           key={doc.id}
                           onClick={() => handleOpenDoc(doc.id)}
-                          className={`hover:bg-white/[0.04] transition-colors cursor-pointer group ${
+                          className={`hover:bg-muted/40 transition-colors cursor-pointer group ${
                             isSelected ? 'bg-primary/5' : ''
                           }`}
                         >
@@ -827,13 +827,13 @@ export default function DocsPage() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2.5">
-                              <span className="text-sky-400 text-sm">📄</span>
-                              <span className="font-semibold text-white group-hover:text-primary transition-colors">
+                              <span className="text-sky-500 text-sm">📄</span>
+                              <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
                                 {doc.title}
                               </span>
 
                               {subCount > 0 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 text-[10px] font-bold">
                                   <FilePlus className="w-2.5 h-2.5" />
                                   {subCount}
                                 </span>
@@ -841,7 +841,7 @@ export default function DocsPage() {
 
                               {doc.isProtected && (
                                 <span
-                                  className="text-amber-400"
+                                  className="text-amber-500"
                                   title="Protected document"
                                 >
                                   <Lock className="w-3 h-3" />
@@ -849,7 +849,7 @@ export default function DocsPage() {
                               )}
 
                               {doc.isWiki && (
-                                <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 text-[9px] font-bold border border-indigo-500/30">
+                                <span className="px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold border border-indigo-500/30">
                                   WIKI
                                 </span>
                               )}
@@ -859,7 +859,7 @@ export default function DocsPage() {
                                 <button
                                   type="button"
                                   onClick={(e) => handleCopyLink(e, doc.id)}
-                                  className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white"
+                                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                                   title="Copy link"
                                 >
                                   <LinkIcon className="w-3 h-3" />
@@ -867,10 +867,10 @@ export default function DocsPage() {
                                 <button
                                   type="button"
                                   onClick={(e) => handleToggleStar(e, doc)}
-                                  className={`p-1 rounded hover:bg-white/10 ${
+                                  className={`p-1 rounded hover:bg-muted ${
                                     doc.starred
-                                      ? 'text-amber-400'
-                                      : 'text-zinc-400 hover:text-amber-400'
+                                      ? 'text-amber-500'
+                                      : 'text-muted-foreground hover:text-amber-500'
                                   }`}
                                   title={doc.starred ? 'Remove favorite' : 'Add favorite'}
                                 >
@@ -881,7 +881,7 @@ export default function DocsPage() {
                                 <button
                                   type="button"
                                   onClick={(e) => handleRequestDeleteDoc(e, doc.id, doc.title)}
-                                  className="p-1 rounded hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400"
+                                  className="p-1 rounded hover:bg-rose-500/15 text-muted-foreground hover:text-rose-500"
                                   title="Delete document"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -891,7 +891,7 @@ export default function DocsPage() {
                           </td>
 
                           <td className="py-3 px-4">
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[11px] font-medium">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-300 text-[11px] font-medium">
                               <Users className="w-3 h-3" />
                               <span>{doc.location || 'Team Space'}</span>
                             </span>
@@ -903,31 +903,31 @@ export default function DocsPage() {
                                 {doc.tags.map((tag) => (
                                   <span
                                     key={tag}
-                                    className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-[10px] text-zinc-400 font-medium"
+                                    className="px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[10px] text-muted-foreground font-medium"
                                   >
                                     #{tag}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-zinc-600">—</span>
+                              <span className="text-muted-foreground/60">—</span>
                             )}
                           </td>
 
-                          <td className="py-3 px-4 text-zinc-400">
+                          <td className="py-3 px-4 text-muted-foreground">
                             <div className="flex items-center gap-1.5">
-                              <div className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-400 font-bold text-[9px] flex items-center justify-center border border-emerald-500/30">
+                              <div className="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[9px] flex items-center justify-center border border-emerald-500/30">
                                 {(doc.authorName || 'A').charAt(0).toUpperCase()}
                               </div>
-                              <span className="text-xs text-zinc-300">{doc.authorName || 'Team'}</span>
+                              <span className="text-xs text-foreground font-medium">{doc.authorName || 'Team'}</span>
                             </div>
                           </td>
 
-                          <td className="py-3 px-4 text-zinc-400 font-medium" suppressHydrationWarning>
+                          <td className="py-3 px-4 text-muted-foreground font-medium" suppressHydrationWarning>
                             {formatDocDate(doc.updatedAt)}
                           </td>
 
-                          <td className="py-3 px-4 text-zinc-400 font-medium" suppressHydrationWarning>
+                          <td className="py-3 px-4 text-muted-foreground font-medium" suppressHydrationWarning>
                             {doc.viewedAt ? formatDocDate(doc.viewedAt) : 'Today'}
                           </td>
                         </tr>
@@ -948,7 +948,7 @@ export default function DocsPage() {
                             uploadedBy: file.uploadedBy,
                           })
                         }
-                        className="hover:bg-white/[0.04] transition-colors cursor-pointer group bg-purple-500/[0.02]"
+                        className="hover:bg-muted/40 transition-colors cursor-pointer group bg-purple-500/[0.03]"
                       >
                         <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -961,10 +961,10 @@ export default function DocsPage() {
 
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                            <div className="w-6 h-6 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
                               {renderFileIcon(file, 'w-3.5 h-3.5')}
                             </div>
-                            <span className="font-semibold text-white group-hover:text-primary transition-colors truncate max-w-xs md:max-w-sm" title={file.name}>
+                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors truncate max-w-xs md:max-w-sm" title={file.name}>
                               {file.name}
                             </span>
 
@@ -985,8 +985,8 @@ export default function DocsPage() {
                             </span>
 
                             {/* View-Only Badge */}
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/80 text-zinc-400 text-[9px] font-bold shrink-0">
-                              <Eye className="w-2.5 h-2.5 text-sky-400" />
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-muted border border-border text-muted-foreground text-[9px] font-bold shrink-0">
+                              <Eye className="w-2.5 h-2.5 text-sky-500" />
                               <span>VIEW ONLY</span>
                             </span>
 
@@ -1005,7 +1005,7 @@ export default function DocsPage() {
                                     uploadedBy: file.uploadedBy,
                                   })
                                 }}
-                                className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                                 title="Open & view document contents"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -1017,7 +1017,7 @@ export default function DocsPage() {
                                   downloadFile(file.name, file.dataUrl)
                                   showToast(`Downloading "${file.name}"`)
                                 }}
-                                className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-emerald-400"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-emerald-500"
                                 title="Download file"
                               >
                                 <Download className="w-3.5 h-3.5" />
@@ -1027,34 +1027,34 @@ export default function DocsPage() {
                         </td>
 
                         <td className="py-3 px-4">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[11px] font-medium">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-300 text-[11px] font-medium">
                             <Folder className="w-3 h-3" />
                             <span>{file.taskTitle ? `Deliverable: ${file.taskTitle}` : 'Project Vault'}</span>
                           </span>
                         </td>
 
                         <td className="py-3 px-4">
-                          <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-[10px] text-zinc-400 font-bold uppercase">
+                          <span className="px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[10px] text-muted-foreground font-bold uppercase">
                             {file.name.split('.').pop() || 'FILE'}
                           </span>
                         </td>
 
-                        <td className="py-3 px-4 text-zinc-400">
+                        <td className="py-3 px-4 text-muted-foreground">
                           <div className="flex items-center gap-1.5">
-                            <div className="w-4 h-4 rounded-full bg-purple-600/30 text-purple-400 font-bold text-[9px] flex items-center justify-center border border-purple-500/30">
+                            <div className="w-4 h-4 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold text-[9px] flex items-center justify-center border border-purple-500/30">
                               {(file.uploadedBy || 'M').charAt(0).toUpperCase()}
                             </div>
-                            <span className="text-xs text-zinc-300 truncate max-w-[120px]">
+                            <span className="text-xs text-foreground font-medium truncate max-w-[120px]">
                               {file.uploadedBy || 'Team'}
                             </span>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 text-zinc-400 font-medium" suppressHydrationWarning>
+                        <td className="py-3 px-4 text-muted-foreground font-medium" suppressHydrationWarning>
                           {formatDocDate(file.uploadedAt)}
                         </td>
 
-                        <td className="py-3 px-4 text-zinc-400 font-medium">
+                        <td className="py-3 px-4 text-muted-foreground font-medium">
                           {formatFileSize(file.size)}
                         </td>
                       </tr>
@@ -1062,13 +1062,13 @@ export default function DocsPage() {
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center text-zinc-500 space-y-3">
-                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-500">
+                    <td colSpan={7} className="py-16 text-center text-muted-foreground space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto text-muted-foreground">
                         <BookOpen className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-sm font-bold text-white">No documents found</p>
-                        <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                        <p className="text-sm font-bold text-foreground">No documents found</p>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                           {searchFilter
                             ? `No docs matched "${searchFilter}". Try another search or filter.`
                             : 'Start by creating your first technical document, specification, or meeting notes.'}
@@ -1077,7 +1077,7 @@ export default function DocsPage() {
                       <button
                         type="button"
                         onClick={() => handleCreateNewDoc()}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-zinc-950 font-bold text-xs hover:bg-zinc-200 transition-colors shadow-md cursor-pointer mt-2"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors shadow-md cursor-pointer mt-2"
                       >
                         <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                         <span>Create New Doc</span>
@@ -1104,10 +1104,10 @@ export default function DocsPage() {
                   <div
                     key={doc.id}
                     onClick={() => handleOpenDoc(doc.id)}
-                    className={`p-5 rounded-2xl bg-[#12131b] hover:bg-[#161722] border transition-all cursor-pointer group flex flex-col justify-between space-y-4 shadow-lg ${
+                    className={`p-5 rounded-2xl bg-card hover:bg-card/90 border transition-all cursor-pointer group flex flex-col justify-between space-y-4 shadow-xs ${
                       isSelected
                         ? 'border-primary/50 shadow-primary/10'
-                        : 'border-white/10 hover:border-white/20'
+                        : 'border-border hover:border-border/80'
                     }`}
                   >
                     {/* Card Header */}
@@ -1115,7 +1115,7 @@ export default function DocsPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span className="text-xl">📄</span>
-                          <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate">
+                          <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
                             {doc.title}
                           </h3>
                         </div>
@@ -1124,10 +1124,10 @@ export default function DocsPage() {
                           <button
                             type="button"
                             onClick={(e) => handleToggleStar(e, doc)}
-                            className={`p-1 rounded-lg hover:bg-white/10 transition-colors ${
+                            className={`p-1 rounded-lg hover:bg-muted transition-colors ${
                               doc.starred
-                                ? 'text-amber-400'
-                                : 'text-zinc-500 hover:text-amber-400'
+                                ? 'text-amber-500'
+                                : 'text-muted-foreground hover:text-amber-500'
                             }`}
                             title="Favorite"
                           >
@@ -1138,7 +1138,7 @@ export default function DocsPage() {
                           <button
                             type="button"
                             onClick={(e) => handleRequestDeleteDoc(e, doc.id, doc.title)}
-                            className="p-1 rounded-lg hover:bg-rose-500/20 text-zinc-500 hover:text-rose-400 transition-colors"
+                            className="p-1 rounded-lg hover:bg-rose-500/15 text-muted-foreground hover:text-rose-500 transition-colors"
                             title="Delete"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1147,20 +1147,20 @@ export default function DocsPage() {
                       </div>
 
                       {/* Content Excerpt Preview */}
-                      <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                         {cleanPreviewText(doc.content)}
                       </p>
                     </div>
 
                     {/* Card Space & Tags */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/5">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/60">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-300 text-[10px] font-medium">
                         <Users className="w-2.5 h-2.5" />
                         <span>{doc.location || 'Team Space'}</span>
                       </span>
 
                       {subCount > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 text-[10px] font-bold">
                           <FilePlus className="w-2.5 h-2.5" />
                           <span>{subCount} subpages</span>
                         </span>
@@ -1169,7 +1169,7 @@ export default function DocsPage() {
                       {doc.tags?.slice(0, 2).map((t) => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 rounded-lg bg-white/5 text-[10px] text-zinc-400 font-medium"
+                          className="px-2 py-0.5 rounded-lg bg-muted text-[10px] text-muted-foreground font-medium"
                         >
                           #{t}
                         </span>
@@ -1177,12 +1177,12 @@ export default function DocsPage() {
                     </div>
 
                     {/* Card Footer */}
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-400 font-bold text-[9px] flex items-center justify-center border border-emerald-500/30">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[9px] flex items-center justify-center border border-emerald-500/30">
                           {(doc.authorName || 'A').charAt(0).toUpperCase()}
                         </div>
-                        <span className="text-zinc-300">{doc.authorName || 'Team'}</span>
+                        <span className="text-foreground font-medium">{doc.authorName || 'Team'}</span>
                       </div>
                       <span suppressHydrationWarning>{formatDocDate(doc.updatedAt)}</span>
                     </div>
@@ -1204,19 +1204,19 @@ export default function DocsPage() {
                       uploadedBy: file.uploadedBy,
                     })
                   }
-                  className="p-5 rounded-2xl bg-[#12131b] hover:bg-[#161722] border border-white/10 hover:border-primary/40 transition-all cursor-pointer group flex flex-col justify-between space-y-4 shadow-lg"
+                  className="p-5 rounded-2xl bg-card hover:bg-card/90 border border-border hover:border-primary/40 transition-all cursor-pointer group flex flex-col justify-between space-y-4 shadow-xs"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                           {renderFileIcon(file, 'w-4 h-4')}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors truncate" title={file.name}>
+                          <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate" title={file.name}>
                             {file.name}
                           </h3>
-                          <span className="text-[10px] text-zinc-400 font-medium">
+                          <span className="text-[10px] text-muted-foreground font-medium">
                             {formatFileSize(file.size)}
                           </span>
                         </div>
@@ -1236,7 +1236,7 @@ export default function DocsPage() {
                               uploadedBy: file.uploadedBy,
                             })
                           }}
-                          className="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           title="Open & view document"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -1248,7 +1248,7 @@ export default function DocsPage() {
                             downloadFile(file.name, file.dataUrl)
                             showToast(`Downloading "${file.name}"`)
                           }}
-                          className="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-emerald-400 transition-colors"
+                          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-emerald-500 transition-colors"
                           title="Download document"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -1273,22 +1273,22 @@ export default function DocsPage() {
                         <span>Project: {file.projectName}</span>
                       </span>
 
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-bold">
-                        <Eye className="w-2.5 h-2.5 text-sky-400" /> View Only
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border text-muted-foreground text-[10px] font-bold">
+                        <Eye className="w-2.5 h-2.5 text-sky-500" /> View Only
                       </span>
                     </div>
 
                     {/* Origin / Deliverable Info */}
-                    <div className="text-[11px] text-zinc-400 truncate">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       {file.taskTitle ? (
-                        <span>From Deliverable: <b className="text-zinc-200">{file.taskTitle}</b></span>
+                        <span>From Deliverable: <b className="text-foreground">{file.taskTitle}</b></span>
                       ) : (
                         <span>Project Vault Document</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-500">
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>By {file.uploadedBy || 'Team'}</span>
                     <span suppressHydrationWarning>{formatDocDate(file.uploadedAt)}</span>
                   </div>
@@ -1296,13 +1296,13 @@ export default function DocsPage() {
               ))}
             </div>
           ) : (
-            <div className="py-16 text-center text-zinc-500 space-y-3 border border-white/10 rounded-2xl bg-[#111218]">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-500">
+            <div className="py-16 text-center text-muted-foreground space-y-3 border border-border rounded-2xl bg-card shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto text-muted-foreground">
                 <BookOpen className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-white">No documents found</p>
-                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                <p className="text-sm font-bold text-foreground">No documents found</p>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                   {searchFilter
                     ? `No docs matched "${searchFilter}". Try another search or filter.`
                     : 'Start by creating your first technical document, specification, or meeting notes.'}
@@ -1311,7 +1311,7 @@ export default function DocsPage() {
               <button
                 type="button"
                 onClick={() => handleCreateNewDoc()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-zinc-950 font-bold text-xs hover:bg-zinc-200 transition-colors shadow-md cursor-pointer mt-2"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors shadow-md cursor-pointer mt-2"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>Create New Doc</span>
@@ -1324,32 +1324,32 @@ export default function DocsPage() {
       {/* SINGLE DOC DELETE CONFIRMATION MODAL */}
       {docToDelete && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
           onClick={() => setDocToDelete(null)}
         >
           <div
-            className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in select-none"
+            className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in select-none text-foreground"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/30">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Delete Document</h3>
-                <p className="text-xs text-zinc-400">Confirmation & Permission</p>
+                <h3 className="text-base font-bold text-foreground">Delete Document</h3>
+                <p className="text-xs text-muted-foreground">Confirmation & Permission</p>
               </div>
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to delete <strong className="text-white">"{docToDelete.title}"</strong>? This will permanently remove the document from your workspace and database. This action cannot be undone.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete <strong className="text-foreground">"{docToDelete.title}"</strong>? This will permanently remove the document from your workspace and database. This action cannot be undone.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
               <button
                 type="button"
                 onClick={() => setDocToDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1369,32 +1369,32 @@ export default function DocsPage() {
       {/* BULK DELETE CONFIRMATION MODAL */}
       {isBulkDeleting && (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
           onClick={() => setIsBulkDeleting(false)}
         >
           <div
-            className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in select-none"
+            className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in select-none text-foreground"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/30">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Delete Selected Documents</h3>
-                <p className="text-xs text-zinc-400">{selectedDocIds.length} items selected</p>
+                <h3 className="text-base font-bold text-foreground">Delete Selected Documents</h3>
+                <p className="text-xs text-muted-foreground">{selectedDocIds.length} items selected</p>
               </div>
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to delete <strong className="text-white">{selectedDocIds.length} document{selectedDocIds.length > 1 ? 's' : ''}</strong>? This will permanently remove them from your workspace and database. This action cannot be undone.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete <strong className="text-foreground">{selectedDocIds.length} document{selectedDocIds.length > 1 ? 's' : ''}</strong>? This will permanently remove them from your workspace and database. This action cannot be undone.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
               <button
                 type="button"
                 onClick={() => setIsBulkDeleting(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
                 Cancel
               </button>

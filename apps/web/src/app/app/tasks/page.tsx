@@ -59,6 +59,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-store'
 import { TaskAttachment, TaskComment } from '@/types'
+import { FileViewerModal, FileToView } from '@/components/file-viewer-modal'
 import { useProjectStore } from '@/stores/project-store'
 import { useStatusStore, CustomStatus } from '@/stores/status-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -493,15 +494,43 @@ export default function TasksPage() {
 
   const downloadAttachment = (att: TaskAttachment) => {
     try {
+      let url = att.dataUrl
+      let revoke = false
+      if (!url || (!url.startsWith('data:') && !url.startsWith('http') && !url.startsWith('blob:'))) {
+        const fallbackContent = url || `# ${att.name}\n\nTaskFlow Deliverable Asset\nFile: ${att.name}\nUploaded: ${att.uploadedAt || new Date().toISOString()}`
+        const blob = new Blob([fallbackContent], { type: att.type || 'text/plain' })
+        url = URL.createObjectURL(blob)
+        revoke = true
+      }
       const link = document.createElement('a')
-      link.href = att.dataUrl
+      link.href = url
       link.download = att.name
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      if (revoke) {
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+      }
     } catch (e) {
       console.error('Download failed', e)
     }
+  }
+
+  const openAttachmentInViewer = (att: TaskAttachment) => {
+    let url = att.dataUrl
+    if (!url || (!url.startsWith('data:') && !url.startsWith('http') && !url.startsWith('blob:'))) {
+      const fallbackContent = url || `# ${att.name}\n\nTaskFlow Deliverable Asset\nFile: ${att.name}\nUploaded: ${att.uploadedAt || new Date().toISOString()}`
+      const blob = new Blob([fallbackContent], { type: att.type || 'text/plain' })
+      url = URL.createObjectURL(blob)
+    }
+    setActiveFileToView({
+      name: att.name,
+      size: att.size,
+      type: att.type,
+      dataUrl: url,
+      uploadedAt: att.uploadedAt,
+      uploadedBy: editingTask?.assigneeName,
+    })
   }
 
   const readFilesAsAttachments = async (files: FileList | null): Promise<TaskAttachment[]> => {
@@ -544,6 +573,7 @@ export default function TasksPage() {
   }
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [activeFileToView, setActiveFileToView] = useState<FileToView | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
 
   const { getStatuses, fetchWorkspaceStatuses } = useStatusStore()
@@ -965,16 +995,55 @@ export default function TasksPage() {
     setEditPriority(task.priority || 'medium')
     setEditStatus(task.status || 'todo')
     setEditDescription(task.description || '')
-    setEditProgress(calculateTaskProgress(task))
+    setEditProgress(typeof task.progress === 'number' && !isNaN(task.progress) ? task.progress : calculateTaskProgress(task))
 
-    // Parse attachments from filesChanged
+    // Parse attachments from filesChanged or task.attachments
     try {
-      if (task.filesChanged && task.filesChanged.startsWith('[')) {
-        const parsed = JSON.parse(task.filesChanged)
-        setEditAttachments(Array.isArray(parsed) ? parsed : [])
-      } else {
-        setEditAttachments([])
+      let rawList: any[] = []
+      const rawAtt = (task as any).attachments || task.filesChanged
+      if (rawAtt) {
+        if (typeof rawAtt === 'string') {
+          try {
+            const parsed = JSON.parse(rawAtt)
+            if (Array.isArray(parsed)) rawList = parsed
+          } catch {
+            if (rawAtt.trim()) {
+              rawList = rawAtt.split(',').map((name, i) => ({
+                id: `att_${task.id}_${i}`,
+                name: name.trim(),
+                size: 2048,
+                type: 'text/plain',
+                dataUrl: '',
+                uploadedAt: task.updatedAt || new Date().toISOString(),
+              }))
+            }
+          }
+        } else if (Array.isArray(rawAtt)) {
+          rawList = rawAtt
+        }
       }
+
+      const normalized: TaskAttachment[] = rawList.map((item: any, idx: number) => {
+        if (typeof item === 'string') {
+          return {
+            id: `att_${task.id}_${idx}`,
+            name: item,
+            size: 2048,
+            type: 'text/plain',
+            dataUrl: '',
+            uploadedAt: task.updatedAt || new Date().toISOString(),
+          }
+        }
+        return {
+          id: item.id || `att_${task.id}_${idx}`,
+          name: item.name || 'Untitled File',
+          size: typeof item.size === 'number' ? item.size : 2048,
+          type: item.type || 'text/plain',
+          dataUrl: item.dataUrl || '',
+          uploadedAt: item.uploadedAt || task.updatedAt || new Date().toISOString(),
+        }
+      })
+      setEditAttachments(normalized)
     } catch {
       setEditAttachments([])
     }
@@ -1050,13 +1119,7 @@ export default function TasksPage() {
     setAutoSaveStatus('saving')
     const timer = setTimeout(async () => {
       try {
-        let finalProgress = editProgress
-        if (editSubtasks.length > 0) {
-          const done = editSubtasks.filter((s: any) => s.completed).length
-          finalProgress = Math.round((done / editSubtasks.length) * 100)
-        } else if (editStatus === 'done') {
-          finalProgress = 100
-        }
+        const finalProgress = editProgress
 
         await updateTask(editingTask.id, {
           projectId: editProjectId || undefined,
@@ -1119,14 +1182,7 @@ export default function TasksPage() {
       setIsUpdatingTask(true)
       const isDone = editStatus === 'done'
 
-      // Calculate progress if subtasks exist
-      let finalProgress = editProgress
-      if (editSubtasks.length > 0) {
-        const done = editSubtasks.filter((s: any) => s.completed).length
-        finalProgress = Math.round((done / editSubtasks.length) * 100)
-      } else if (isDone) {
-        finalProgress = 100
-      }
+      const finalProgress = editProgress
 
       await updateTask(editingTask.id, {
         projectId: editProjectId || undefined,
@@ -3557,14 +3613,14 @@ export default function TasksPage() {
                           />
                         </div>
 
-                        {/* Task Completion Progress Slider - SINGLE ANIMATED INTERACTIVE SLIDER (No dual sliders) */}
+                        {/* Task Completion Progress Slider - SINGLE ANIMATED INTERACTIVE SLIDER */}
                         <div className="p-3 rounded-2xl bg-muted/30 border border-border/60 space-y-2">
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-semibold text-foreground flex items-center gap-1.5">
                               <SlidersHorizontal className="w-3.5 h-3.5 text-primary" /> Task Progress Percentage
                             </span>
                             <span className="font-bold text-primary px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs shadow-xs">
-                              {calculatedSubtaskProgress}%
+                              {editProgress}%
                             </span>
                           </div>
 
@@ -3573,8 +3629,8 @@ export default function TasksPage() {
                             {/* Animated track with gradient */}
                             <div className="absolute inset-x-0 h-3 rounded-full bg-muted/80 overflow-hidden border border-border/70 shadow-inner">
                               <div
-                                className="h-full bg-gradient-to-r from-emerald-500 via-primary to-indigo-500 rounded-full transition-all duration-200 ease-out relative"
-                                style={{ width: `${calculatedSubtaskProgress}%` }}
+                                className="h-full bg-gradient-to-r from-emerald-500 via-primary to-indigo-500 rounded-full transition-all duration-150 ease-out relative"
+                                style={{ width: `${editProgress}%` }}
                               >
                                 {/* Shimmer light effect */}
                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-shimmer" />
@@ -3587,10 +3643,10 @@ export default function TasksPage() {
                               min="0"
                               max="100"
                               disabled={isReadOnly}
-                              value={calculatedSubtaskProgress}
+                              value={editProgress}
                               onChange={(e) => {
                                 const val = parseInt(e.target.value, 10)
-                                setEditProgress(val)
+                                setEditProgress(isNaN(val) ? 0 : val)
                               }}
                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-20"
                               aria-label="Task progress percentage"
@@ -3599,17 +3655,22 @@ export default function TasksPage() {
                             {/* Glowing custom thumb indicator */}
                             <div
                               className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-background border-2 border-primary shadow-md shadow-primary/50 flex items-center justify-center pointer-events-none transition-all duration-150 group-hover:scale-125 group-active:scale-110 z-10"
-                              style={{ left: `${Math.min(Math.max(calculatedSubtaskProgress, 2), 98)}%` }}
+                              style={{ left: `${Math.min(Math.max(editProgress, 2), 98)}%` }}
                             >
                               <div className="w-2 h-2 rounded-full bg-primary animate-ping opacity-75" />
                               <div className="absolute w-2 h-2 rounded-full bg-primary" />
                             </div>
                           </div>
 
-                          {editSubtasks.length > 0 && (
+                          {editSubtasks.length > 0 ? (
                             <p className="text-[10px] text-muted-foreground flex items-center justify-between">
-                              <span>Computed from subtasks ({editSubtasks.filter((s: any) => s.completed).length}/{editSubtasks.length} done).</span>
-                              <span className="text-primary/80">Drag slider to override</span>
+                              <span>Subtasks ({editSubtasks.filter((s: any) => s.completed).length}/{editSubtasks.length} done).</span>
+                              <span className="text-primary/80 font-medium">Drag slider to adjust ({editProgress}%)</span>
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground flex items-center justify-between">
+                              <span>Drag slider to set task progress percentage.</span>
+                              <span className="text-primary/80 font-medium">{editProgress}% Complete</span>
                             </p>
                           )}
                         </div>
@@ -3660,7 +3721,11 @@ export default function TasksPage() {
                                   key={att.id}
                                   className="flex flex-col justify-between p-2.5 rounded-2xl border border-border/80 bg-background/80 hover:bg-background transition-all shadow-xs space-y-2 group"
                                 >
-                                  <div className="flex items-center gap-2.5 min-w-0">
+                                  <div
+                                    className="flex items-center gap-2.5 min-w-0 cursor-pointer"
+                                    onClick={() => openAttachmentInViewer(att)}
+                                    title="Click to view file contents"
+                                  >
                                     {isImg ? (
                                       <img
                                         src={att.dataUrl}
@@ -3673,7 +3738,7 @@ export default function TasksPage() {
                                       </div>
                                     )}
                                     <div className="min-w-0">
-                                      <p className="text-xs font-bold text-foreground truncate">{att.name}</p>
+                                      <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{att.name}</p>
                                       <p className="text-[10px] text-muted-foreground">{formatFileSize(att.size)}</p>
                                       <p className="text-[9px] text-muted-foreground">
                                         {new Date(att.uploadedAt).toLocaleDateString()}
@@ -3681,15 +3746,27 @@ export default function TasksPage() {
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
-                                    <button
-                                      type="button"
-                                      onClick={() => downloadAttachment(att)}
-                                      className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-                                    >
-                                      <Download className="w-3 h-3" />
-                                      <span>Download</span>
-                                    </button>
+                                  <div className="flex items-center justify-between pt-1.5 border-t border-border/40 gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => openAttachmentInViewer(att)}
+                                        className="px-2.5 py-1 rounded-lg bg-sky-500/10 hover:bg-sky-500 text-sky-500 hover:text-white text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                                        title="Open file viewer"
+                                      >
+                                        <Eye className="w-3 h-3" />
+                                        <span>Open</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => downloadAttachment(att)}
+                                        className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                                        title="Download file"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        <span>Download</span>
+                                      </button>
+                                    </div>
 
                                     {!isReadOnly && (
                                       <button
@@ -3847,9 +3924,14 @@ export default function TasksPage() {
                                       type="checkbox"
                                       checked={st.completed}
                                       onChange={() => {
-                                        setEditSubtasks((prev) =>
-                                          prev.map((s, i) => (i === idx ? { ...s, completed: !s.completed } : s))
-                                        )
+                                        setEditSubtasks((prev) => {
+                                          const next = prev.map((s, i) => (i === idx ? { ...s, completed: !s.completed } : s))
+                                          if (next.length > 0) {
+                                            const doneCount = next.filter((s: any) => s.completed).length
+                                            setEditProgress(Math.round((doneCount / next.length) * 100))
+                                          }
+                                          return next
+                                        })
                                       }}
                                       className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
                                     />
@@ -3883,13 +3965,13 @@ export default function TasksPage() {
                                           <button
                                             key={att.id}
                                             type="button"
-                                            onClick={() => downloadAttachment(att)}
+                                            onClick={() => openAttachmentInViewer(att)}
                                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-card border border-border/60 text-[10px] text-foreground hover:text-primary transition-all cursor-pointer shadow-xs"
-                                            title="Download subtask attachment"
+                                            title="Open & view subtask attachment"
                                           >
                                             {getFileIcon(att.type, att.name)}
                                             <span className="truncate max-w-[120px] font-medium">{att.name}</span>
-                                            <Download className="w-2.5 h-2.5 text-primary ml-1" />
+                                            <Eye className="w-2.5 h-2.5 text-primary ml-1" />
                                           </button>
                                         ))}
                                       </div>
@@ -4076,6 +4158,13 @@ export default function TasksPage() {
         onClose={() => setStatusModalOpen(false)}
         workspaceId={currentWorkspace?.id || 'default'}
         spaceName={currentWorkspace?.name || 'Workspace'}
+      />
+
+      {/* UNIVERSAL FILE VIEWER MODAL FOR TASK DELIVERABLE ATTACHMENTS */}
+      <FileViewerModal
+        isOpen={Boolean(activeFileToView)}
+        file={activeFileToView}
+        onClose={() => setActiveFileToView(null)}
       />
     </>
   )
