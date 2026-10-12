@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Building2, X, Loader2, Sparkles, Check, ArrowRight } from 'lucide-react'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -17,13 +17,16 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
   const [plan, setPlan] = useState('ENTERPRISE')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loadingRef = useRef(false)
 
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loadingRef.current || loading) return
     if (!name.trim()) return
 
+    loadingRef.current = true
     setLoading(true)
     setError(null)
 
@@ -39,6 +42,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
     } catch (err: any) {
       setError(err?.message || 'Failed to create organization. Please try again.')
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
   }

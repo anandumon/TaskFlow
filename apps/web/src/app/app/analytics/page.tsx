@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   BarChart3,
   TrendingUp,
@@ -88,15 +88,33 @@ export default function AnalyticsPage() {
     setDraggedPanelId(null)
   }
 
+  const [analyticsDataLoaded, setAnalyticsDataLoaded] = useState(false)
+  const lastAnalyticsWsRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastAnalyticsWsRef.current !== currentWorkspace.id) {
+      setAnalyticsDataLoaded(false)
+    }
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+    ]).finally(() => {
+      if (active) {
+        lastAnalyticsWsRef.current = currentWorkspace.id
+        setAnalyticsDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects])
 
-  // Show skeleton on initial empty load
-  if ((tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
+  // Show skeleton until all APIs complete or while actively loading
+  if (!analyticsDataLoaded || (tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
     return <AnalyticsSkeleton />
   }
 

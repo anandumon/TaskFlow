@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -269,11 +269,29 @@ export default function ProjectDetailsPage() {
     return 0
   }
 
+  const [projectDetailsLoaded, setProjectDetailsLoaded] = useState(false)
+  const lastDetailsWsRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-      fetchWorkspaceStatuses(currentWorkspace.id)
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastDetailsWsRef.current !== currentWorkspace.id) {
+      setProjectDetailsLoaded(false)
+    }
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+      fetchWorkspaceStatuses(currentWorkspace.id),
+    ]).finally(() => {
+      if (active) {
+        lastDetailsWsRef.current = currentWorkspace.id
+        setProjectDetailsLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects, fetchWorkspaceStatuses])
 
@@ -1022,7 +1040,7 @@ export default function ProjectDetailsPage() {
     }
   }
 
-  if ((isProjectsLoading && !project) || (!project && projects.length === 0)) {
+  if (!projectDetailsLoaded || !project) {
     return <ProjectDetailsSkeleton />
   }
 
@@ -2681,7 +2699,7 @@ export default function ProjectDetailsPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Are you sure you want to delete deliverable <strong className="text-foreground">"{taskToDelete.title}"</strong>? This will permanently remove the task from this project. This action cannot be undone.
+                  Are you sure you want to delete deliverable <strong className="text-foreground">&quot;{taskToDelete.title}&quot;</strong>? This will permanently remove the task from this project. This action cannot be undone.
                 </p>
 
                 <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
@@ -2770,7 +2788,7 @@ export default function ProjectDetailsPage() {
                     <Sparkles className="w-3.5 h-3.5 text-primary" /> Automatic Setup Included
                   </div>
                   <p>
-                    When they open the invite link, if they don't have an account, they can sign up and the organization, workspace, and project will be automatically attached for them.
+                    When they open the invite link, if they don&apos;t have an account, they can sign up and the organization, workspace, and project will be automatically attached for them.
                   </p>
                 </div>
 

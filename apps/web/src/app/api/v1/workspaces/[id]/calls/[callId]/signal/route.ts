@@ -64,8 +64,8 @@ export async function POST(
     const body = await req.json()
     const { type, payload, recipientId } = body
 
-    if (!type || !['OFFER', 'ANSWER', 'ICE_CANDIDATE'].includes(type.toUpperCase())) {
-      return apiError('Invalid signal type. Expected OFFER, ANSWER, or ICE_CANDIDATE', 400)
+    if (!type || !['OFFER', 'ANSWER', 'ICE_CANDIDATE', 'ICE_RESTART_REQUEST'].includes(type.toUpperCase())) {
+      return apiError('Invalid signal type. Expected OFFER, ANSWER, ICE_CANDIDATE, or ICE_RESTART_REQUEST', 400)
     }
 
     if (!payload || typeof payload !== 'object') {
@@ -91,7 +91,7 @@ export async function POST(
 
     // Broadcast signaling event for instant delivery
     broadcastCallEvent({
-      type: 'call_started', // re-use realtime bus channel
+      type: 'call_signal',
       workspaceId,
       callId,
       callerId: authUser.id,

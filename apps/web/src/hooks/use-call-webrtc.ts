@@ -183,9 +183,12 @@ export function useCallWebRTC({
 
   const isCaller = createdBy === userId
 
-  // Helper to send WebRTC signals (Offer, Answer, ICE) to backend signaling route
+  // Helper to send WebRTC signals (Offer, Answer, ICE, Restart) to backend signaling route
   const sendSignal = useCallback(
-    async (type: 'OFFER' | 'ANSWER' | 'ICE_CANDIDATE', payload: any) => {
+    async (
+      type: 'OFFER' | 'ANSWER' | 'ICE_CANDIDATE' | 'ICE_RESTART_REQUEST',
+      payload: any
+    ) => {
       if (!callId || !workspaceId) return
       try {
         const headers = authHeaders ? authHeaders() : {}
@@ -431,13 +434,25 @@ export function useCallWebRTC({
 
     pc.onconnectionstatechange = () => {
       if (isDisposed) return
-      setConnectionState(pc.connectionState)
-      if (pc.connectionState === 'connected') {
+      const state = pc.connectionState
+      setConnectionState(state)
+      if (state === 'connected') {
         setIsEncrypted(true)
-      } else if (pc.connectionState === 'failed') {
-        console.warn('[useCallWebRTC] Peer connection failed. Attempting ICE restart...')
+        setMediaError(null)
+      } else if (state === 'failed') {
+        console.warn('[useCallWebRTC] Peer connection failed. Triggering ICE restart...')
         try {
-          pc.restartIce()
+          if (isCaller) {
+            pc.restartIce()
+            pc.createOffer({ iceRestart: true })
+              .then(async (newOffer) => {
+                await pc.setLocalDescription(newOffer)
+                await sendSignal('OFFER', newOffer)
+              })
+              .catch((err) => console.warn('[useCallWebRTC] ICE restart offer error:', err))
+          } else {
+            sendSignal('ICE_RESTART_REQUEST', {})
+          }
         } catch (e) {
           console.warn('[useCallWebRTC] restartIce error:', e)
         }
@@ -446,7 +461,7 @@ export function useCallWebRTC({
 
     // ICE Candidate Gathering
     pc.onicecandidate = (event) => {
-      if (event.candidate && !isDisposed) {
+      if (event.candidate && event.candidate.candidate && !isDisposed) {
         sendSignal('ICE_CANDIDATE', event.candidate.toJSON())
       }
     }
@@ -533,7 +548,129 @@ export function useCallWebRTC({
     }
   }, [enabled, callId, status, isCaller, sendSignal, acquireMedia, attachTracksToPc])
 
-  // Signaling Polling Loop
+  // Unified Signal Processor (Handles both Instant SSE Signals & Poll Fallback)
+  const processSignal = useCallback(
+    async (sig: any) => {
+      const pc = pcRef.current
+      if (!pc || pc.signalingState === 'closed') return
+
+      if (processedSignalIdsRef.current.has(sig.id)) return
+      if (sig.senderId && sig.senderId === userId) return
+
+      processedSignalIdsRef.current.add(sig.id)
+      if (sig.createdAt) {
+        lastServerTimestampRef.current = sig.createdAt
+      }
+
+      // Handle incoming OFFER (Callee side)
+      if (sig.type === 'OFFER' && !isCaller) {
+        if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-pranswer') {
+          let curStream = localStreamRef.current
+          if (!curStream || !curStream.getTracks().some((t) => t.readyState === 'live')) {
+            curStream = await acquireMedia()
+          }
+          if (curStream) {
+            attachTracksToPc(pc, curStream)
+          }
+
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sig.payload))
+
+            // Flush queued ICE candidates
+            while (pendingIceCandidatesRef.current.length > 0) {
+              const candidate = pendingIceCandidatesRef.current.shift()
+              if (candidate && candidate.candidate) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(candidate))
+                } catch (e) {
+                  console.warn('[useCallWebRTC] Error adding queued ICE:', e)
+                }
+              }
+            }
+
+            const answer = await pc.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true,
+            })
+            await pc.setLocalDescription(answer)
+            await sendSignal('ANSWER', answer)
+          } catch (sdpErr) {
+            console.error('[useCallWebRTC] Error handling OFFER:', sdpErr)
+          }
+        }
+      }
+
+      // Handle incoming ANSWER (Caller side)
+      else if (sig.type === 'ANSWER' && isCaller) {
+        if (pc.signalingState === 'have-local-offer') {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sig.payload))
+
+            // Flush queued ICE candidates
+            while (pendingIceCandidatesRef.current.length > 0) {
+              const candidate = pendingIceCandidatesRef.current.shift()
+              if (candidate && candidate.candidate) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(candidate))
+                } catch (e) {
+                  console.warn('[useCallWebRTC] Error adding queued ICE:', e)
+                }
+              }
+            }
+          } catch (sdpErr) {
+            console.error('[useCallWebRTC] Error handling ANSWER:', sdpErr)
+          }
+        }
+      }
+
+      // Handle incoming ICE_CANDIDATE
+      else if (sig.type === 'ICE_CANDIDATE') {
+        if (sig.payload && sig.payload.candidate) {
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(sig.payload))
+            } catch (e) {
+              console.warn('[useCallWebRTC] Error adding ICE candidate:', e)
+            }
+          } else {
+            pendingIceCandidatesRef.current.push(sig.payload)
+          }
+        }
+      }
+
+      // Handle remote ICE restart request
+      else if (sig.type === 'ICE_RESTART_REQUEST' && isCaller) {
+        try {
+          pc.restartIce()
+          const newOffer = await pc.createOffer({ iceRestart: true })
+          await pc.setLocalDescription(newOffer)
+          await sendSignal('OFFER', newOffer)
+        } catch (err) {
+          console.warn('[useCallWebRTC] Error handling ICE_RESTART_REQUEST:', err)
+        }
+      }
+    },
+    [isCaller, userId, acquireMedia, attachTracksToPc, sendSignal]
+  )
+
+  // Instant Real-Time Signal Listener via SSE CustomEvent
+  useEffect(() => {
+    if (!enabled || !callId || status !== 'ACTIVE') return
+
+    const handleCustomSignal = (e: any) => {
+      const sig = e.detail
+      if (sig && sig.callId === callId) {
+        processSignal(sig)
+      }
+    }
+
+    window.addEventListener('taskflow:call_signal', handleCustomSignal)
+    return () => {
+      window.removeEventListener('taskflow:call_signal', handleCustomSignal)
+    }
+  }, [enabled, callId, status, processSignal])
+
+  // Signaling Polling Loop (Safety Net Fallback)
   useEffect(() => {
     if (!enabled || !callId || status !== 'ACTIVE') return
 
@@ -548,12 +685,8 @@ export function useCallWebRTC({
 
       try {
         const headers = authHeaders ? authHeaders() : {}
-        const sinceQuery = lastServerTimestampRef.current
-          ? `since=${encodeURIComponent(lastServerTimestampRef.current)}`
-          : 'since=0'
-
         const res = await fetch(
-          `/api/v1/workspaces/${workspaceId}/calls/${callId}/signal?${sinceQuery}`,
+          `/api/v1/workspaces/${workspaceId}/calls/${callId}/signal`,
           { headers }
         )
 
@@ -563,90 +696,7 @@ export function useCallWebRTC({
 
           for (const sig of signals) {
             if (isDestroyed) break
-
-            // Skip signals already processed or sent by self
-            if (processedSignalIdsRef.current.has(sig.id)) continue
-            if (sig.senderId && sig.senderId === userId) continue
-
-            processedSignalIdsRef.current.add(sig.id)
-            if (sig.createdAt) {
-              lastServerTimestampRef.current = sig.createdAt
-            }
-
-            // Handle incoming OFFER (Callee side)
-            if (sig.type === 'OFFER' && !isCaller) {
-              if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-pranswer') {
-                // Ensure local tracks are attached BEFORE generating answer
-                let curStream = localStreamRef.current
-                if (!curStream || !curStream.getTracks().some((t) => t.readyState === 'live')) {
-                  curStream = await acquireMedia()
-                }
-                if (curStream) {
-                  attachTracksToPc(pc, curStream)
-                }
-
-                try {
-                  await pc.setRemoteDescription(new RTCSessionDescription(sig.payload))
-
-                  // Flush queued ICE candidates
-                  while (pendingIceCandidatesRef.current.length > 0) {
-                    const candidate = pendingIceCandidatesRef.current.shift()
-                    if (candidate) {
-                      try {
-                        await pc.addIceCandidate(new RTCIceCandidate(candidate))
-                      } catch (e) {
-                        console.warn('[useCallWebRTC] Error adding queued ICE:', e)
-                      }
-                    }
-                  }
-
-                  const answer = await pc.createAnswer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true,
-                  })
-                  await pc.setLocalDescription(answer)
-                  await sendSignal('ANSWER', answer)
-                } catch (sdpErr) {
-                  console.error('[useCallWebRTC] Error handling OFFER:', sdpErr)
-                }
-              }
-            }
-
-            // Handle incoming ANSWER (Caller side)
-            else if (sig.type === 'ANSWER' && isCaller) {
-              if (pc.signalingState === 'have-local-offer') {
-                try {
-                  await pc.setRemoteDescription(new RTCSessionDescription(sig.payload))
-
-                  // Flush queued ICE candidates
-                  while (pendingIceCandidatesRef.current.length > 0) {
-                    const candidate = pendingIceCandidatesRef.current.shift()
-                    if (candidate) {
-                      try {
-                        await pc.addIceCandidate(new RTCIceCandidate(candidate))
-                      } catch (e) {
-                        console.warn('[useCallWebRTC] Error adding queued ICE:', e)
-                      }
-                    }
-                  }
-                } catch (sdpErr) {
-                  console.error('[useCallWebRTC] Error handling ANSWER:', sdpErr)
-                }
-              }
-            }
-
-            // Handle incoming ICE_CANDIDATE
-            else if (sig.type === 'ICE_CANDIDATE') {
-              if (pc.remoteDescription && pc.remoteDescription.type) {
-                try {
-                  await pc.addIceCandidate(new RTCIceCandidate(sig.payload))
-                } catch (e) {
-                  console.warn('[useCallWebRTC] Error adding ICE candidate:', e)
-                }
-              } else {
-                pendingIceCandidatesRef.current.push(sig.payload)
-              }
-            }
+            await processSignal(sig)
           }
         }
       } catch (err) {
@@ -654,7 +704,7 @@ export function useCallWebRTC({
       } finally {
         isPollingRef.current = false
         if (!isDestroyed) {
-          setTimeout(pollSignals, 500)
+          setTimeout(pollSignals, 1200)
         }
       }
     }
@@ -664,18 +714,7 @@ export function useCallWebRTC({
     return () => {
       isDestroyed = true
     }
-  }, [
-    enabled,
-    callId,
-    status,
-    isCaller,
-    userId,
-    workspaceId,
-    authHeaders,
-    sendSignal,
-    acquireMedia,
-    attachTracksToPc,
-  ])
+  }, [enabled, callId, status, workspaceId, authHeaders, processSignal])
 
   return {
     localStream,

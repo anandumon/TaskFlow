@@ -8,10 +8,17 @@ export function getIceServers(): RTCIceServer[] {
   const customTurnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME
   const customTurnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL
 
+  // Rock-solid multi-region STUN servers covering standard UDP and firewall-friendly port 443
   const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.nextcloud.com:443' },
+    { urls: 'stun:stun.nextcloud.com:3478' },
   ]
 
   if (customTurnUrl) {
@@ -20,25 +27,6 @@ export function getIceServers(): RTCIceServer[] {
       username: customTurnUsername,
       credential: customTurnCredential,
     })
-  } else {
-    // OpenRelay (Metered) free public TURN relay fallback for symmetric NAT & restricted firewalls
-    servers.push(
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      }
-    )
   }
 
   return servers
@@ -47,4 +35,6 @@ export function getIceServers(): RTCIceServer[] {
 export const RTC_CONFIG: RTCConfiguration = {
   iceServers: getIceServers(),
   iceCandidatePoolSize: 10,
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 }

@@ -749,8 +749,8 @@ export default function SettingsPage() {
     { id: 'privacy', label: 'Privacy & Terms', icon: ShieldCheck },
   ]
 
-  // Show skeleton only on initial load (no org data cached yet)
-  if (isOrgLoading && organizations.length === 0) {
+  // Show skeleton until mounted and initial org data loaded
+  if (!mounted || (isOrgLoading && organizations.length === 0)) {
     return <SettingsSkeleton />
   }
 
@@ -1158,7 +1158,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-xs font-bold text-foreground">Delete Organization</p>
                     <p className="text-[10px] text-muted-foreground">
-                      Permanently delete '{currentOrg?.name || 'this organization'}', including all workspaces, projects, teams, and tasks.
+                      Permanently delete &apos;{currentOrg?.name || 'this organization'}&apos;, including all workspaces, projects, teams, and tasks.
                     </p>
                   </div>
                   <button
@@ -1336,7 +1336,7 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-xs font-bold text-foreground">Delete Workspace</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Permanently remove '{currentWorkspace?.name || 'this workspace'}' along with its projects, tasks, and teams.
+                    Permanently remove &apos;{currentWorkspace?.name || 'this workspace'}&apos; along with its projects, tasks, and teams.
                   </p>
                 </div>
                 <button
@@ -1517,7 +1517,7 @@ export default function SettingsPage() {
                 <span>1. Peer-to-Peer & DTLS-SRTP Encryption</span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                TaskFlow employs direct Peer-to-Peer (P2P) WebRTC protocols for all 1-to-1 audio and video communications. Media packets are encrypted in transit using industry-standard DTLS-SRTP (AES-GCM-256). Media streams flow directly between participants' browsers without intermediate server decryption.
+                TaskFlow employs direct Peer-to-Peer (P2P) WebRTC protocols for all 1-to-1 audio and video communications. Media packets are encrypted in transit using industry-standard DTLS-SRTP (AES-GCM-256). Media streams flow directly between participants&apos; browsers without intermediate server decryption.
               </p>
             </div>
 
@@ -1644,7 +1644,7 @@ export default function SettingsPage() {
             </div>
 
             <p className="text-xs text-foreground/90 leading-relaxed">
-              Are you sure you want to delete workspace <span className="font-bold text-foreground">"{currentWorkspace?.name}"</span>? All projects, tasks, and teams assigned to this workspace will be deleted.
+              Are you sure you want to delete workspace <span className="font-bold text-foreground">&quot;{currentWorkspace?.name}&quot;</span>? All projects, tasks, and teams assigned to this workspace will be deleted.
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
@@ -1686,7 +1686,7 @@ export default function SettingsPage() {
             </div>
 
             <p className="text-xs text-foreground/90 leading-relaxed">
-              This will permanently delete <span className="font-bold text-foreground">"{currentOrg?.name}"</span>, including all workspaces, projects, tasks, teams, and invites.
+              This will permanently delete <span className="font-bold text-foreground">&quot;{currentOrg?.name}&quot;</span>, including all workspaces, projects, tasks, teams, and invites.
             </p>
 
             <div className="space-y-1.5 pt-1">

@@ -105,7 +105,7 @@ export function MinimizedCallBar() {
 
         <button
           type="button"
-          onClick={endActiveCall}
+          onClick={() => endActiveCall()}
           className="p-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/30 cursor-pointer ml-1"
           title="End Call"
         >

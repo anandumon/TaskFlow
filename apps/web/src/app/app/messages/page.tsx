@@ -58,6 +58,7 @@ import { usePresenceStore } from '@/stores/presence-store'
 import { useCallStore } from '@/stores/call-store'
 import { apiClient } from '@/lib/api-client'
 import { Portal } from '@/components/ui/portal'
+import { MessagesSkeleton } from '@/components/loading'
 import { CreateChannelModal } from '@/features/chat/components/CreateChannelModal'
 import { NewDirectMessageModal } from '@/features/chat/components/NewDirectMessageModal'
 import { ChatInputBar } from '@/features/chat/components/ChatInputBar'
@@ -365,6 +366,10 @@ export default function MessagesPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isSendingMessageRef = useRef(false)
+
+  const [messagesDataLoaded, setMessagesDataLoaded] = useState(false)
+  const lastMessagesWsRef = useRef<string | null>(null)
 
   // 1. Fetch workspace channels, tasks, and members on mount or workspace change
   useEffect(() => {
@@ -372,10 +377,9 @@ export default function MessagesPage() {
     const orgId = currentWorkspace?.organizationId || currentOrg?.id
 
     if (!wsId && !orgId) return
-
-    if (wsId) {
-      fetchChannels(wsId)
-      loadTasks(wsId)
+    let active = true
+    if (lastMessagesWsRef.current !== wsId) {
+      setMessagesDataLoaded(false)
     }
 
     const mapMember = (m: any): DMContact => {
@@ -444,7 +448,23 @@ export default function MessagesPage() {
       }
     }
 
-    fetchAllMembers()
+    const promises: Promise<any>[] = []
+    if (wsId) {
+      promises.push(fetchChannels(wsId))
+      promises.push(loadTasks(wsId))
+    }
+    promises.push(fetchAllMembers())
+
+    Promise.all(promises).finally(() => {
+      if (active) {
+        lastMessagesWsRef.current = wsId || null
+        setMessagesDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [currentWorkspace?.id, currentWorkspace?.organizationId, currentOrg?.id, fetchChannels, loadTasks, user?.id])
 
   // Track organization / workspace changes to always default to the top channel when switching organizations
@@ -526,8 +546,9 @@ export default function MessagesPage() {
   // Send message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!inputText.trim() || !currentWorkspace?.id || isSendingMessage) return
+    if (!inputText.trim() || !currentWorkspace?.id || isSendingMessage || isSendingMessageRef.current) return
 
+    isSendingMessageRef.current = true
     const content = inputText.trim()
     setInputText('')
 
@@ -547,6 +568,8 @@ export default function MessagesPage() {
     } catch {
       setToastMessage('Failed to send message. Please try again.')
       setTimeout(() => setToastMessage(null), 3000)
+    } finally {
+      isSendingMessageRef.current = false
     }
   }
 
@@ -638,6 +661,10 @@ export default function MessagesPage() {
     }
     return []
   }, [workspaceMembers, user?.id, user?.email, isUserOnline, lastSync, onlineUserIds])
+
+  if (!messagesDataLoaded || (isLoadingChannels && channels.length === 0)) {
+    return <MessagesSkeleton />
+  }
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background animate-fade-in">
@@ -1877,7 +1904,7 @@ export default function MessagesPage() {
 
                 {/* Message Snippet Preview */}
                 <div className="p-3 rounded-xl bg-muted/40 border border-border/80 text-xs text-foreground/90 italic truncate">
-                  "{deletingMessage.content || (deletingMessage.attachments?.[0]?.title ? `[${deletingMessage.attachments[0].title}]` : 'Attachment')}"
+                  &quot;{deletingMessage.content || (deletingMessage.attachments?.[0]?.title ? `[${deletingMessage.attachments[0].title}]` : 'Attachment')}&quot;
                 </div>
 
                 {/* Deletion Mode Radio Options */}

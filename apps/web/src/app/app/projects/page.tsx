@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   FolderKanban,
@@ -56,6 +56,9 @@ export default function ProjectsPage() {
   const [editProjectIcon, setEditProjectIcon] = useState('')
   const [editProjectEnvs, setEditProjectEnvs] = useState<string[]>([])
   const [isUpdatingProject, setIsUpdatingProject] = useState(false)
+  const isUpdatingProjectRef = useRef(false)
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const isCreatingProjectRef = useRef(false)
 
   // Drag and drop custom project ordering
   const [projectOrder, setProjectOrder] = useState<string[]>([])
@@ -111,9 +114,25 @@ export default function ProjectsPage() {
     }
   }, [currentOrg?.id, workspaces, fetchWorkspaces])
 
+  const [projectsDataLoaded, setProjectsDataLoaded] = useState(false)
+  const lastProjectsWsRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadProjects(currentWorkspace.id)
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastProjectsWsRef.current !== currentWorkspace.id) {
+      setProjectsDataLoaded(false)
+    }
+
+    loadProjects(currentWorkspace.id).finally(() => {
+      if (active) {
+        lastProjectsWsRef.current = currentWorkspace.id
+        setProjectsDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadProjects])
 
@@ -133,6 +152,7 @@ export default function ProjectsPage() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isCreatingProjectRef.current || isCreatingProject) return
     if (!newProjectName.trim()) return
 
     const activeWs = currentWorkspace || (workspaces && workspaces[0])
@@ -142,6 +162,8 @@ export default function ProjectsPage() {
     }
 
     try {
+      isCreatingProjectRef.current = true
+      setIsCreatingProject(true)
       await createProject(activeWs.id, {
         name: newProjectName.trim(),
         description: newProjectDescription.trim() || 'Comprehensive project milestones & deliverables',
@@ -159,6 +181,9 @@ export default function ProjectsPage() {
       showToast('Project created with custom environments!')
     } catch (err: any) {
       showToast(err?.message || 'Failed to create project')
+    } finally {
+      isCreatingProjectRef.current = false
+      setIsCreatingProject(false)
     }
   }
 
@@ -218,8 +243,9 @@ export default function ProjectsPage() {
 
   const handleSaveEditProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingProject || !editProjectName.trim() || isUpdatingProject) return
+    if (!editingProject || !editProjectName.trim() || isUpdatingProjectRef.current || isUpdatingProject) return
     try {
+      isUpdatingProjectRef.current = true
       setIsUpdatingProject(true)
       await updateProject(editingProject.id, {
         name: editProjectName.trim(),
@@ -236,6 +262,7 @@ export default function ProjectsPage() {
     } catch (err: any) {
       showToast(err?.message || 'Failed to update project')
     } finally {
+      isUpdatingProjectRef.current = false
       setIsUpdatingProject(false)
     }
   }
@@ -284,8 +311,8 @@ export default function ProjectsPage() {
     return indexA - indexB
   })
 
-  // Show skeleton on initial empty load (after all hooks have executed)
-  if (isLoading && projects.length === 0) {
+  // Show skeleton until all APIs complete or while actively loading
+  if (!projectsDataLoaded || (isLoading && projects.length === 0)) {
     return <ProjectSkeleton />
   }
 
@@ -750,9 +777,17 @@ export default function ProjectsPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95"
+                    disabled={isCreatingProject || !newProjectName.trim()}
+                    className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                   >
-                    Create Project
+                    {isCreatingProject ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      'Create Project'
+                    )}
                   </button>
                 </div>
               </form>
@@ -1015,7 +1050,7 @@ export default function ProjectsPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Are you sure you want to delete project <strong className="text-foreground">"{projectToDelete.name}"</strong>? All associated deliverables, environment boards, and roadmap milestones will be permanently removed. This action cannot be undone.
+                Are you sure you want to delete project <strong className="text-foreground">&quot;{projectToDelete.name}&quot;</strong>? All associated deliverables, environment boards, and roadmap milestones will be permanently removed. This action cannot be undone.
               </p>
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">

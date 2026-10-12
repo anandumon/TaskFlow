@@ -35,6 +35,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const prevPathRef = useRef(pathname)
+
+  useEffect(() => {
+    if (prevPathRef.current !== pathname) {
+      setIsNavigating(true)
+      prevPathRef.current = pathname
+      const t = setTimeout(() => setIsNavigating(false), 400)
+      return () => clearTimeout(t)
+    }
+  }, [pathname])
 
   const { isModalOpen: isTermsModalOpen, openModal: openTermsModal, fetchTermsStatus } = useTermsStore()
 
@@ -223,7 +234,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <div className="flex h-screen w-screen overflow-hidden bg-background relative">
+      {isNavigating && (
+        <div className="fixed top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary via-indigo-400 to-sky-400 z-[9999] animate-pulse shadow-md shadow-primary/30" />
+      )}
       <Sidebar
         mobileOpen={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}

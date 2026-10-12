@@ -83,7 +83,7 @@ interface CallState {
   startCallFromPreJoin: (workspaceId: string) => Promise<boolean>
   acceptIncomingCall: () => Promise<boolean>
   declineIncomingCall: () => Promise<void>
-  endActiveCall: () => Promise<void>
+  endActiveCall: (notifyServer?: boolean) => Promise<void>
   toggleAudio: () => void
   toggleVideo: () => void
   toggleScreenShare: () => void
@@ -350,7 +350,7 @@ export const useCallStore = create<CallState>((set, get) => ({
     }
   },
 
-  endActiveCall: async () => {
+  endActiveCall: async (notifyServer: boolean = true) => {
     const { activeCall, localStream } = get()
     if (activeCall?.id) {
       handledCallIds.add(activeCall.id)
@@ -375,18 +375,20 @@ export const useCallStore = create<CallState>((set, get) => ({
     }
 
     try {
-      const token =
-        localStorage.getItem('accessToken') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('taskflow_token')
+      if (notifyServer) {
+        const token =
+          localStorage.getItem('accessToken') ||
+          localStorage.getItem('token') ||
+          localStorage.getItem('taskflow_token')
 
-      await fetch(
-        `/api/v1/workspaces/${activeCall.workspaceId}/calls/${activeCall.id}/end`,
-        {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      )
+        await fetch(
+          `/api/v1/workspaces/${activeCall.workspaceId}/calls/${activeCall.id}/end`,
+          {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        )
+      }
     } catch (err) {
       console.error('[call-store] end call error:', err)
     } finally {

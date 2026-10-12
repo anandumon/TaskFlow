@@ -35,6 +35,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Loader2,
 } from 'lucide-react'
 import { useUserTheme } from '@/hooks/useUserTheme'
 import { UserGuideModal } from '@/components/user-guide-modal'
@@ -74,6 +75,12 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const [isLockedExpanded, setIsLockedExpanded] = useState(false)
   const sidebarContainerRef = useRef<HTMLDivElement | null>(null)
   const isExpanded = isHovered || isLockedExpanded || mobileOpen
+
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname, searchParams])
 
   const [channelsCollapsed, setChannelsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -590,7 +597,9 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         <nav className={`space-y-1 ${isExpanded ? 'p-3' : 'py-2 px-2 flex flex-col items-center space-y-1.5'}`}>
           {navItems.map((item) => {
             const Icon = item.icon
-            const active = pathname === item.href || (item.href !== '/app/home' && pathname.startsWith(item.href))
+            const isPending = pendingHref === item.href
+            const isDestinationActive = pathname === item.href || (item.href !== '/app/home' && pathname.startsWith(item.href))
+            const active = isPending || isDestinationActive
             return (
               <Link
                 key={item.href}
@@ -598,6 +607,9 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 prefetch={true}
                 onClick={(e) => {
                   e.stopPropagation()
+                  if (item.href !== pathname) {
+                    setPendingHref(item.href)
+                  }
                   if (onCloseMobile) onCloseMobile()
                 }}
                 title={item.label}
@@ -615,8 +627,13 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                       }`
                 }`}
               >
-                <Icon className={`${isExpanded ? 'w-4 h-4' : 'w-5 h-5'} shrink-0`} />
-                {isExpanded && <span>{item.label}</span>}
+                <Icon className={`${isExpanded ? 'w-4 h-4' : 'w-5 h-5'} shrink-0 ${isPending ? 'animate-pulse' : ''}`} />
+                {isExpanded && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span className="truncate">{item.label}</span>
+                    {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-foreground shrink-0 ml-1.5" />}
+                  </div>
+                )}
               </Link>
             )
           })}

@@ -50,6 +50,7 @@ import {
   getFileTypeCategory,
   downloadFile,
 } from '@/lib/project-files'
+import { DocsSkeleton } from '@/components/loading'
 
 export default function DocsPage() {
   const { docs, loadDocs, createDoc, deleteDoc, updateDoc } = useDocStore()
@@ -79,13 +80,33 @@ export default function DocsPage() {
     setIsMounted(true)
   }, [])
 
+  const [docsDataLoaded, setDocsDataLoaded] = useState(false)
+  const lastDocsWsRef = useRef<string | null>(null)
+
   useEffect(() => {
+    let active = true
+    if (lastDocsWsRef.current !== (currentWorkspace?.id || 'default')) {
+      setDocsDataLoaded(false)
+    }
+
+    const promises: Promise<any>[] = []
     if (currentWorkspace?.id) {
-      loadDocs(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-      loadTasks(currentWorkspace.id)
+      promises.push(Promise.resolve(loadDocs(currentWorkspace.id)))
+      promises.push(loadProjects(currentWorkspace.id))
+      promises.push(loadTasks(currentWorkspace.id))
     } else {
-      loadDocs()
+      promises.push(Promise.resolve(loadDocs()))
+    }
+
+    Promise.all(promises).finally(() => {
+      if (active) {
+        lastDocsWsRef.current = currentWorkspace?.id || 'default'
+        setDocsDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [loadDocs, loadProjects, loadTasks, currentWorkspace?.id])
 
@@ -388,6 +409,10 @@ export default function DocsPage() {
         .trim()
         .slice(0, 140) + '...'
     )
+  }
+
+  if (!isMounted || !docsDataLoaded) {
+    return <DocsSkeleton />
   }
 
   return (
@@ -1342,7 +1367,7 @@ export default function DocsPage() {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Are you sure you want to delete <strong className="text-foreground">"{docToDelete.title}"</strong>? This will permanently remove the document from your workspace and database. This action cannot be undone.
+              Are you sure you want to delete <strong className="text-foreground">&quot;{docToDelete.title}&quot;</strong>? This will permanently remove the document from your workspace and database. This action cannot be undone.
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">

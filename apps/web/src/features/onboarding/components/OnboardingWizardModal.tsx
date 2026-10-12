@@ -321,7 +321,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
                   Enter your Invitation Code
                 </h1>
                 <p className="text-xs text-white/60 leading-relaxed">
-                  Enter the unique referral or invitation code sent to your email to automatically join your team's workspace and project.
+                  Enter the unique referral or invitation code sent to your email to automatically join your team&apos;s workspace and project.
                 </p>
               </div>
 
@@ -443,7 +443,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
                   }}
                   className="text-xs text-white/50 hover:text-white transition-colors cursor-pointer"
                 >
-                  Don't have an invitation code? <span className="text-primary font-semibold underline underline-offset-2">Create a new Organization</span>
+                  Don&apos;t have an invitation code? <span className="text-primary font-semibold underline underline-offset-2">Create a new Organization</span>
                 </button>
               </div>
             </div>

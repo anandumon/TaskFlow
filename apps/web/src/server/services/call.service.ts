@@ -792,42 +792,98 @@ export async function endCall(
     return { success: false, error: 'Unauthorized to end call' }
   }
 
-  // If caller hangs up while still RINGING, mark as CANCELLED instead of ENDED
-  const finalStatus = (session.status === 'RINGING' && session.created_by === userId) ? 'CANCELLED' : 'ENDED'
+  const isOneToOne =
+    session.call_type === 'ONE_TO_ONE_VOICE' ||
+    session.call_type === 'ONE_TO_ONE_VIDEO'
+  const isHost = session.created_by === userId
 
-  await query(
-    `UPDATE call_sessions 
-     SET status = $2, ended_at = NOW(), ended_by = $3, current_participants = 0, updated_at = NOW() 
-     WHERE id = $1`,
-    [callId, finalStatus, userId]
-  )
+  // In 1-to-1 calls, either participant ending ends the call for both.
+  // In group calls, only the host ending ends the call for everyone; regular members leave individually.
+  if (isOneToOne || isHost) {
+    const finalStatus =
+      session.status === 'RINGING' && isHost ? 'CANCELLED' : 'ENDED'
 
-  await query(
-    `UPDATE call_participants 
-     SET status = 'LEFT', left_at = NOW(), updated_at = NOW() 
-     WHERE call_session_id = $1 AND status IN ('RINGING', 'ACCEPTED', 'JOINED', 'INVITED')`,
-    [callId]
-  )
+    await query(
+      `UPDATE call_sessions 
+       SET status = $2, ended_at = NOW(), ended_by = $3, current_participants = 0, updated_at = NOW() 
+       WHERE id = $1`,
+      [callId, finalStatus, userId]
+    )
 
-  await query(
-    `INSERT INTO call_events (call_session_id, user_id, event_type, metadata)
-     VALUES ($1, $2, $3, $4)`,
-    [callId, userId, finalStatus === 'CANCELLED' ? 'CALL_CANCELLED' : 'CALL_ENDED', JSON.stringify({ reason })]
-  )
+    await query(
+      `UPDATE call_participants 
+       SET status = 'LEFT', left_at = NOW(), updated_at = NOW() 
+       WHERE call_session_id = $1 AND status IN ('RINGING', 'ACCEPTED', 'JOINED', 'INVITED')`,
+      [callId]
+    )
 
-  const updated = await getCallSession(callId)
-  if (updated) {
+    await query(
+      `INSERT INTO call_events (call_session_id, user_id, event_type, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        callId,
+        userId,
+        finalStatus === 'CANCELLED' ? 'CALL_CANCELLED' : 'CALL_ENDED',
+        JSON.stringify({ reason, endedByHost: isHost }),
+      ]
+    )
+
+    const updated = await getCallSession(callId)
+    if (updated) {
+      broadcastCallEvent({
+        type: 'call_ended',
+        workspaceId: updated.workspaceId,
+        callId,
+        callerId: updated.createdBy,
+        recipientId: session.recipient_id || undefined,
+        channelId: session.channel_id || undefined,
+        timestamp: new Date().toISOString(),
+        data: {
+          callSession: updated,
+          reason,
+          status: finalStatus,
+          isHostEnd: isHost,
+          endedBy: userId,
+        },
+      })
+    }
+
+    return { success: true, callSession: updated || undefined }
+  } else {
+    // Non-host participant leaves a group call: individual member departure
+    await query(
+      `UPDATE call_participants 
+       SET status = 'LEFT', left_at = NOW(), updated_at = NOW() 
+       WHERE call_session_id = $1 AND user_id = $2`,
+      [callId, userId]
+    )
+
+    await query(
+      `UPDATE call_sessions 
+       SET current_participants = GREATEST(0, current_participants - 1), updated_at = NOW() 
+       WHERE id = $1`,
+      [callId]
+    )
+
+    await query(
+      `INSERT INTO call_events (call_session_id, user_id, event_type, metadata)
+       VALUES ($1, $2, 'PARTICIPANT_LEFT', $3)`,
+      [callId, userId, JSON.stringify({ reason })]
+    )
+
     broadcastCallEvent({
-      type: 'call_ended',
-      workspaceId: updated.workspaceId,
+      type: 'call_participant_left',
+      workspaceId: session.workspace_id,
       callId,
-      callerId: updated.createdBy,
+      callerId: session.created_by,
+      channelId: session.channel_id || undefined,
       timestamp: new Date().toISOString(),
-      data: { callSession: updated, reason, status: finalStatus },
+      data: { callId, userId, status: 'LEFT' },
     })
-  }
 
-  return { success: true, callSession: updated || undefined }
+    const updated = await getCallSession(callId)
+    return { success: true, callSession: updated || undefined }
+  }
 }
 
 /**

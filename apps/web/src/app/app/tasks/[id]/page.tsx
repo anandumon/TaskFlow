@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Trash2, CheckCircle2, AlertCircle, FolderKanban, Lock } from 'lucide-react'
@@ -55,24 +55,119 @@ export default function TaskDetailsPage() {
   const { canDeleteTask } = usePermissions()
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [taskDetailsLoaded, setTaskDetailsLoaded] = useState(false)
+  const lastTaskDetailsWsRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-      fetchWorkspaceMembers(currentWorkspace.id).catch(() => {})
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastTaskDetailsWsRef.current !== currentWorkspace.id) {
+      setTaskDetailsLoaded(false)
+    }
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+      fetchWorkspaceMembers(currentWorkspace.id).catch(() => {}),
+    ]).finally(() => {
+      if (active) {
+        lastTaskDetailsWsRef.current = currentWorkspace.id
+        setTaskDetailsLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects, fetchWorkspaceMembers])
 
   const task = tasks.find((t) => t.id === taskId)
   const project = projects.find((p) => p.id === task?.projectId)
 
+  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses } = useStatusStore()
+  const workspaceStatuses = useMemo(
+    () => getStatuses(currentWorkspace?.id || 'default'),
+    [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses]
+  )
+
+  const projectEnvs = useMemo(() => {
+    return getProjectEnvironments(project)
+  }, [project])
+
+  const currentEnv = useMemo(() => {
+    return task ? getEnvForStatus(task.status, task.environment) : 'DEV'
+  }, [task?.status, task?.environment])
+
+  const envOptions = useMemo(() => {
+    const list = [...projectEnvs]
+    if (currentEnv && !list.includes(currentEnv)) {
+      list.unshift(currentEnv)
+    }
+    return list
+  }, [projectEnvs, currentEnv])
+
+  const currentUserName = getFirstName(
+    user?.firstName ||
+    user?.displayName?.split(' ')[0] ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'You'
+  )
+
+  const availableUsers: AssignableUser[] = useMemo(() => {
+    const userMap = new Map<string, AssignableUser>()
+
+    ;(workspaceMembers || []).forEach((m: any) => {
+      const name = getFirstName(m.displayName || m.name || m.firstName || m.email?.split('@')[0] || 'Member')
+      const id = String(m.userId || m.id)
+      userMap.set(id, {
+        id,
+        name,
+        email: m.email,
+        initials: getInitials(name),
+        color: getAvatarColor(name),
+        role: m.role || 'Member',
+      })
+    })
+
+    ;(orgMembers || []).forEach((m: any) => {
+      const id = String(m.userId || m.id)
+      if (!userMap.has(id)) {
+        const name = getFirstName(m.firstName || m.name || m.displayName || m.email?.split('@')[0] || 'Member')
+        userMap.set(id, {
+          id,
+          name,
+          email: m.email,
+          initials: getInitials(name),
+          color: getAvatarColor(name),
+          role: m.role || 'Member',
+        })
+      }
+    })
+
+    if (user) {
+      const uid = String(user.id)
+      if (!userMap.has(uid)) {
+        userMap.set(uid, {
+          id: uid,
+          name: currentUserName,
+          email: user.email,
+          initials: getInitials(currentUserName),
+          color: getAvatarColor(currentUserName),
+          role: 'You',
+        })
+      }
+    }
+
+    return Array.from(userMap.values())
+  }, [workspaceMembers, orgMembers, user, currentUserName])
+
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3000)
   }
 
-  if ((isTasksLoading && !task) || (!task && tasks.length === 0)) {
+  if (!taskDetailsLoaded || (isTasksLoading && !task)) {
     return <TaskDetailsSkeleton />
   }
 
@@ -241,32 +336,6 @@ export default function TaskDetailsPage() {
     showToast('File change removed!')
   }
 
-  const { getStatuses, workspaceStatuses: rawWorkspaceStatuses } = useStatusStore()
-  const workspaceStatuses = useMemo(
-    () => getStatuses(currentWorkspace?.id || 'default'),
-    [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses]
-  )
-
-  // Only show the selected environments for this project
-  const projectEnvs = useMemo(() => {
-    return getProjectEnvironments(project)
-  }, [project])
-
-  // Current environment dynamically computed according to status rule:
-  // in dev -> DEV, in sit -> SIT, in uat -> UAT, release -> RELEASE, completed -> MAIN.
-  // for others -> show the same as the status for env!
-  const currentEnv = useMemo(() => {
-    return task ? getEnvForStatus(task.status, task.environment) : 'DEV'
-  }, [task?.status, task?.environment])
-
-  const envOptions = useMemo(() => {
-    const list = [...projectEnvs]
-    if (currentEnv && !list.includes(currentEnv)) {
-      list.unshift(currentEnv)
-    }
-    return list
-  }, [projectEnvs, currentEnv])
-
   const handleAddNote = async (noteText: string) => {
     await addNote(task.id, noteText)
     showToast('Note added to discussion!')
@@ -300,65 +369,6 @@ export default function TaskDetailsPage() {
     }
     loadProjects(wsId)
   }
-
-  const currentUserName = getFirstName(
-    user?.firstName ||
-    user?.displayName?.split(' ')[0] ||
-    user?.displayName ||
-    user?.email?.split('@')[0] ||
-    'You'
-  )
-
-  const availableUsers: AssignableUser[] = useMemo(() => {
-    const userMap = new Map<string, AssignableUser>()
-
-    // 1. Add workspace members (users who have direct access to this workspace)
-    ;(workspaceMembers || []).forEach((m: any) => {
-      const name = getFirstName(m.displayName || m.name || m.firstName || m.email?.split('@')[0] || 'Member')
-      const id = String(m.userId || m.id)
-      userMap.set(id, {
-        id,
-        name,
-        email: m.email,
-        initials: getInitials(name),
-        color: getAvatarColor(name),
-        role: m.role || 'Member',
-      })
-    })
-
-    // 2. Add organization members
-    ;(orgMembers || []).forEach((m: any) => {
-      const id = String(m.userId || m.id)
-      if (!userMap.has(id)) {
-        const name = getFirstName(m.firstName || m.name || m.displayName || m.email?.split('@')[0] || 'Member')
-        userMap.set(id, {
-          id,
-          name,
-          email: m.email,
-          initials: getInitials(name),
-          color: getAvatarColor(name),
-          role: m.role || 'Member',
-        })
-      }
-    })
-
-    // 3. Ensure current user is in the list
-    if (user) {
-      const uid = String(user.id)
-      if (!userMap.has(uid)) {
-        userMap.set(uid, {
-          id: uid,
-          name: currentUserName,
-          email: user.email,
-          initials: getInitials(currentUserName),
-          color: getAvatarColor(currentUserName),
-          role: 'You',
-        })
-      }
-    }
-
-    return Array.from(userMap.values())
-  }, [workspaceMembers, orgMembers, user, currentUserName])
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">

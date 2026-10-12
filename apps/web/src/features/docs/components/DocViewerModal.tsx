@@ -1066,7 +1066,7 @@ export function DocViewerModal({
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to delete <strong className="text-white">"{title}"</strong>? This will remove it from your workspace. This action cannot be undone.
+              Are you sure you want to delete <strong className="text-white">&quot;{title}&quot;</strong>? This will remove it from your workspace. This action cannot be undone.
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
@@ -1104,7 +1104,7 @@ export function DocViewerModal({
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              You have unsaved changes in <strong className="text-white">"{title || 'Untitled Doc'}"</strong>. Do you want to save them before closing?
+              You have unsaved changes in <strong className="text-white">&quot;{title || 'Untitled Doc'}&quot;</strong>. Do you want to save them before closing?
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
@@ -1159,7 +1159,7 @@ export function DocViewerModal({
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              A document with the name <strong className="text-white">"{title}"</strong> already exists in this workspace. Please enter a different name for your document to save:
+              A document with the name <strong className="text-white">&quot;{title}&quot;</strong> already exists in this workspace. Please enter a different name for your document to save:
             </p>
 
             <div className="space-y-1.5">
@@ -1212,7 +1212,7 @@ export function DocViewerModal({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">Share Document</h3>
-                  <p className="text-xs text-zinc-400">"{title || 'Untitled Doc'}"</p>
+                  <p className="text-xs text-zinc-400">&quot;{title || 'Untitled Doc'}&quot;</p>
                 </div>
               </div>
               <button

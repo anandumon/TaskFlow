@@ -45,25 +45,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadProjects: async (workspaceId: string) => {
     if (!workspaceId) return
     const currentProjs = get().projects
-    if (currentProjs.length === 0) {
+    const isDifferentWorkspace =
+      currentProjs.length > 0 && currentProjs.some((p) => p.workspaceId && p.workspaceId !== workspaceId)
+
+    if (currentProjs.length === 0 || isDifferentWorkspace) {
       if (typeof window !== 'undefined') {
         const cached = localStorage.getItem(`taskflow_cached_projects_${workspaceId}`)
         if (cached) {
           try {
             const parsed = JSON.parse(cached)
             if (Array.isArray(parsed) && parsed.length > 0) {
-              set({ projects: parsed, isLoading: false })
+              set({ projects: parsed, isLoading: false, error: null })
             } else {
-              set({ isLoading: true, error: null })
+              set({ projects: isDifferentWorkspace ? [] : currentProjs, isLoading: true, error: null })
             }
           } catch {
-            set({ isLoading: true, error: null })
+            set({ projects: isDifferentWorkspace ? [] : currentProjs, isLoading: true, error: null })
           }
         } else {
-          set({ isLoading: true, error: null })
+          set({ projects: isDifferentWorkspace ? [] : currentProjs, isLoading: true, error: null })
         }
       } else {
-        set({ isLoading: true, error: null })
+        set({ projects: isDifferentWorkspace ? [] : currentProjs, isLoading: true, error: null })
       }
     }
 

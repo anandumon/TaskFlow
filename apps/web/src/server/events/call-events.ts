@@ -19,6 +19,7 @@ export interface CallRealtimeEvent {
     | 'call_accepted'
     | 'call_declined'
     | 'call_started'
+    | 'call_signal'
     | 'call_ended'
     | 'call_participant_joined'
     | 'call_participant_left'

@@ -344,6 +344,11 @@ export function LiveCallModal() {
   const participants = activeCall.participants || []
   const remoteParticipant = participants.find((p) => p.userId !== user?.id)
   const isRemoteMuted = remoteParticipant?.isMuted ?? false
+  const isHost = activeCall.createdBy === user?.id
+  const isGroupCall =
+    activeCall.callType === 'GROUP_VOICE' ||
+    activeCall.callType === 'GROUP_VIDEO' ||
+    activeCall.callType === 'CHANNEL_CALL'
 
   const modalContent = (
     <div
@@ -410,55 +415,17 @@ export function LiveCallModal() {
           </div>
         </div>
 
-        {/* Center: Security Badge, Audio Unlock & Network Indicator */}
-        <div className="hidden sm:flex items-center gap-3">
-          {/* Autoplay blocked prompt */}
-          {audioBlocked && (
-            <button
-              type="button"
-              onClick={unlockAudio}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition-all shadow-lg shadow-amber-500/20 cursor-pointer animate-pulse"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>Tap to enable audio</span>
-            </button>
-          )}
-
-          {/* E2EE Security Badge */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsSecurityOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-semibold transition-all cursor-pointer"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>P2P Encrypted (DTLS-SRTP 256-bit)</span>
-            </button>
-
-            {/* Security Guarantee Popover */}
-            {isSecurityOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-72 rounded-2xl bg-[#161722] border border-white/15 p-4 shadow-2xl z-50 space-y-2 animate-scale-in text-left">
-                <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-                  <Lock className="w-4 h-4" />
-                  <span>Direct Encrypted Media Stream</span>
-                </div>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  Audio and video media are end-to-end encrypted using WebRTC DTLS-SRTP (AES-256) with direct peer transport and TURN relay fallback.
-                </p>
-                <div className="pt-1 text-[10px] text-zinc-400 border-t border-white/5 flex items-center justify-between">
-                  <span>DTLS / SRTP 256-bit Active</span>
-                  <span className="text-emerald-400 font-bold">End-to-End Media</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Quality Indicator */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-300 font-medium">
-            <Wifi className="w-3 h-3 text-emerald-400" />
-            <span className="text-[11px] capitalize">{connectionState === 'connected' ? connectionQuality : connectionState}</span>
-          </div>
-        </div>
+        {/* Center: Audio Unlock if blocked */}
+        {audioBlocked && (
+          <button
+            type="button"
+            onClick={unlockAudio}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition-all shadow-lg shadow-amber-500/20 cursor-pointer animate-pulse"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Tap to enable audio</span>
+          </button>
+        )}
 
         {/* Right Actions: Minimize & Fullscreen */}
         <div className="flex items-center gap-2">
@@ -740,7 +707,34 @@ export function LiveCallModal() {
       </div>
 
       {/* ── BOTTOM CONTROL TOOLBAR ── */}
-      <footer className="h-20 bg-[#0c0d14]/95 backdrop-blur-xl border-t border-white/10 px-6 flex items-center justify-center shrink-0 z-20">
+      <footer className="h-20 bg-[#0c0d14]/95 backdrop-blur-xl border-t border-white/10 px-6 flex items-center justify-between shrink-0 z-20">
+        {/* Left: Connection & Encryption Status Indicator */}
+        <div className="flex items-center gap-2 min-w-[140px] sm:min-w-[200px]">
+          {connectionState === 'connected' ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <span>E2EE &bull; {connectionQuality}</span>
+            </div>
+          ) : connectionState === 'connecting' ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>Connecting...</span>
+            </div>
+          ) : connectionState === 'failed' ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span>Reconnecting...</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium">
+              <span className="w-2 h-2 rounded-full bg-zinc-400" />
+              <span className="capitalize">{connectionState}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Center: Main Call Action Controls */}
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Mute Microphone Button */}
           <button
@@ -788,16 +782,25 @@ export function LiveCallModal() {
             </button>
           )}
 
-          {/* Hang Up Button */}
+          {/* Hang Up / Leave Button */}
           <button
             type="button"
             onClick={() => endActiveCall()}
-            className="p-3.5 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-xl shadow-rose-600/40 flex items-center gap-2 cursor-pointer"
-            title="Leave and end call"
+            className="p-3.5 px-5 sm:px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-xl shadow-rose-600/40 flex items-center gap-2 cursor-pointer active:scale-95"
+            title={isGroupCall && !isHost ? 'Leave group call' : 'End call for everyone'}
           >
             <PhoneOff className="w-5 h-5" />
-            <span className="text-xs tracking-wide">End Call</span>
+            <span className="text-xs tracking-wide">
+              {isGroupCall && !isHost ? 'Leave Call' : 'End Call'}
+            </span>
           </button>
+        </div>
+
+        {/* Right: Duration Pill */}
+        <div className="hidden sm:flex items-center justify-end min-w-[140px] sm:min-w-[200px]">
+          <span className="text-xs font-mono text-zinc-400 px-3 py-1 rounded-xl bg-white/5 border border-white/5">
+            {formatDuration(callDuration)}
+          </span>
         </div>
       </footer>
     </div>

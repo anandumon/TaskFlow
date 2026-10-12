@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Layers, X, Loader2, Sparkles, Check, ArrowRight, FolderKanban, Terminal, Zap, Shield, Rocket } from 'lucide-react'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -30,16 +30,20 @@ export function CreateWorkspaceModal({ isOpen, onClose }: CreateWorkspaceModalPr
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const loadingRef = useRef(false)
+
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loadingRef.current || loading) return
     if (!name.trim()) return
     if (!currentOrg?.id) {
       setError('Please select an active organization first.')
       return
     }
 
+    loadingRef.current = true
     setLoading(true)
     setError(null)
 
@@ -58,6 +62,7 @@ export function CreateWorkspaceModal({ isOpen, onClose }: CreateWorkspaceModalPr
     } catch (err: any) {
       setError(err?.message || 'Failed to create workspace. Please try again.')
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
   }

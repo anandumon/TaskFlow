@@ -669,8 +669,8 @@ export default function TeamsPage() {
 
   const canManage = Boolean(isAdmin || canRemoveUser)
 
-  // Show skeleton only during initial directory data load when we have no members yet
-  if (isInitialLoading && membersList.length === 0) {
+  // Show skeleton until initial directory data finishes loading
+  if (isInitialLoading || (isLoadingMembers && membersList.length === 0)) {
     return <TeamsSkeleton />
   }
 

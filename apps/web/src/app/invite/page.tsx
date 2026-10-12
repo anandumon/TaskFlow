@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense } from 'react'
+import React, { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -54,6 +54,7 @@ function InviteContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [accepting, setAccepting] = useState(false)
+  const acceptingRef = useRef(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const qMode = searchParams.get('mode')
@@ -66,6 +67,7 @@ function InviteContent() {
   const [authEmail, setAuthEmail] = useState('')
   const [password, setPassword] = useState('')
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const authSubmittingRef = useRef(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false)
@@ -244,7 +246,8 @@ function InviteContent() {
   }, [token])
 
   const handleAccept = async () => {
-    if (!token) return
+    if (!token || acceptingRef.current || accepting) return
+    acceptingRef.current = true
     setAccepting(true)
     setError(null)
 
@@ -293,6 +296,7 @@ function InviteContent() {
           'Failed to accept invitation. Please try again.'
       )
     } finally {
+      acceptingRef.current = false
       setAccepting(false)
     }
   }
@@ -315,6 +319,8 @@ function InviteContent() {
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (authSubmittingRef.current || authSubmitting) return
+    authSubmittingRef.current = true
     setAuthSubmitting(true)
     setAuthError(null)
 
@@ -407,6 +413,7 @@ function InviteContent() {
           'Authentication failed. Please check your credentials.'
       )
     } finally {
+      authSubmittingRef.current = false
       setAuthSubmitting(false)
     }
   }

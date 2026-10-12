@@ -180,6 +180,16 @@ export async function createProject(
     environments?: string
   }
 ): Promise<ProjectDto> {
+  // Server-side idempotent deduplication: prevent duplicate rows from double-submits within 3 seconds
+  const windowStart = new Date(Date.now() - 3000)
+  const existing = await queryOne(
+    `SELECT * FROM projects WHERE workspace_id = $1 AND name = $2 AND created_at >= $3 AND (deleted = false OR deleted IS NULL)`,
+    [workspaceId, input.name.trim(), windowStart]
+  )
+  if (existing) {
+    return mapProject(existing)
+  }
+
   const id = crypto.randomUUID()
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()

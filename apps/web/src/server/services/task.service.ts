@@ -145,6 +145,19 @@ export async function createTask(
   creatorId?: string
 ): Promise<TaskDto> {
   await ensureTasksSchema()
+
+  // Server-side idempotent deduplication: prevent duplicate rows from double-submits within 3 seconds
+  if (creatorId && input.title) {
+    const windowStart = new Date(Date.now() - 3000)
+    const existing = await queryOne(
+      `SELECT * FROM tasks WHERE workspace_id = $1 AND title = $2 AND created_by = $3 AND created_at >= $4 AND (deleted = false OR deleted IS NULL)`,
+      [workspaceId, input.title.trim(), creatorId, windowStart]
+    )
+    if (existing) {
+      return mapTask(existing)
+    }
+  }
+
   const id = crypto.randomUUID()
   const now = new Date()
 

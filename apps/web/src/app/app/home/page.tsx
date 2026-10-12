@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
@@ -34,15 +34,33 @@ export default function DashboardPage() {
   const { tasks, loadTasks, updateStatus, isLoading: tasksLoading } = useTaskStore()
   const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore()
 
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const lastWsRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastWsRef.current !== currentWorkspace.id) {
+      setDataLoaded(false)
+    }
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+    ]).finally(() => {
+      if (active) {
+        lastWsRef.current = currentWorkspace.id
+        setDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects])
 
-  // Show skeleton on initial load (stores empty + actively fetching)
-  if ((tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
+  // Show skeleton until all APIs complete or while actively loading
+  if (!dataLoaded || (tasksLoading && tasks.length === 0) || (projectsLoading && projects.length === 0)) {
     return <DashboardSkeleton />
   }
 

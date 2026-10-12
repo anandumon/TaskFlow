@@ -153,17 +153,39 @@ export function useChatRealtime() {
                   } else if (eventType === 'call_declined') {
                     if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
                       callStore.setErrorMessage('Call declined by user')
-                      callStore.endActiveCall()
+                      callStore.endActiveCall(false)
                     }
                     if (callStore.incomingCall && callStore.incomingCall.callSession.id === payload.callId) {
                       callStore.setIncomingCall(null)
                     }
                   } else if (eventType === 'call_ended') {
                     if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
-                      callStore.endActiveCall()
+                      // End call immediately for both users without re-triggering network call
+                      callStore.endActiveCall(false)
                     }
                     if (callStore.incomingCall && callStore.incomingCall.callSession.id === payload.callId) {
                       callStore.setIncomingCall(null)
+                    }
+                  } else if (eventType === 'call_participant_left') {
+                    // In group calls: remove departed participant from active list
+                    if (callStore.activeCall && callStore.activeCall.id === payload.callId) {
+                      const leftId = payload.data?.userId || payload.userId
+                      if (leftId && leftId !== userRef.current?.id) {
+                        const remaining = (callStore.activeCall.participants || []).filter(
+                          (p: any) => p.userId !== leftId
+                        )
+                        callStore.setActiveCall({
+                          ...callStore.activeCall,
+                          participants: remaining,
+                        })
+                      }
+                    }
+                  } else if (eventType === 'call_signal') {
+                    const sig = payload.data?.signal
+                    if (sig && typeof window !== 'undefined') {
+                      window.dispatchEvent(
+                        new CustomEvent('taskflow:call_signal', { detail: sig })
+                      )
                     }
                   }
                 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Calendar as CalendarIcon,
@@ -171,12 +171,30 @@ export default function CalendarPage() {
   const [newTaskEnv, setNewTaskEnv] = useState<TaskEnvironment>('DEV')
   const [newTaskDay, setNewTaskDay] = useState('')
 
+  const [calendarDataLoaded, setCalendarDataLoaded] = useState(false)
+  const lastCalWsRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-      fetchConnections().catch(() => {})
-      fetchUnifiedEvents(currentWorkspace.id).catch(() => {})
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastCalWsRef.current !== currentWorkspace.id) {
+      setCalendarDataLoaded(false)
+    }
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+      fetchConnections().catch(() => {}),
+      fetchUnifiedEvents(currentWorkspace.id).catch(() => {}),
+    ]).finally(() => {
+      if (active) {
+        lastCalWsRef.current = currentWorkspace.id
+        setCalendarDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, loadTasks, loadProjects, fetchConnections, fetchUnifiedEvents])
 
@@ -313,8 +331,8 @@ export default function CalendarPage() {
   const rowCount = totalSlots > 35 ? 6 : 5
   const gridRowsClass = rowCount === 6 ? 'grid-rows-6' : 'grid-rows-5'
 
-  // Show skeleton during initial empty load (after all hooks have executed)
-  if (tasksLoading && tasks.length === 0) {
+  // Show skeleton until all APIs complete or while actively loading
+  if (!calendarDataLoaded || (tasksLoading && tasks.length === 0)) {
     return <CalendarSkeleton />
   }
 

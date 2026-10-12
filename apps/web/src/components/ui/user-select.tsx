@@ -212,7 +212,7 @@ export function UserSelect({
                   <UserPlus className="w-3.5 h-3.5 shrink-0" />
                   <div className="min-w-0">
                     <div className="truncate">
-                      Assign custom name: <span className="font-bold underline text-foreground">"{getFirstName(searchTerm.trim())}"</span>
+                      Assign custom name: <span className="font-bold underline text-foreground">&quot;{getFirstName(searchTerm.trim())}&quot;</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-normal">Person without a TaskFlow account</div>
                   </div>

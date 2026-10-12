@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   CheckSquare,
@@ -278,7 +278,7 @@ function UserSelect({
                   <UserPlus className="w-3.5 h-3.5 shrink-0" />
                   <div className="min-w-0">
                     <div className="truncate">
-                      Assign custom name: <span className="font-bold underline text-foreground">"{searchTerm.trim()}"</span>
+                      Assign custom name: <span className="font-bold underline text-foreground">&quot;{searchTerm.trim()}&quot;</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-normal">Person without a TaskFlow account</div>
                   </div>
@@ -436,6 +436,7 @@ export default function TasksPage() {
   const [newSubtaskDue, setNewSubtaskDue] = useState(todayStr)
   const [newSubtaskAttachments, setNewSubtaskAttachments] = useState<TaskAttachment[]>([])
   const [isSavingTask, setIsSavingTask] = useState(false)
+  const isSavingTaskRef = useRef(false)
   const [isUpdatingTask, setIsUpdatingTask] = useState(false)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
@@ -642,16 +643,32 @@ export default function TasksPage() {
     }
   }
 
+  const [tasksDataLoaded, setTasksDataLoaded] = useState(false)
+  const lastTasksWsRef = useRef<string | null>(null)
+
   // Load initial tasks, projects, workspace members, org members, and statuses
   useEffect(() => {
-    if (currentWorkspace?.id) {
-      loadTasks(currentWorkspace.id)
-      loadProjects(currentWorkspace.id)
-      fetchWsMembers(currentWorkspace.id)
-      fetchWorkspaceStatuses(currentWorkspace.id)
+    if (!currentWorkspace?.id) return
+    let active = true
+    if (lastTasksWsRef.current !== currentWorkspace.id) {
+      setTasksDataLoaded(false)
     }
-    if (currentOrg?.id) {
-      fetchOrgMembers(currentOrg.id)
+
+    Promise.all([
+      loadTasks(currentWorkspace.id),
+      loadProjects(currentWorkspace.id),
+      fetchWsMembers(currentWorkspace.id),
+      fetchWorkspaceStatuses(currentWorkspace.id),
+      currentOrg?.id ? fetchOrgMembers(currentOrg.id) : Promise.resolve(),
+    ]).finally(() => {
+      if (active) {
+        lastTasksWsRef.current = currentWorkspace.id
+        setTasksDataLoaded(true)
+      }
+    })
+
+    return () => {
+      active = false
     }
   }, [currentWorkspace?.id, currentOrg?.id, loadTasks, loadProjects, fetchWsMembers, fetchOrgMembers, fetchWorkspaceStatuses])
 
@@ -878,7 +895,7 @@ export default function TasksPage() {
   // Add Task Handler (Multi-step Wizard with Description, Attachments, Subtasks & Progress)
   const handleAddTask = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (isSavingTask) return
+    if (isSavingTaskRef.current || isSavingTask) return
     if (!newTaskTitle.trim()) {
       showToast('Please enter a task title.')
       setCreateTaskStep(1)
@@ -898,6 +915,7 @@ export default function TasksPage() {
 
     const wsId = currentWorkspace?.id || '50a4c29f-09ff-4480-8b6b-495381247d0f'
     try {
+      isSavingTaskRef.current = true
       setIsSavingTask(true)
       let initialProgress = 0
       if (newTaskSubtasks.length > 0) {
@@ -946,6 +964,7 @@ export default function TasksPage() {
     } catch (err: any) {
       showToast(err?.message || 'Task creation failed')
     } finally {
+      isSavingTaskRef.current = false
       setIsSavingTask(false)
     }
   }
@@ -1432,8 +1451,8 @@ export default function TasksPage() {
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   })
 
-  // Show skeleton during initial load only (after all hooks have executed)
-  if (tasksLoading && tasks.length === 0) {
+  // Show skeleton until all APIs complete or while actively loading
+  if (!tasksDataLoaded || (tasksLoading && tasks.length === 0)) {
     return <TaskListSkeleton />
   }
 
@@ -2882,7 +2901,7 @@ export default function TasksPage() {
                           <FolderKanban className="w-4 h-4" /> Project Required Before Creating Tasks
                         </div>
                         <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          This workspace doesn't have any projects yet. Every task must be assigned to a project.
+                          This workspace doesn&apos;t have any projects yet. Every task must be assigned to a project.
                         </p>
                         <Link
                           href="/app/projects"
@@ -4126,7 +4145,7 @@ export default function TasksPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Are you sure you want to delete task <strong className="text-foreground">"{taskToDelete.title}"</strong>? This will permanently remove the task from the database. This action cannot be undone.
+                Are you sure you want to delete task <strong className="text-foreground">&quot;{taskToDelete.title}&quot;</strong>? This will permanently remove the task from the database. This action cannot be undone.
               </p>
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
