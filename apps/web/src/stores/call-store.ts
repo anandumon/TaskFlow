@@ -140,7 +140,13 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 
   closePreJoin: () => {
-    set({ isPreJoinOpen: false, preJoinOptions: null })
+    const cur = get().localStream
+    if (cur) {
+      try {
+        cur.getTracks().forEach((track) => track.stop())
+      } catch {}
+    }
+    set({ isPreJoinOpen: false, preJoinOptions: null, localStream: null })
   },
 
   startCallFromPreJoin: async (workspaceId: string) => {
@@ -384,6 +390,13 @@ export const useCallStore = create<CallState>((set, get) => ({
     } catch (err) {
       console.error('[call-store] end call error:', err)
     } finally {
+      const finalStream = get().localStream
+      if (finalStream) {
+        try {
+          finalStream.getTracks().forEach((track) => track.stop())
+        } catch {}
+      }
+
       set({
         activeCall: null,
         localStream: null,
@@ -420,7 +433,8 @@ export const useCallStore = create<CallState>((set, get) => ({
       isIncomingMinimized: false,
     })
   },
-  setActiveCall: (call) => set({ activeCall: call }),
+  setActiveCall: (call) =>
+    set({ activeCall: call, ...(call ? { isLiveCallOpen: true } : {}) }),
   setLocalStream: (stream) => set({ localStream: stream }),
   setLiveKitCredentials: (token, serverUrl, roomName, e2eeKey) =>
     set({ liveKitToken: token, serverUrl, roomName, e2eeKey }),

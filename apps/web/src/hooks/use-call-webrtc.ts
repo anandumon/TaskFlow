@@ -35,16 +35,38 @@ export interface UseCallWebRTCResult {
 /**
  * Attaches a MediaStream to a video or audio element ref and keeps it attached across renders.
  * Re-attaches when either the stream OR the element changes (handles minimize/restore remounting).
+/**
+ * Attaches a MediaStream to a video or audio element safely without resetting the pipeline
+ * if the underlying tracks have not changed. Guarantees play is resumed if paused.
  */
 export function attachStreamToElement(
   el: HTMLVideoElement | HTMLAudioElement | null,
   stream: MediaStream | null
 ) {
   if (!el) return
-  if (el.srcObject !== stream) {
-    el.srcObject = stream
+  if (!stream) {
+    if (el.srcObject) {
+      el.srcObject = null
+    }
+    return
   }
-  if (stream) {
+
+  const currentObj = el.srcObject as MediaStream | null
+  if (currentObj !== stream) {
+    const curTracks = currentObj?.getTracks?.() || []
+    const newTracks = stream.getTracks?.() || []
+    const isSameTracks =
+      curTracks.length === newTracks.length &&
+      curTracks.length > 0 &&
+      curTracks.every((t, i) => t.id === newTracks[i]?.id)
+
+    if (!isSameTracks || !currentObj) {
+      el.srcObject = stream
+    }
+  }
+
+  // Ensure playback is ongoing (re-trigger if browser paused it on route/visibility changes)
+  if (el.paused || el.readyState === 0) {
     const playPromise = el.play()
     if (playPromise !== undefined) {
       playPromise.catch((err) => {
@@ -52,6 +74,41 @@ export function attachStreamToElement(
         console.warn('[attachStreamToElement] Play deferred:', err?.name || err)
       })
     }
+  }
+}
+
+/**
+ * Safely finds the dedicated video sender on an RTCPeerConnection,
+ * checking transceivers first to ensure the audio sender is never mistakenly selected.
+ */
+export function getVideoSender(pc: RTCPeerConnection | null): RTCRtpSender | null {
+  if (!pc) return null
+  try {
+    const transceivers = pc.getTransceivers ? pc.getTransceivers() : []
+    const videoTransceiver = transceivers.find(
+      (t) => t.sender.track?.kind === 'video' || t.receiver.track?.kind === 'video'
+    )
+    if (videoTransceiver) return videoTransceiver.sender
+    return pc.getSenders().find((s) => s.track?.kind === 'video') || null
+  } catch {
+    return pc.getSenders().find((s) => s.track?.kind === 'video') || null
+  }
+}
+
+/**
+ * Safely finds the dedicated audio sender on an RTCPeerConnection.
+ */
+export function getAudioSender(pc: RTCPeerConnection | null): RTCRtpSender | null {
+  if (!pc) return null
+  try {
+    const transceivers = pc.getTransceivers ? pc.getTransceivers() : []
+    const audioTransceiver = transceivers.find(
+      (t) => t.sender.track?.kind === 'audio' || t.receiver.track?.kind === 'audio'
+    )
+    if (audioTransceiver) return audioTransceiver.sender
+    return pc.getSenders().find((s) => s.track?.kind === 'audio') || null
+  } catch {
+    return pc.getSenders().find((s) => s.track?.kind === 'audio') || null
   }
 }
 
@@ -327,6 +384,11 @@ export function useCallWebRTC({
         audioContextRef.current.close().catch(() => {})
         audioContextRef.current = null
       }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop())
+        localStreamRef.current = null
+        setLocalStream(null)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, callId])
@@ -415,15 +477,24 @@ export function useCallWebRTC({
 
       const updateTracks = () => {
         if (isDisposed) return
-        const hasVideo = freshStream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live')
-        const hasAudio = freshStream.getAudioTracks().some((t) => t.enabled && t.readyState === 'live')
-        setHasRemoteVideo(hasVideo)
+        const liveVideo = freshStream.getVideoTracks().filter((t) => t.readyState === 'live')
+        const liveAudio = freshStream.getAudioTracks().filter((t) => t.readyState === 'live')
+        const hasVideo = liveVideo.some((t) => t.enabled && !t.muted)
+        const hasAudio = liveAudio.some((t) => t.enabled && !t.muted)
+        setHasRemoteVideo(hasVideo || liveVideo.length > 0)
         setRemoteAudioMuted(!hasAudio)
       }
 
-      event.track.onmute = updateTracks
-      event.track.onunmute = updateTracks
-      event.track.onended = updateTracks
+      event.track.onmute = () => {
+        updateTracks()
+      }
+      event.track.onunmute = () => {
+        updateTracks()
+        setRemoteStream(new MediaStream(currentRemote.getTracks()))
+      }
+      event.track.onended = () => {
+        updateTracks()
+      }
       updateTracks()
     }
 

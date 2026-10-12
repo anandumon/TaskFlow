@@ -19,7 +19,13 @@ import {
 } from 'lucide-react'
 import { useCallStore } from '@/stores/call-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { useCallWebRTC, useStreamRef, attachStreamToElement } from '@/hooks/use-call-webrtc'
+import {
+  useCallWebRTC,
+  useStreamRef,
+  attachStreamToElement,
+  getVideoSender,
+  getAudioSender,
+} from '@/hooks/use-call-webrtc'
 
 const TERMINAL = ['ENDED', 'CANCELLED', 'DECLINED', 'MISSED', 'EXPIRED']
 
@@ -91,6 +97,17 @@ export function LiveCallModal() {
 
   const [remoteVideoPlaying, setRemoteVideoPlaying] = useState(false)
   const screenStreamRef = useRef<MediaStream | null>(null)
+  const wasScreenSharingRef = useRef(false)
+
+  // Stop screen stream tracks on unmount if active
+  useEffect(() => {
+    return () => {
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((t) => t.stop())
+        screenStreamRef.current = null
+      }
+    }
+  }, [])
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -105,28 +122,53 @@ export function LiveCallModal() {
     if (remoteAudioRef.current) {
       attachStreamToElement(remoteAudioRef.current, remoteStream)
     }
-  }, [remoteStream])
+  }, [remoteStream, isScreenSharing, isMinimized])
 
   useEffect(() => {
     if (localVideoRef.current) {
       attachStreamToElement(localVideoRef.current, localStream)
     }
-  }, [localStream])
+  }, [localStream, isScreenSharing, isMinimized])
 
   useEffect(() => {
-    if (screenVideoRef.current) {
+    if (screenVideoRef.current && screenStream) {
       attachStreamToElement(screenVideoRef.current, screenStream)
     }
-  }, [screenStream])
+  }, [screenStream, isScreenSharing])
 
-  // When unminimizing / restoring, re-verify and ensure playback is active
+  // Continuous playback watchdog: re-verifies playback on restore, focus, tab switch, or back navigation ("goback")
   useEffect(() => {
-    if (!isMinimized) {
-      if (remoteVideoRef.current) attachStreamToElement(remoteVideoRef.current, remoteStream)
-      if (localVideoRef.current) attachStreamToElement(localVideoRef.current, localStream)
-      if (remoteAudioRef.current) attachStreamToElement(remoteAudioRef.current, remoteStream)
+    const resumeAllMedia = () => {
+      if (remoteAudioRef.current) {
+        attachStreamToElement(remoteAudioRef.current, remoteStream)
+        if (remoteAudioRef.current.paused) remoteAudioRef.current.play().catch(() => {})
+      }
+      if (!isMinimized && remoteVideoRef.current) {
+        attachStreamToElement(remoteVideoRef.current, remoteStream)
+        if (remoteVideoRef.current.paused) remoteVideoRef.current.play().catch(() => {})
+      }
+      if (localVideoRef.current) {
+        attachStreamToElement(localVideoRef.current, localStream)
+        if (localVideoRef.current.paused) localVideoRef.current.play().catch(() => {})
+      }
+      if (screenVideoRef.current && screenStream) {
+        attachStreamToElement(screenVideoRef.current, screenStream)
+        if (screenVideoRef.current.paused) screenVideoRef.current.play().catch(() => {})
+      }
+      resumeAudio()
     }
-  }, [isMinimized, remoteStream, localStream])
+
+    resumeAllMedia()
+
+    document.addEventListener('visibilitychange', resumeAllMedia)
+    window.addEventListener('focus', resumeAllMedia)
+    window.addEventListener('popstate', resumeAllMedia)
+    return () => {
+      document.removeEventListener('visibilitychange', resumeAllMedia)
+      window.removeEventListener('focus', resumeAllMedia)
+      window.removeEventListener('popstate', resumeAllMedia)
+    }
+  }, [isMinimized, remoteStream, localStream, screenStream, resumeAudio, isScreenSharing])
 
   const unlockAudio = useCallback(() => {
     if (remoteAudioRef.current && remoteAudioRef.current.paused) {
@@ -164,7 +206,17 @@ export function LiveCallModal() {
 
   // Screen share handler with WebRTC sender replacement
   useEffect(() => {
+    if (!isLiveCallOpen || !activeCall || activeCall.status !== 'ACTIVE') {
+      return
+    }
+
     if (!isScreenSharing) {
+      // Only restore camera if screen sharing was actually active
+      if (!wasScreenSharingRef.current && !screenStreamRef.current && !screenStream) {
+        return
+      }
+      wasScreenSharingRef.current = false
+
       const pc = peerConnectionRef.current
       const currentScreen = screenStreamRef.current || screenStream
 
@@ -182,7 +234,10 @@ export function LiveCallModal() {
             if (freshTrack) {
               camTrack = freshTrack
               if (localStreamRef.current) {
-                localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current?.removeTrack(t))
+                localStreamRef.current.getVideoTracks().forEach((t) => {
+                  t.stop()
+                  localStreamRef.current?.removeTrack(t)
+                })
                 localStreamRef.current.addTrack(freshTrack)
               }
             }
@@ -192,11 +247,24 @@ export function LiveCallModal() {
         }
 
         if (pc) {
-          const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video' || (s.track === null && !s.dtmf))
+          const videoSender = getVideoSender(pc)
           if (videoSender) {
+            if (camTrack) camTrack.enabled = !localVideoOff
             await videoSender.replaceTrack(camTrack || null).catch((err) => {
               console.warn('[LiveCallModal] replaceTrack camera error:', err)
             })
+          }
+
+          // Verify and ensure mic audio sender is 100% active and connected
+          const audioSender = getAudioSender(pc)
+          const micTrack = localStreamRef.current?.getAudioTracks().find((t) => t.readyState === 'live')
+          if (audioSender && micTrack) {
+            micTrack.enabled = !localAudioMuted
+            if (audioSender.track !== micTrack) {
+              await audioSender.replaceTrack(micTrack).catch((err) => {
+                console.warn('[LiveCallModal] replaceTrack audio verification error:', err)
+              })
+            }
           }
         }
 
@@ -207,10 +275,21 @@ export function LiveCallModal() {
         screenStreamRef.current = null
         setScreenStream(null)
 
-        // Ensure local video element displays local camera stream
+        if (localStreamRef.current) {
+          useCallStore.getState().setLocalStream(localStreamRef.current)
+        }
+
+        // Ensure local & remote elements resume playback smoothly
         if (localVideoRef.current && localStreamRef.current) {
           attachStreamToElement(localVideoRef.current, localStreamRef.current)
         }
+        if (remoteAudioRef.current && remoteStream) {
+          attachStreamToElement(remoteAudioRef.current, remoteStream)
+        }
+        if (remoteVideoRef.current && remoteStream) {
+          attachStreamToElement(remoteVideoRef.current, remoteStream)
+        }
+        resumeAudio()
       }
 
       restoreCamera()
@@ -219,9 +298,10 @@ export function LiveCallModal() {
 
     const startScreen = async () => {
       try {
+        wasScreenSharingRef.current = true
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
-          audio: false, // Keep mic audio 100% steady and untouched
+          audio: false, // Keep mic audio 100% steady on mic sender
         })
         screenStreamRef.current = stream
         setScreenStream(stream)
@@ -229,7 +309,7 @@ export function LiveCallModal() {
         const screenTrack = stream.getVideoTracks()[0]
         const pc = peerConnectionRef.current
         if (pc && screenTrack) {
-          const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video' || (s.track === null && !s.dtmf))
+          const videoSender = getVideoSender(pc)
           if (videoSender) {
             await videoSender.replaceTrack(screenTrack).catch((err) => {
               console.warn('[LiveCallModal] replaceTrack screen error:', err)
@@ -251,7 +331,7 @@ export function LiveCallModal() {
     }
 
     startScreen()
-  }, [isScreenSharing, toggleScreenShare, localStreamRef, peerConnectionRef, localVideoOff, isVoiceOnly])
+  }, [isScreenSharing, toggleScreenShare, localStreamRef, peerConnectionRef, localVideoOff, isVoiceOnly, isLiveCallOpen, activeCall?.status, localAudioMuted, remoteStream, resumeAudio])
 
   if (!isMounted || !isLiveCallOpen || !activeCall) return null
 
@@ -263,17 +343,18 @@ export function LiveCallModal() {
 
   const participants = activeCall.participants || []
   const remoteParticipant = participants.find((p) => p.userId !== user?.id)
+  const isRemoteMuted = remoteParticipant?.isMuted ?? false
 
   const modalContent = (
     <div
       onClick={unlockAudio}
       className={
         isMinimized
-          ? 'fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none overflow-hidden select-none'
+          ? 'fixed bottom-0 right-0 w-1 h-1 opacity-0 pointer-events-none overflow-hidden select-none z-[99990]'
           : 'fixed inset-0 top-0 left-0 w-screen h-screen z-[99990] bg-[#090a10] text-[#e1e4ea] flex flex-col select-none animate-fade-in overflow-hidden cursor-default'
       }
     >
-      {/* Unmuted Dedicated Remote Audio Player - stays continuously mounted offscreen so remote voice never halts or glitches */}
+      {/* Unmuted Dedicated Remote Audio Player - positioned at viewport bottom so browser never throttles voice */}
       <audio
         ref={(el) => {
           remoteAudioRef.current = el
@@ -283,11 +364,11 @@ export function LiveCallModal() {
         playsInline
         style={{
           position: 'fixed',
-          top: -9999,
-          left: -9999,
+          bottom: 0,
+          right: 0,
           width: 1,
           height: 1,
-          opacity: 0,
+          opacity: 0.01,
           pointerEvents: 'none',
         }}
       />
@@ -407,30 +488,143 @@ export function LiveCallModal() {
 
       {/* ── MAIN CONTENT AREA ── */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
-        {/* Primary Video / Presentation Stage */}
-        <div className="flex-1 relative bg-black flex items-center justify-center p-4">
-          {activeCall.status === 'RINGING' ? (
-            <div className="flex flex-col items-center justify-center space-y-6">
-              <div className="relative">
-                <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 border-2 border-emerald-400/40 flex items-center justify-center text-white text-5xl font-extrabold shadow-2xl">
-                  {(remoteParticipant?.name || 'U').charAt(0).toUpperCase()}
-                </div>
-                <span className="absolute -inset-3 rounded-full border-2 border-emerald-400/50 animate-ping pointer-events-none" />
-                <span className="absolute -inset-6 rounded-full border border-emerald-400/20 animate-pulse pointer-events-none" />
+        {activeCall.status === 'RINGING' ? (
+          <div className="flex-1 bg-black flex flex-col items-center justify-center space-y-6 p-4">
+            <div className="relative">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 border-2 border-emerald-400/40 flex items-center justify-center text-white text-5xl font-extrabold shadow-2xl">
+                {(remoteParticipant?.name || 'U').charAt(0).toUpperCase()}
               </div>
-              <div className="text-center space-y-2">
-                <h3 className="text-xl font-extrabold text-white">
-                  Calling {remoteParticipant?.name || 'User'}...
-                </h3>
-                <p className="text-xs text-emerald-400 flex items-center justify-center gap-2 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Ringing &bull; Waiting for recipient to answer
-                </p>
+              <span className="absolute -inset-3 rounded-full border-2 border-emerald-400/50 animate-ping pointer-events-none" />
+              <span className="absolute -inset-6 rounded-full border border-emerald-400/20 animate-pulse pointer-events-none" />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-extrabold text-white">
+                Calling {remoteParticipant?.name || 'User'}...
+              </h3>
+              <p className="text-xs text-emerald-400 flex items-center justify-center gap-2 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                Ringing &bull; Waiting for recipient to answer
+              </p>
+            </div>
+          </div>
+        ) : isScreenSharing ? (
+          /* ── GOOGLE MEET STYLE PRESENTATION LAYOUT ── */
+          <div className="flex-1 h-full min-h-0 flex flex-col lg:flex-row overflow-hidden relative bg-[#090a10]">
+            {/* 1. Main Central Screen Presentation Stage */}
+            <div className="flex-1 h-full min-w-0 flex flex-col items-center justify-center p-3 sm:p-4 relative">
+              <div className="w-full h-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black flex items-center justify-center relative border border-emerald-500/40 shadow-2xl">
+                <video
+                  ref={(el) => {
+                    screenVideoRef.current = el
+                    attachStreamToElement(el, screenStream)
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+                {/* Google Meet Style Top Banner Pill */}
+                <div className="absolute top-4 left-4 flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-black/85 backdrop-blur-md border border-emerald-500/30 text-xs font-semibold text-white shadow-xl z-20">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <MonitorUp className="w-4 h-4 text-emerald-400" />
+                  <span>You are presenting your screen</span>
+                  <button
+                    type="button"
+                    onClick={toggleScreenShare}
+                    className="ml-2 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                  >
+                    Stop presenting
+                  </button>
+                </div>
               </div>
             </div>
-          ) : !isVoiceOnly && !isScreenSharing ? (
+
+            {/* 2. Side Participant Cards Rail (Google Meet layout) */}
+            <div className="w-full lg:w-72 xl:w-80 h-auto lg:h-full shrink-0 flex flex-row lg:flex-col gap-3 p-3 lg:pl-0 overflow-x-auto lg:overflow-y-auto z-10 bg-[#0c0d14]/70 backdrop-blur-md border-t lg:border-t-0 lg:border-l border-white/10">
+              {/* Remote Participant Card */}
+              <div
+                className={`relative w-48 sm:w-56 lg:w-full aspect-video rounded-2xl overflow-hidden bg-[#13141f] border-2 shadow-xl transition-all duration-200 shrink-0 ${
+                  !isRemoteMuted ? 'border-emerald-400/80 ring-2 ring-emerald-400/20' : 'border-white/15'
+                }`}
+              >
+                <video
+                  ref={(el) => {
+                    remoteVideoRef.current = el
+                    attachStreamToElement(el, remoteStream)
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  onPlay={() => setRemoteVideoPlaying(true)}
+                  onPlaying={() => setRemoteVideoPlaying(true)}
+                  onLoadedMetadata={() => setRemoteVideoPlaying(true)}
+                  className="w-full h-full object-cover"
+                />
+                {/* Fallback avatar if remote video off */}
+                {(!hasRemoteVideo || !remoteVideoPlaying) && (
+                  <div className="absolute inset-0 bg-[#13141f] flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 border border-emerald-400/40 flex items-center justify-center text-white text-lg font-bold shadow-lg">
+                      {(remoteParticipant?.name || activeCall.createdByName || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-[11px] font-semibold text-zinc-300 truncate max-w-[140px]">
+                      {remoteParticipant?.name || activeCall.createdByName || 'Participant'}
+                    </span>
+                  </div>
+                )}
+                {/* Bottom Name & Mic Pill */}
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-white px-2.5 py-1 rounded-xl bg-black/75 backdrop-blur-md border border-white/10">
+                  <span className="truncate font-semibold text-zinc-200">
+                    {remoteParticipant?.name || activeCall.createdByName || 'Participant'}
+                  </span>
+                  {isRemoteMuted ? (
+                    <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  ) : (
+                    <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                </div>
+              </div>
+
+              {/* Local Participant Card (You) */}
+              <div
+                className={`relative w-48 sm:w-56 lg:w-full aspect-video rounded-2xl overflow-hidden bg-[#13141f] border-2 shadow-xl transition-all duration-200 shrink-0 ${
+                  isSpeaking ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-white/15'
+                }`}
+              >
+                {!localVideoOff ? (
+                  <video
+                    ref={(el) => {
+                      localVideoRef.current = el
+                      attachStreamToElement(el, localStream)
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover scale-x-[-1]"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center space-y-2 bg-[#13141f]">
+                    <div className="w-12 h-12 rounded-full bg-white/10 border border-white/15 flex items-center justify-center text-white font-bold text-lg">
+                      {(user?.displayName || user?.firstName || 'Y').charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-[11px] text-zinc-400 font-medium">Camera Off</span>
+                  </div>
+                )}
+                {/* Bottom Name & Mic Pill */}
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-white px-2.5 py-1 rounded-xl bg-black/75 backdrop-blur-md border border-white/10">
+                  <span className="truncate font-semibold text-zinc-200">You</span>
+                  {localAudioMuted ? (
+                    <MicOff className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  ) : (
+                    <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : !isVoiceOnly ? (
+          /* Standard Video Call Layout (Non-presenting) */
+          <div className="flex-1 relative bg-black flex items-center justify-center p-4">
             <div className="w-full h-full max-w-5xl rounded-3xl overflow-hidden bg-[#111218] border border-white/10 flex items-center justify-center relative shadow-2xl">
-              {/* Remote Video Feed (muted so audio plays from dedicated audio element without doubling) */}
               <video
                 ref={(el) => {
                   remoteVideoRef.current = el
@@ -446,7 +640,7 @@ export function LiveCallModal() {
               />
 
               {/* Remote Avatar Fallback only when remote camera is off or not yet streaming */}
-              {!hasRemoteVideo && !remoteVideoPlaying && (
+              {(!hasRemoteVideo || !remoteVideoPlaying) && (
                 <div className="absolute inset-0 bg-[#111218] flex flex-col items-center justify-center space-y-3 pointer-events-none">
                   <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border-2 border-emerald-400/30 flex items-center justify-center text-white text-4xl font-extrabold shadow-2xl">
                     {(remoteParticipant?.name || activeCall.createdByName || 'U').charAt(0).toUpperCase()}
@@ -458,44 +652,8 @@ export function LiveCallModal() {
                 </div>
               )}
             </div>
-          ) : isScreenSharing ? (
-            <div className="w-full h-full rounded-3xl overflow-hidden bg-black flex items-center justify-center relative border border-emerald-500/30">
-              {/* Presenting user's own screen stream */}
-              <video
-                ref={(el) => {
-                  screenVideoRef.current = el
-                  attachStreamToElement(el, screenStream)
-                }}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute top-4 left-4 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-md border border-white/15 text-xs text-emerald-400 font-semibold flex items-center gap-2">
-                <MonitorUp className="w-4 h-4" />
-                <span>You are presenting your screen</span>
-              </div>
-            </div>
-          ) : (
-            /* Voice-Only Big Harmony Avatar Grid */
-            <div className="flex flex-col items-center justify-center space-y-6">
-              <div className="relative">
-                <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-indigo-500/30 to-purple-500/30 border-2 border-indigo-400/40 flex items-center justify-center text-white text-5xl font-bold shadow-2xl">
-                  {(remoteParticipant?.name || 'M').charAt(0).toUpperCase()}
-                </div>
-                <span className="absolute -inset-2 rounded-full border border-indigo-400/30 animate-ping pointer-events-none" />
-              </div>
-              <div className="text-center space-y-1">
-                <h3 className="text-lg font-bold text-white">
-                  {remoteParticipant?.name || activeCall.createdByName || 'Member'}
-                </h3>
-                <p className="text-xs text-zinc-400">Live P2P Voice Connected &bull; Audio Active</p>
-              </div>
-            </div>
-          )}
 
-          {/* Local Self-View PiP Floating Corner Tile */}
-          {!isVoiceOnly && (
+            {/* Local Self-View PiP Floating Corner Tile */}
             <div
               className={`absolute bottom-6 right-6 w-48 sm:w-56 aspect-video rounded-2xl overflow-hidden bg-[#181922] border-2 shadow-2xl transition-all duration-200 z-30 ${
                 isSpeaking ? 'border-emerald-400 ring-2 ring-emerald-400/30' : 'border-white/20'
@@ -527,8 +685,24 @@ export function LiveCallModal() {
                 {localAudioMuted && <MicOff className="w-3 h-3 text-rose-400" />}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          /* Voice-Only Big Harmony Avatar Grid */
+          <div className="flex-1 bg-black flex flex-col items-center justify-center space-y-6 p-4">
+            <div className="relative">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-indigo-500/30 to-purple-500/30 border-2 border-indigo-400/40 flex items-center justify-center text-white text-5xl font-bold shadow-2xl">
+                {(remoteParticipant?.name || 'M').charAt(0).toUpperCase()}
+              </div>
+              <span className="absolute -inset-2 rounded-full border border-indigo-400/30 animate-ping pointer-events-none" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold text-white">
+                {remoteParticipant?.name || activeCall.createdByName || 'Member'}
+              </h3>
+              <p className="text-xs text-zinc-400">Live P2P Voice Connected &bull; Audio Active</p>
+            </div>
+          </div>
+        )}
 
         {/* Slide-Over Participants Sidebar */}
         {isSidebarOpen && (

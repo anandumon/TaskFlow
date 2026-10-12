@@ -10,12 +10,17 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTermsStore } from '@/stores/terms-store'
 
+const TERMINAL = ['ENDED', 'CANCELLED', 'DECLINED', 'MISSED', 'EXPIRED']
+
 export function CallProvider({ children }: { children?: React.ReactNode }) {
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
   const {
     activeCall,
     incomingCall,
+    isPreJoinOpen,
+    isLiveCallOpen,
+    isMinimized,
     setIncomingCall,
     setActiveCall,
     endActiveCall,
@@ -152,13 +157,15 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
     setErrorMessage,
   ])
 
+  const isCallLive = !!activeCall && !TERMINAL.includes(activeCall.status) && isLiveCallOpen
+
   return (
     <>
       {children}
-      <PreJoinModal />
-      <IncomingCallModal />
-      <LiveCallModal />
-      <MinimizedCallBar />
+      {isPreJoinOpen && <PreJoinModal />}
+      {incomingCall && <IncomingCallModal />}
+      {isCallLive && <LiveCallModal />}
+      {isCallLive && isMinimized && <MinimizedCallBar />}
     </>
   )
 }
