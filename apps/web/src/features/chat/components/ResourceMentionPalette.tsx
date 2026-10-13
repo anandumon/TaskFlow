@@ -50,7 +50,7 @@ export interface ResourceMentionPaletteProps {
   onOpenDoc?: () => void
 }
 
-type TabKey = 'all' | 'tasks' | 'docs' | 'agents' | 'people' | 'teams' | 'drive'
+type TabKey = 'all' | 'tasks' | 'docs' | 'people' | 'drive'
 
 interface ServiceGroupItem {
   id: string
@@ -459,18 +459,6 @@ export function ResourceMentionPalette({
 
           <button
             type="button"
-            onClick={() => setActiveTab('agents')}
-            className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'agents'
-                ? 'bg-background text-foreground shadow-2xs font-bold border border-border/60'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            Agents
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('people')}
             className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'people'
@@ -479,18 +467,6 @@ export function ResourceMentionPalette({
             }`}
           >
             People
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('teams')}
-            className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'teams'
-                ? 'bg-background text-foreground shadow-2xs font-bold border border-border/60'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            Teams
           </button>
         </div>
 
@@ -554,39 +530,6 @@ export function ResourceMentionPalette({
               </div>
             </div>
 
-            {/* Agents Preview */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Agents
-              </div>
-              <div className="space-y-0.5">
-                {defaultAgents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectAgent(agent)
-                      onClose()
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-primary to-purple-600 text-white flex items-center justify-center shrink-0">
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0 truncate">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs text-foreground">{agent.name}</span>
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-500/15 text-purple-400 font-bold border border-purple-500/30">
-                            {agent.badge}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Tasks Section Preview */}
             <div className="space-y-1">
@@ -784,43 +727,6 @@ export function ResourceMentionPalette({
           </div>
         )}
 
-        {/* TAB 4: AGENTS */}
-        {activeTab === 'agents' && (
-          <div className="space-y-2">
-            <div className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Workspace Agents
-            </div>
-            <div className="space-y-1">
-              {defaultAgents.map((agent) => (
-                <button
-                  key={agent.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectAgent(agent)
-                    onClose()
-                  }}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left border border-border/50 group"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-primary to-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                      <Bot className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                        <span>{agent.name}</span>
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-bold">
-                          {agent.badge}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">{agent.description}</div>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground shrink-0" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* TAB 5: PEOPLE */}
         {activeTab === 'people' && (
@@ -868,45 +774,7 @@ export function ResourceMentionPalette({
           </div>
         )}
 
-        {/* TAB 6: TEAMS */}
-        {activeTab === 'teams' && (
-          <div className="space-y-2">
-            <div className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Squads &amp; Departments
-            </div>
-            <div className="space-y-1">
-              {sampleTeams.map((team) => (
-                <button
-                  key={team.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectPerson({
-                      id: team.id,
-                      name: team.name,
-                      email: `${team.id}@taskflow.dev`,
-                      role: 'Squad',
-                      isOnline: true,
-                    })
-                    onClose()
-                  }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left group"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                      <Users className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="truncate font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
-                      {team.name}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-                    {team.membersCount} members
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   )

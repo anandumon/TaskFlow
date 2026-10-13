@@ -36,13 +36,17 @@ import {
   ListTodo,
   ExternalLink,
   ChevronDown,
-  Lock,
   AlertTriangle,
+  Download,
+  FileDown,
 } from 'lucide-react'
 import { useDocStore, DocItem, SubPageItem } from '@/stores/doc-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore } from '@/stores/task-store'
+import { TableTemplateModal } from './TableTemplateModal'
+import { DocVisualEditor } from './DocVisualEditor'
+import { TableTemplate } from './DocTemplates'
 
 interface DocViewerModalProps {
   isOpen: boolean
@@ -99,6 +103,7 @@ export function DocViewerModal({
   const [settingsTab, setSettingsTab] = useState<'entire' | 'page'>('entire')
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [isSavingDoc, setIsSavingDoc] = useState(false)
 
   // Interactive Feature Modals (matching Screenshot 5)
   const [showColumnsPopover, setShowColumnsPopover] = useState(false)
@@ -111,6 +116,7 @@ export function DocViewerModal({
   const [isProtected, setIsProtected] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [isWiki, setIsWiki] = useState(false)
+  const [isTableModalOpen, setIsTableModalOpen] = useState(false)
 
   const isDeletingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -234,6 +240,8 @@ export function DocViewerModal({
 
   // Explicit Save to Docs
   const handleSaveToDocs = async (overrideTitle?: string): Promise<boolean> => {
+    if (isSavingDoc) return false
+    setIsSavingDoc(true)
     const finalTitle = (overrideTitle || title).trim() || 'Untitled Doc'
 
     // Check duplicate name in DB/Store
@@ -243,6 +251,7 @@ export function DocViewerModal({
       setDuplicateWarning(
         `A document named "${finalTitle}" already exists in this workspace. Please choose a unique name.`
       )
+      setIsSavingDoc(false)
       return false
     }
 
@@ -281,6 +290,8 @@ export function DocViewerModal({
       setAutoSaveStatus('idle')
       showToast('Failed to save document.')
       return false
+    } finally {
+      setTimeout(() => setIsSavingDoc(false), 500)
     }
   }
 
@@ -302,7 +313,7 @@ export function DocViewerModal({
     }
 
     const shareUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/app/docs/${currentDoc?.id || docId}`
+      ? `${window.location.origin}/app/docs/${encodeURIComponent(currentDoc?.id || docId)}`
       : ''
 
     if (navigator.clipboard) {
@@ -310,6 +321,60 @@ export function DocViewerModal({
     }
     showToast('Document saved & share link copied to clipboard!')
     setShowShareModal(true)
+  }
+
+  const handleDownloadDoc = (format: 'md' | 'txt' | 'html' = 'md') => {
+    try {
+      const safeTitle = (title || 'Document').trim().replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_')
+      let fileContent = content || ''
+      let mimeType = 'text/markdown;charset=utf-8'
+      let extension = 'md'
+
+      if (format === 'txt') {
+        mimeType = 'text/plain;charset=utf-8'
+        extension = 'txt'
+        fileContent = `${title}\n\n` + (content || '')
+          .replace(/#{1,6}\s+/g, '')
+          .replace(/(\*\*|__)(.*?)\1/g, '$2')
+          .replace(/(\*|_)(.*?)\1/g, '$2')
+          .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
+      } else if (format === 'html') {
+        mimeType = 'text/html;charset=utf-8'
+        extension = 'html'
+        fileContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${title || 'TaskFlow Document'}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #1e293b; background: #fff; }
+    h1 { font-size: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 24px; }
+    p { margin-bottom: 16px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>${title || 'Untitled Document'}</h1>
+  <div>${(content || '').replace(/\n/g, '<br/>')}</div>
+</body>
+</html>`
+      } else {
+        fileContent = `# ${title || 'Document'}\n\n${content || ''}`
+      }
+
+      const blob = new Blob([fileContent], { type: mimeType })
+      const downloadUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = downloadUrl
+      anchor.download = `${safeTitle}.${extension}`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      URL.revokeObjectURL(downloadUrl)
+      showToast(`Document downloaded as .${extension}`)
+    } catch (err) {
+      console.error('Download failed', err)
+      showToast('Failed to download document')
+    }
   }
 
   if (!isOpen) return null
@@ -340,10 +405,29 @@ export function DocViewerModal({
   }
 
   const handleInsertTable = () => {
-    const tableSnippet = `\n\n| Item | Owner | Status | Priority |\n|---|---|---|---|\n| API Integration | Anandu | In Progress | High |\n| Design System Polish | Team | Done | Medium |\n| Testing & QA | Anandu | In Progress | High |\n`
+    setIsTableModalOpen(true)
+  }
+
+  const handleSelectTableTemplate = (tpl: TableTemplate) => {
+    const headerLine = `| ${tpl.headers.join(' | ')} |`
+    const sepLine = `| ${tpl.headers.map(() => '---').join(' | ')} |`
+    const dataLines = tpl.rows.map((row) => `| ${row.join(' | ')} |`).join('\n')
+    const tableSnippet = `\n\n${headerLine}\n${sepLine}\n${dataLines}\n`
     setContent((prev) => (prev ? prev + tableSnippet : tableSnippet.trimStart()))
-    showToast('Added editable Table')
-    setTimeout(() => textareaRef.current?.focus(), 50)
+    showToast(`Added ${tpl.name} table template`)
+  }
+
+  const handleInsertCustomGrid = (rows: number, cols: number, colorTheme: string, headers: string[]) => {
+    const headerLine = `| ${headers.join(' | ')} |`
+    const sepLine = `| ${headers.map(() => '---').join(' | ')} |`
+    const dataRows: string[] = []
+    for (let r = 1; r <= rows; r++) {
+      const cells = Array.from({ length: cols }, (_, c) => `R${r}C${c + 1}`)
+      dataRows.push(`| ${cells.join(' | ')} |`)
+    }
+    const tableSnippet = `\n\n${headerLine}\n${sepLine}\n${dataRows.join('\n')}\n`
+    setContent((prev) => (prev ? prev + tableSnippet : tableSnippet.trimStart()))
+    showToast(`Added ${rows}x${cols} custom table`)
   }
 
   const handleCreateSubpage = () => {
@@ -485,12 +569,17 @@ export function DocViewerModal({
           {/* Save to Docs Button */}
           <button
             type="button"
+            disabled={isSavingDoc}
             onClick={() => handleSaveToDocs()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
             title="Save changes to TaskFlow Docs"
           >
-            <Check className="w-3.5 h-3.5" />
-            <span>Save to Docs</span>
+            {isSavingDoc ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            <span>{isSavingDoc ? 'Saving...' : 'Save to Docs'}</span>
           </button>
 
           {/* Share Button */}
@@ -502,6 +591,17 @@ export function DocViewerModal({
           >
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Share</span>
+          </button>
+
+          {/* Download Button */}
+          <button
+            type="button"
+            onClick={() => handleDownloadDoc('md')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-medium transition-colors cursor-pointer"
+            title="Download document (.md)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Download</span>
           </button>
 
           {/* Settings button */}
@@ -794,20 +894,14 @@ export function DocViewerModal({
             </div>
           )}
 
-          {/* Interactive Editable Content Area */}
+          {/* Interactive Editable Content Area with Word & Docs Visual Tables, Columns, Checklists */}
           <div className="pt-2">
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value)
-                if (e.target.value.endsWith('/')) {
-                  setShowSlashMenu(true)
-                }
-              }}
-              placeholder="Type '/' for slash commands, or start writing notes, project requirements, architectural diagrams..."
-              rows={16}
-              className="w-full bg-transparent text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-600 focus:outline-none resize-none font-sans"
+            <DocVisualEditor
+              content={content}
+              onChange={(newVal) => setContent(newVal)}
+              onOpenTableModal={() => setIsTableModalOpen(true)}
+              onOpenColumnsModal={() => setShowColumnsPopover(true)}
+              onOpenChecklistModal={() => setShowClickUpListModal(true)}
             />
           </div>
         </div>
@@ -1225,29 +1319,69 @@ export function DocViewerModal({
             </div>
 
             <p className="text-xs text-zinc-300">
-              Your document has been saved with the latest changes and is ready to share.
+              Your document has been saved with the latest changes. Share the link or download a copy below.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-zinc-400">Share Link</label>
+              <label className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
+                <span>Document Share Link</span>
+              </label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
-                  value={typeof window !== 'undefined' ? `${window.location.origin}/app/docs/${currentDoc?.id || docId}` : ''}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-300 select-all focus:outline-none"
+                  value={typeof window !== 'undefined' ? `${window.location.origin}/app/docs/${encodeURIComponent(currentDoc?.id || docId)}` : ''}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-200 select-all focus:outline-none font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    const url = `${window.location.origin}/app/docs/${currentDoc?.id || docId}`
+                    const url = `${window.location.origin}/app/docs/${encodeURIComponent(currentDoc?.id || docId)}`
                     navigator.clipboard?.writeText(url)
                     showToast('Link copied to clipboard!')
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-sm"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>Copy</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Download Document options */}
+            <div className="space-y-2 pt-2 border-t border-white/10">
+              <label className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Download Document</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadDoc('md')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  title="Download as Markdown"
+                >
+                  <span className="text-xs font-bold text-sky-400 group-hover:scale-105 transition-transform">Markdown</span>
+                  <span className="text-[10px] text-zinc-400">.md</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadDoc('txt')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  title="Download as Plain Text"
+                >
+                  <span className="text-xs font-bold text-amber-400 group-hover:scale-105 transition-transform">Plain Text</span>
+                  <span className="text-[10px] text-zinc-400">.txt</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadDoc('html')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  title="Download as Web HTML"
+                >
+                  <span className="text-xs font-bold text-emerald-400 group-hover:scale-105 transition-transform">HTML Doc</span>
+                  <span className="text-[10px] text-zinc-400">.html</span>
                 </button>
               </div>
             </div>
@@ -1264,6 +1398,14 @@ export function DocViewerModal({
           </div>
         </div>
       )}
+
+      {/* TABLE TEMPLATE SELECTOR MODAL (Word & Google Docs styles) */}
+      <TableTemplateModal
+        isOpen={isTableModalOpen}
+        onClose={() => setIsTableModalOpen(false)}
+        onSelectTemplate={handleSelectTableTemplate}
+        onInsertCustomGrid={handleInsertCustomGrid}
+      />
     </div>
   )
 

@@ -173,8 +173,8 @@ class ApiClient {
     return this.request<T>('PUT', path, body, options)
   }
 
-  delete<T>(path: string, options?: RequestInit & { timeoutMs?: number }) {
-    return this.request<T>('DELETE', path, undefined, options)
+  delete<T>(path: string, body?: unknown, options?: RequestInit & { timeoutMs?: number }) {
+    return this.request<T>('DELETE', path, body, options)
   }
 }
 

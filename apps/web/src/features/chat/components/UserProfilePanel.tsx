@@ -151,11 +151,19 @@ export function UserProfilePanel({
       {/* ── TOP HEADER / USER AVATAR & BASIC DETAILS ── */}
       <div className="p-4 sm:p-5 border-b border-border/70 space-y-3.5 shrink-0 bg-card/40">
         <div className="flex items-start justify-between gap-3">
-          {/* Large Square Avatar (Purple Gradient) */}
+          {/* Large Square Avatar */}
           <div className="relative shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-2xl shadow-md shadow-indigo-500/20">
-              {userInitials}
-            </div>
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.name || user.email}
+                className="w-16 h-16 rounded-2xl object-cover shadow-md shadow-indigo-500/20 border border-border/60"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-2xl shadow-md shadow-indigo-500/20">
+                {userInitials}
+              </div>
+            )}
             <span
               className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-card ${
                 isOnline
@@ -664,8 +672,18 @@ export function UserProfilePanel({
 
               {/* Current User Card */}
               <div className="w-full max-w-[280px] p-3 rounded-2xl border border-border bg-card/70 backdrop-blur-md shadow-md flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                  {userInitials}
+                <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-2xs">
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={user.name || user.email}
+                      className="w-full h-full object-cover rounded-xl"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                      {userInitials}
+                    </div>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-xs text-foreground truncate" title={user.email}>

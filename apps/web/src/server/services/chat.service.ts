@@ -214,7 +214,12 @@ export async function getChannelMessages(channelId: string, currentUserId?: stri
   await ensureChatSchema()
   try {
     const rows = await query(
-      `SELECT * FROM chat_messages WHERE channel_id = $1 ORDER BY created_at ASC LIMIT 300`,
+      `SELECT cm.*, COALESCE(cm.sender_avatar, u.avatar_url) AS resolved_avatar,
+              COALESCE(cm.sender_name, u.display_name, u.first_name, u.email) AS resolved_name
+       FROM chat_messages cm
+       LEFT JOIN users u ON u.id = cm.sender_id
+       WHERE cm.channel_id = $1
+       ORDER BY cm.created_at ASC LIMIT 300`,
       [channelId]
     )
     return rows
@@ -228,8 +233,8 @@ export async function getChannelMessages(channelId: string, currentUserId?: stri
         workspaceId: String(r.workspace_id),
         channelId: String(r.channel_id),
         senderId: String(r.sender_id),
-        senderName: r.sender_name || 'User',
-        senderAvatar: r.sender_avatar || undefined,
+        senderName: r.resolved_name || r.sender_name || 'User',
+        senderAvatar: r.resolved_avatar || r.sender_avatar || undefined,
         content: r.content,
         attachments: parseJsonArray(r.attachments),
         isPinned: Boolean(r.is_pinned),
@@ -252,11 +257,14 @@ export async function getDirectMessages(
   await ensureChatSchema()
   try {
     const rows = await query(
-      `SELECT * FROM chat_messages 
-       WHERE workspace_id = $1 
-         AND channel_id IS NULL
-         AND ((sender_id = $2 AND recipient_id = $3) OR (sender_id = $3 AND recipient_id = $2))
-       ORDER BY created_at ASC LIMIT 300`,
+      `SELECT cm.*, COALESCE(cm.sender_avatar, u.avatar_url) AS resolved_avatar,
+              COALESCE(cm.sender_name, u.display_name, u.first_name, u.email) AS resolved_name
+       FROM chat_messages cm
+       LEFT JOIN users u ON u.id = cm.sender_id
+       WHERE cm.workspace_id = $1 
+         AND cm.channel_id IS NULL
+         AND ((cm.sender_id = $2 AND cm.recipient_id = $3) OR (cm.sender_id = $3 AND cm.recipient_id = $2))
+       ORDER BY cm.created_at ASC LIMIT 300`,
       [workspaceId, user1Id, user2Id]
     )
     return rows
@@ -268,8 +276,8 @@ export async function getDirectMessages(
         id: String(r.id),
         workspaceId: String(r.workspace_id),
         senderId: String(r.sender_id),
-        senderName: r.sender_name || 'User',
-        senderAvatar: r.sender_avatar || undefined,
+        senderName: r.resolved_name || r.sender_name || 'User',
+        senderAvatar: r.resolved_avatar || r.sender_avatar || undefined,
         recipientId: String(r.recipient_id),
         content: r.content,
         attachments: parseJsonArray(r.attachments),
@@ -495,6 +503,85 @@ export async function deleteMessageForMe(
     return true
   } catch (err) {
     console.error('[chat.service] deleteMessageForMe error:', err)
+    return false
+  }
+}
+
+export async function deleteMessagesBulkForEveryone(
+  workspaceId: string,
+  messageIds: string[]
+): Promise<boolean> {
+  if (!messageIds || messageIds.length === 0) return true
+  await ensureChatSchema()
+  try {
+    // Find all documents attached to these messages and delete them
+    const rows = await query(
+      `SELECT id, content, attachments FROM chat_messages WHERE id = ANY($1) AND workspace_id = $2`,
+      [messageIds, workspaceId]
+    )
+    for (const msg of rows) {
+      const attachments = parseJsonArray(msg.attachments)
+      for (const a of attachments) {
+        if (a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))) {
+          const docId = a.docId || a.title
+          if (docId) {
+            try {
+              const { deleteWorkspaceDoc } = await import('./doc.service')
+              await deleteWorkspaceDoc(workspaceId, String(docId))
+            } catch (docErr) {
+              console.error('[chat.service] failed to delete attached doc from db in bulk:', docErr)
+            }
+          }
+        }
+      }
+      if (typeof msg.content === 'string') {
+        const docMatch = msg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+        if (docMatch && docMatch[1]) {
+          try {
+            const { deleteWorkspaceDoc } = await import('./doc.service')
+            await deleteWorkspaceDoc(workspaceId, docMatch[1].trim())
+          } catch (docErr) {
+            console.error('[chat.service] failed to delete matched doc from db in bulk:', docErr)
+          }
+        }
+      }
+    }
+
+    // Single SQL DELETE for all messages
+    await query(
+      `DELETE FROM chat_messages WHERE id = ANY($1) AND workspace_id = $2`,
+      [messageIds, workspaceId]
+    )
+    return true
+  } catch (err) {
+    console.error('[chat.service] deleteMessagesBulkForEveryone error:', err)
+    return false
+  }
+}
+
+export async function deleteMessagesBulkForMe(
+  workspaceId: string,
+  messageIds: string[],
+  userId: string
+): Promise<boolean> {
+  if (!messageIds || messageIds.length === 0) return true
+  await ensureChatSchema()
+  try {
+    await query(
+      `UPDATE chat_messages 
+       SET deleted_for = (
+         CASE 
+           WHEN deleted_for IS NULL OR jsonb_typeof(deleted_for) != 'array' THEN jsonb_build_array($1::text)
+           WHEN deleted_for @> jsonb_build_array($1::text) THEN deleted_for
+           ELSE deleted_for || jsonb_build_array($1::text)
+         END
+       )
+       WHERE id = ANY($2) AND workspace_id = $3`,
+      [userId, messageIds, workspaceId]
+    )
+    return true
+  } catch (err) {
+    console.error('[chat.service] deleteMessagesBulkForMe error:', err)
     return false
   }
 }

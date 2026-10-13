@@ -830,12 +830,15 @@ export async function endCall(
 
     const updated = await getCallSession(callId)
     if (updated) {
+      const otherParticipant = (updated.participants || []).find((p) => p.userId !== session.created_by)
+      const targetRecipientId = otherParticipant?.userId || undefined
+
       broadcastCallEvent({
         type: 'call_ended',
         workspaceId: updated.workspaceId,
         callId,
         callerId: updated.createdBy,
-        recipientId: session.recipient_id || undefined,
+        recipientId: targetRecipientId,
         channelId: session.channel_id || undefined,
         timestamp: new Date().toISOString(),
         data: {

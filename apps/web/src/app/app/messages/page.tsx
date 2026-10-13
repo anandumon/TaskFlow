@@ -66,6 +66,24 @@ import { KryaWhiteboardModal } from '@/features/whiteboard/components/KryaWhiteb
 import { UserProfilePanel, ProfileTab } from '@/features/chat/components/UserProfilePanel'
 import { DocViewerModal } from '@/features/docs/components/DocViewerModal'
 import { FileViewerModal, FileToView } from '@/components/file-viewer-modal'
+import { VoiceNotePlayer } from '@/features/chat/components/VoiceNotePlayer'
+import { VideoMessagePlayer, GifMessagePlayer } from '@/features/chat/components/ChatMediaPlayers'
+
+const cleanMessageDisplayContent = (content?: string) => {
+  if (!content) return ''
+  const trimmed = content.trim()
+  // Clean "/create whiteboard <name>", ". create whiteboard <name>", "create whiteboard <name>"
+  const wbMatch = trimmed.match(/^[\/.]?\s*create\s+whiteboard\s*(.*)$/i)
+  if (wbMatch) {
+    return wbMatch[1]?.trim() || 'Whiteboard'
+  }
+  // Clean "/create doc <name>", ". create doc <name>", "create doc <name>"
+  const docMatch = trimmed.match(/^[\/.]?\s*create\s+doc\s*(.*)$/i)
+  if (docMatch) {
+    return docMatch[1]?.trim() || 'Document'
+  }
+  return content
+}
 
 export default function MessagesPage() {
   const searchParams = useSearchParams()
@@ -112,6 +130,7 @@ export default function MessagesPage() {
     editMessage,
     togglePinMessage,
     deleteMessage,
+    deleteMessagesBulk,
   } = useChatStore()
 
   const { deleteDoc, createDoc, docs } = useDocStore()
@@ -123,6 +142,9 @@ export default function MessagesPage() {
   // Message Deletion state (delete for me / delete for everyone)
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null)
   const [deleteMode, setDeleteMode] = useState<'everyone' | 'me'>('everyone')
+  const [isDeletingSingle, setIsDeletingSingle] = useState(false)
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false)
+  const [isStartingCall, setIsStartingCall] = useState(false)
 
   // Auto-sync docs from chat messages into useDocStore (shows docs from General chat and DMs in Docs page)
   useEffect(() => {
@@ -209,41 +231,79 @@ export default function MessagesPage() {
   }
 
   const handleConfirmDeleteMessage = async () => {
-    if (!deletingMessage || !currentWorkspace?.id) return
+    if (!deletingMessage || !currentWorkspace?.id || isDeletingSingle) return
 
-    const docAtt = deletingMessage.attachments?.find(
-      (a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))
-    )
-    const wbAtt = deletingMessage.attachments?.find(
-      (a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId))
-    )
-    if (docAtt && (docAtt.docId || docAtt.title)) {
-      deleteDoc(docAtt.docId || docAtt.title, currentWorkspace.id)
-    }
-    if (typeof deletingMessage.content === 'string') {
-      const docMatch = deletingMessage.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
-      if (docMatch && docMatch[1]) {
-        deleteDoc(docMatch[1].trim(), currentWorkspace.id)
-      }
-    }
-    if (wbAtt && wbAtt.boardId) {
-      try {
-        localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
-      } catch {}
-    }
+    const targetMsg = deletingMessage
+    const currentMode = deleteMode
+    const wsId = currentWorkspace.id
 
-    await deleteMessage(currentWorkspace.id, deletingMessage.id, deleteMode)
-    setToastMessage(
-      deleteMode === 'everyone'
-        ? 'Message deleted for everyone'
-        : 'Message deleted for you'
-    )
-    setTimeout(() => setToastMessage(null), 3000)
+    // Dismiss modal and remove message from state immediately so it vanishes with zero delay
     setDeletingMessage(null)
+    useChatStore.setState((state) => ({
+      messages: state.messages.filter((m) => m.id !== targetMsg.id),
+    }))
+
+    setIsDeletingSingle(true)
+    try {
+      const docAtt = targetMsg.attachments?.find(
+        (a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId))
+      )
+      const wbAtt = targetMsg.attachments?.find(
+        (a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId))
+      )
+      if (docAtt && (docAtt.docId || docAtt.title)) {
+        deleteDoc(docAtt.docId || docAtt.title, wsId)
+      }
+      if (typeof targetMsg.content === 'string') {
+        const docMatch = targetMsg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+        if (docMatch && docMatch[1]) {
+          deleteDoc(docMatch[1].trim(), wsId)
+        }
+      }
+      if (wbAtt && wbAtt.boardId) {
+        try {
+          localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
+        } catch {}
+      }
+
+      await deleteMessage(wsId, targetMsg.id, currentMode)
+    } finally {
+      setIsDeletingSingle(false)
+    }
   }
 
   // Members list for Direct Messages and Channels
   const [workspaceMembers, setWorkspaceMembers] = useState<DMContact[]>([])
+
+  const memberAvatarMap = useMemo(() => {
+    const map = new Map<string, string>()
+    workspaceMembers.forEach((m) => {
+      if (m.avatarUrl) {
+        if (m.id) map.set(m.id.toLowerCase(), m.avatarUrl)
+        if (m.email) map.set(m.email.toLowerCase(), m.avatarUrl)
+        if (m.name) map.set(m.name.toLowerCase(), m.avatarUrl)
+      }
+    })
+    if (user?.avatarUrl) {
+      if (user.id) map.set(user.id.toLowerCase(), user.avatarUrl)
+      if (user.email) map.set(user.email.toLowerCase(), user.avatarUrl)
+    }
+    return map
+  }, [workspaceMembers, user])
+
+  const resolveAvatar = (senderId?: string, senderName?: string, senderAvatar?: string) => {
+    if (senderAvatar) return senderAvatar
+    if (senderId && memberAvatarMap.has(senderId.toLowerCase())) {
+      return memberAvatarMap.get(senderId.toLowerCase())
+    }
+    if (senderName && memberAvatarMap.has(senderName.toLowerCase())) {
+      return memberAvatarMap.get(senderName.toLowerCase())
+    }
+    if (user && (senderId === user.id || (user.email && senderName?.toLowerCase() === user.email.toLowerCase()))) {
+      return user.avatarUrl
+    }
+    return null
+  }
   const [channelsCollapsed, setChannelsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('taskflow_messages_hide_channels') === 'true'
@@ -328,39 +388,42 @@ export default function MessagesPage() {
   }
 
   const handleConfirmBulkDelete = async () => {
-    if (!currentWorkspace?.id || selectedMessageIds.size === 0) return
+    if (!currentWorkspace?.id || selectedMessageIds.size === 0 || isDeletingBulk) return
 
-    const count = selectedMessageIds.size
+    setIsDeletingBulk(true)
     const idsToDelete = Array.from(selectedMessageIds)
-
-    for (const msgId of idsToDelete) {
-      const msg = messages.find((m) => m.id === msgId)
-      if (msg) {
-        const docAtt = msg.attachments?.find((a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)))
-        const wbAtt = msg.attachments?.find((a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId)))
-        if (docAtt && (docAtt.docId || docAtt.title)) {
-          deleteDoc(docAtt.docId || docAtt.title, currentWorkspace.id)
-        }
-        if (typeof msg.content === 'string') {
-          const docMatch = msg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
-          if (docMatch && docMatch[1]) {
-            deleteDoc(docMatch[1].trim(), currentWorkspace.id)
-          }
-        }
-        if (wbAtt && wbAtt.boardId) {
-          try {
-            localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
-          } catch {}
-        }
-      }
-      await deleteMessage(currentWorkspace.id, msgId, bulkDeleteMode)
-    }
-
-    setToastMessage(`Successfully deleted ${count} message${count > 1 ? 's' : ''}`)
-    setTimeout(() => setToastMessage(null), 3000)
     setSelectedMessageIds(new Set())
     setIsMultiSelectMode(false)
     setIsBulkDeleteModalOpen(false)
+
+    try {
+      for (const msgId of idsToDelete) {
+        const msg = messages.find((m) => m.id === msgId)
+        if (msg) {
+          const docAtt = msg.attachments?.find((a: any) => a && (a.type === 'doc' || a.type === 'gdoc' || Boolean(a.docId)))
+          const wbAtt = msg.attachments?.find((a: any) => a && (a.type === 'whiteboard' || Boolean(a.boardId)))
+          if (docAtt && (docAtt.docId || docAtt.title)) {
+            deleteDoc(docAtt.docId || docAtt.title, currentWorkspace.id)
+          }
+          if (typeof msg.content === 'string') {
+            const docMatch = msg.content.match(/\/(?:create\s+doc|doc)\s+([^\n]+)/i)
+            if (docMatch && docMatch[1]) {
+              deleteDoc(docMatch[1].trim(), currentWorkspace.id)
+            }
+          }
+          if (wbAtt && wbAtt.boardId) {
+            try {
+              localStorage.removeItem(`taskflow_krya_whiteboard_${wbAtt.boardId}`)
+            } catch {}
+          }
+        }
+      }
+
+      // Execute single bulk delete call
+      await deleteMessagesBulk(currentWorkspace.id, idsToDelete, bulkDeleteMode)
+    } finally {
+      setIsDeletingBulk(false)
+    }
   }
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -492,26 +555,33 @@ export default function MessagesPage() {
 
   // 2. Handle URL Query Params or default to top channel
   useEffect(() => {
-    const channelParam = searchParams.get('channel')
-    const dmParam = searchParams.get('dm')
+    const channelParam = searchParams.get('channelId') || searchParams.get('channel')
+    const dmParam = searchParams.get('dmUserId') || searchParams.get('dm')
 
     if (channelParam && channels.length > 0) {
       const found = channels.find((c) => c.id === channelParam || c.name.toLowerCase() === channelParam.toLowerCase())
       if (found) {
         setActiveChannel(found)
         setActiveDMUser(null)
+        setMobileView('chat')
         return
       }
     }
 
     if (dmParam && workspaceMembers.length > 0) {
-      const found = workspaceMembers.find((m) => m.id === dmParam || m.email?.toLowerCase() === dmParam.toLowerCase())
+      const found = workspaceMembers.find(
+        (m) =>
+          m.id === dmParam ||
+          (m as any).userId === dmParam ||
+          m.email?.toLowerCase() === dmParam.toLowerCase()
+      )
       if (found) {
         setActiveDMUser({
           ...found,
           isOnline: isUserOnline(found.id, found.email) || Boolean(found.isOnline),
         })
         setActiveChannel(null)
+        setMobileView('chat')
         return
       }
     }
@@ -575,9 +645,12 @@ export default function MessagesPage() {
 
   // Native Live Voice Call
   const handleStartVoiceCall = () => {
-    if (useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
+    if (isStartingCall || useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
       return
     }
+    setIsStartingCall(true)
+    setTimeout(() => setIsStartingCall(false), 2000)
+
     if (activeDMUser) {
       useCallStore.getState().openPreJoin({
         callType: 'ONE_TO_ONE_VOICE',
@@ -596,9 +669,12 @@ export default function MessagesPage() {
 
   // Native Live Video Call
   const handleStartVideoCall = () => {
-    if (useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
+    if (isStartingCall || useCallStore.getState().activeCall || useCallStore.getState().isPreJoinOpen || useCallStore.getState().isCallStarting) {
       return
     }
+    setIsStartingCall(true)
+    setTimeout(() => setIsStartingCall(false), 2000)
+
     if (activeDMUser) {
       useCallStore.getState().openPreJoin({
         callType: 'ONE_TO_ONE_VIDEO',
@@ -873,12 +949,20 @@ export default function MessagesPage() {
                       <div className="flex items-center gap-2.5 truncate">
                         {/* Avatar with status dot */}
                         <div className="relative shrink-0">
-                          <div
-                            className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                            style={{ backgroundColor: bgColor }}
-                          >
-                            {initial}
-                          </div>
+                          {member.avatarUrl || resolveAvatar(member.id, member.name) ? (
+                            <img
+                              src={member.avatarUrl || resolveAvatar(member.id, member.name)!}
+                              alt={member.name}
+                              className="w-5 h-5 rounded-full object-cover border border-border/40 shadow-2xs"
+                            />
+                          ) : (
+                            <div
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                              style={{ backgroundColor: bgColor }}
+                            >
+                              {initial}
+                            </div>
+                          )}
                           <span
                             className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-sidebar ${
                               member.isOnline
@@ -986,9 +1070,17 @@ export default function MessagesPage() {
                     title="Click to view profile"
                   >
                     <div className="relative shrink-0">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-                        {getInitials(activeDMUser.name, activeDMUser.email)}
-                      </div>
+                      {activeDMUser.avatarUrl || resolveAvatar(activeDMUser.id, activeDMUser.name) ? (
+                        <img
+                          src={activeDMUser.avatarUrl || resolveAvatar(activeDMUser.id, activeDMUser.name)!}
+                          alt={activeDMUser.name || 'User'}
+                          className="w-8 h-8 rounded-xl object-cover shadow-2xs border border-border/50"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                          {getInitials(activeDMUser.name, activeDMUser.email)}
+                        </div>
+                      )}
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
                           isOnline
@@ -1046,25 +1138,6 @@ export default function MessagesPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Multi-Select Messages Toggle */}
-            {messages.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMultiSelectMode(!isMultiSelectMode)
-                  setSelectedMessageIds(new Set())
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
-                  isMultiSelectMode
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'bg-card border-border hover:bg-accent text-muted-foreground hover:text-foreground'
-                }`}
-                title={isMultiSelectMode ? 'Exit select mode' : 'Select multiple messages'}
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{isMultiSelectMode ? 'Cancel' : 'Select'}</span>
-              </button>
-            )}
 
             {activeDMUser && (
               <button
@@ -1120,7 +1193,8 @@ export default function MessagesPage() {
               <button
                 type="button"
                 onClick={handleStartVoiceCall}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer"
+                disabled={isStartingCall}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                 title="Start Live Voice Call"
               >
                 <PhoneCall className="w-3.5 h-3.5" />
@@ -1128,15 +1202,12 @@ export default function MessagesPage() {
               <button
                 type="button"
                 onClick={handleStartVideoCall}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer"
+                disabled={isStartingCall}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                 title="Start Live Video Call"
               >
                 <Video className="w-3.5 h-3.5" />
               </button>
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/60 text-[11px] font-medium text-foreground">
-                <Sparkles className="w-3 h-3 text-purple-400" />
-                <span>Brain²</span>
-              </div>
             </div>
           </div>
         )}
@@ -1192,36 +1263,7 @@ export default function MessagesPage() {
             </div>
           ) : (
             <>
-              {/* Direct Message Starter Block (matches Images 1-5) */}
-              {activeDMUser && (
-                <div className="flex flex-col items-center justify-center text-center pt-4 pb-6 px-4 space-y-4 max-w-md mx-auto">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-bold text-foreground">
-                      Chat with {activeDMUser.email || activeDMUser.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      This conversation started on{' '}
-                      {new Date().toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}.
-                    </p>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileInitialTab('activity')
-                      setIsProfilePanelOpen(true)
-                    }}
-                    className="w-full max-w-sm flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card/90 hover:bg-accent text-xs font-semibold text-foreground transition-all cursor-pointer shadow-2xs group"
-                  >
-                    <User className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    <span>View Profile</span>
-                  </button>
-                </div>
-              )}
 
               {/* Channel Empty State */}
               {activeChannel && messages.length === 0 && (
@@ -1241,53 +1283,77 @@ export default function MessagesPage() {
               )}
 
               {messages.map((msg) => {
-              const isMe = user && msg.senderId === user.id
-              const initials = getInitials(msg.senderName)
-              const docAtt = msg.attachments?.find((a: any) => a.type === 'doc')
-              const nonDocAttachments = msg.attachments?.filter((a: any) => a.type !== 'doc') || []
+                const isMe = Boolean(
+                  (user && (
+                    msg.senderId === user.id ||
+                    msg.senderId === (user as any)?.sub ||
+                    (user.email && msg.senderName?.toLowerCase() === user.email.toLowerCase())
+                  )) ||
+                  msg.senderId === 'current-user' ||
+                  msg.senderId === 'me' ||
+                  (msg.id && typeof msg.id === 'string' && msg.id.startsWith('temp-'))
+                )
+                const senderAvatar = isMe
+                  ? user?.avatarUrl || resolveAvatar(msg.senderId, msg.senderName, msg.senderAvatar)
+                  : resolveAvatar(msg.senderId, msg.senderName, msg.senderAvatar)
+                const initials = isMe && user ? getInitials(user.firstName || user.name, user.email) : getInitials(msg.senderName)
+                const docAtt = msg.attachments?.find((a: any) => a.type === 'doc')
+                const nonDocAttachments = msg.attachments?.filter((a: any) => a.type !== 'doc') || []
 
-              return (
-                <div
-                  key={msg.id}
-                  onClick={() => {
-                    if (isMultiSelectMode) {
-                      toggleSelectMessage(msg.id)
-                    }
-                  }}
-                  className={`relative flex gap-3 items-start group ${
-                    isMultiSelectMode ? 'cursor-pointer hover:bg-accent/30 p-1.5 rounded-2xl transition-colors' : ''
-                  } ${isMe ? 'flex-row-reverse' : ''}`}
-                >
-                  {/* Multi-Select Checkbox */}
-                  {isMultiSelectMode && (
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation()
+                return (
+                  <div
+                    key={msg.id}
+                    onClick={() => {
+                      if (isMultiSelectMode) {
                         toggleSelectMessage(msg.id)
-                      }}
-                      className="self-center cursor-pointer p-1 shrink-0"
-                    >
+                      }
+                    }}
+                    className={`relative flex gap-3 items-start group ${
+                      isMultiSelectMode ? 'cursor-pointer hover:bg-accent/30 p-1.5 rounded-2xl transition-colors' : ''
+                    } ${isMe ? 'flex-row-reverse' : ''}`}
+                  >
+                    {/* Multi-Select Checkbox */}
+                    {isMultiSelectMode && (
                       <div
-                        className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-all ${
-                          selectedMessageIds.has(msg.id)
-                            ? 'bg-primary border-primary text-primary-foreground shadow-xs'
-                            : 'border-border/80 hover:border-primary/60 bg-muted/40'
-                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleSelectMessage(msg.id)
+                        }}
+                        className="self-center cursor-pointer p-1 shrink-0"
                       >
-                        {selectedMessageIds.has(msg.id) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        <div
+                          className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-all ${
+                            selectedMessageIds.has(msg.id)
+                              ? 'bg-primary border-primary text-primary-foreground shadow-xs'
+                              : 'border-border/80 hover:border-primary/60 bg-muted/40'
+                          }`}
+                        >
+                          {selectedMessageIds.has(msg.id) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Sender Avatar */}
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                    {initials}
-                  </div>
+                    {/* Sender Avatar */}
+                    {senderAvatar ? (
+                      <img
+                        src={senderAvatar}
+                        alt={msg.senderName || 'Avatar'}
+                        className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-2xs border border-border/50"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                        {initials}
+                      </div>
+                    )}
 
                   {/* Message Content */}
                   <div className={`space-y-1 max-w-[75%] relative ${isMe ? 'items-end text-right' : ''}`}>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="font-bold text-foreground">{msg.senderName}</span>
+                      <span className="font-bold text-foreground">
+                        {isMe && user
+                          ? (user.name || user.firstName || user.email?.split('@')[0] || msg.senderName)
+                          : msg.senderName}
+                      </span>
                       <span>
                         {new Date(msg.createdAt).toLocaleTimeString([], {
                           hour: '2-digit',
@@ -1362,7 +1428,7 @@ export default function MessagesPage() {
                                 title: docAtt.title || 'demo',
                               })
                             }
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl font-bold transition-all shadow-sm cursor-pointer border ${
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-bold transition-all shadow-sm cursor-pointer border ${
                               isMe
                                 ? 'bg-zinc-950/90 hover:bg-zinc-900 text-white border-zinc-700/80 shadow-md'
                                 : 'bg-zinc-900/90 hover:bg-zinc-800 text-white border-zinc-700 shadow-xs'
@@ -1370,25 +1436,30 @@ export default function MessagesPage() {
                             title={`Open ${docAtt.title || 'Document'}`}
                           >
                             <span className="text-sm">📄</span>
-                            <span className="font-extrabold tracking-wide text-white">
-                              {docAtt.title || 'demo'}
-                            </span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/20 text-white font-bold uppercase tracking-wider">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 text-white font-bold uppercase tracking-wider">
                               Doc
                             </span>
                           </button>
-                          {msg.content && (
+                          {msg.content ? (
                             <span
                               className={
                                 isMe ? 'font-medium text-white/95' : 'font-normal text-foreground'
                               }
                             >
-                              {msg.content}
+                              {cleanMessageDisplayContent(msg.content)}
+                            </span>
+                          ) : (
+                            <span
+                              className={
+                                isMe ? 'font-medium text-white/95' : 'font-normal text-foreground'
+                              }
+                            >
+                              {docAtt.title || 'Document'}
                             </span>
                           )}
                         </div>
                       ) : (
-                        msg.content && <p>{msg.content}</p>
+                        msg.content && <p>{cleanMessageDisplayContent(msg.content)}</p>
                       )}
 
                       {/* Render attachments if any */}
@@ -1443,18 +1514,20 @@ export default function MessagesPage() {
                             }
 
                             if (att.type === 'whiteboard') {
-                              const boardId = att.boardId || 'board-main'
-                              // Extract board title: prefer att.title if not generic 'krya', or parse from message content
+                              // Extract board title: prefer att.title if not generic 'krya', or parse from clean message content
                               let boardTitle = att.title
                               if (!boardTitle || boardTitle.toLowerCase() === 'krya') {
-                                const match = msg.content?.match(/\/create\s+whiteboard\s+(.+)/i)
-                                if (match && match[1]) {
-                                  boardTitle = match[1].trim()
-                                }
+                                boardTitle = cleanMessageDisplayContent(msg.content)
                               }
                               if (!boardTitle || boardTitle.toLowerCase() === 'krya') {
                                 boardTitle = 'Whiteboard'
                               }
+                              const boardId =
+                                att.boardId && att.boardId !== 'board-main'
+                                  ? att.boardId
+                                  : boardTitle && boardTitle.toLowerCase() !== 'whiteboard'
+                                  ? `board-${boardTitle.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}-${msg.id.slice(0, 8)}`
+                                  : `board-${msg.id}`
 
                               return (
                                 <div key={aIdx} className="space-y-2 pt-1 max-w-2xl">
@@ -1548,13 +1621,37 @@ export default function MessagesPage() {
                               )
                             }
 
-                            if (att.type === 'image' || att.type === 'gif') {
+                            if (att.type === 'gif' || (att.type === 'image' && (att.url?.includes('.gif') || att.name?.toLowerCase().endsWith('.gif')))) {
+                              return (
+                                <GifMessagePlayer
+                                  key={aIdx}
+                                  url={att.url}
+                                  name={att.name || 'Animated GIF'}
+                                  onPreview={() => {
+                                    setActiveFileToView({
+                                      name: att.name || 'animation.gif',
+                                      dataUrl: att.url,
+                                      type: 'image/gif',
+                                    })
+                                  }}
+                                />
+                              )
+                            }
+
+                            if (att.type === 'image') {
                               return (
                                 <div key={aIdx} className="rounded-xl overflow-hidden max-w-sm">
                                   <img
                                     src={att.url}
                                     alt={att.name || 'Attachment'}
-                                    className="max-h-60 w-auto rounded-xl object-cover shadow-sm"
+                                    className="max-h-60 w-auto rounded-xl object-cover shadow-sm cursor-pointer hover:opacity-95 transition-opacity"
+                                    onClick={() => {
+                                      setActiveFileToView({
+                                        name: att.name || 'Image',
+                                        dataUrl: att.url,
+                                        type: 'image',
+                                      })
+                                    }}
                                   />
                                 </div>
                               )
@@ -1562,24 +1659,27 @@ export default function MessagesPage() {
 
                             if (att.type === 'video' || att.type === 'video_clip') {
                               return (
-                                <div key={aIdx} className="rounded-xl overflow-hidden max-w-sm bg-black/40 p-2 space-y-1 border border-border/50">
-                                  <div className="flex items-center gap-1.5 text-[11px] font-bold">
-                                    <Video className="w-3.5 h-3.5 text-purple-400" />
-                                    <span>{att.title || 'Video Clip'}</span>
-                                    {att.duration && <span className="opacity-75 font-normal">({att.duration})</span>}
-                                  </div>
-                                  <video controls src={att.url} className="w-full rounded-lg max-h-48" />
-                                </div>
+                                <VideoMessagePlayer
+                                  key={aIdx}
+                                  url={att.url}
+                                  title={att.title}
+                                  duration={att.duration}
+                                  poster={att.poster}
+                                />
                               )
                             }
 
-                            if (att.type === 'audio_memo') {
+                            if (att.type === 'audio_memo' || att.type === 'audio' || att.type === 'voice') {
                               return (
-                                <div key={aIdx} className="p-2.5 rounded-xl border border-border/60 bg-muted/40 flex items-center gap-2">
-                                  <Mic className="w-4 h-4 text-amber-500 shrink-0" />
-                                  <span className="text-[11px] font-bold truncate">{att.title || 'Voice Memo'}</span>
-                                  <span className="text-[10px] text-muted-foreground ml-auto">Audio Note</span>
-                                </div>
+                                <VoiceNotePlayer
+                                  key={aIdx}
+                                  url={att.url}
+                                  dataUrl={att.dataUrl}
+                                  audioData={att.audioData}
+                                  durationText={att.duration || att.title}
+                                  title={att.title || 'Voice Note'}
+                                  isMe={Boolean(isMe)}
+                                />
                               )
                             }
 
@@ -1780,6 +1880,7 @@ export default function MessagesPage() {
         <div className="p-2 sm:p-3 border-t border-border bg-card/70 backdrop-blur-md shrink-0">
           <div className="max-w-5xl mx-auto">
             <ChatInputBar
+              key={activeChannel ? `channel-${activeChannel.id}` : activeDMUser ? `dm-${activeDMUser.id}` : 'chat-input'}
               targetName={activeChannel ? activeChannel.name : activeDMUser?.name || 'team member'}
               targetType={activeChannel ? 'channel' : 'dm'}
               activeChannel={activeChannel}
@@ -1788,19 +1889,26 @@ export default function MessagesPage() {
               tasks={tasks}
               isSending={isSendingMessage}
               onSendMessage={async (content, attachments) => {
-                if (!currentWorkspace?.id) return
-                if (activeChannel) {
-                  await sendMessage(currentWorkspace.id, {
-                    channelId: activeChannel.id,
-                    content,
-                    attachments,
-                  })
-                } else if (activeDMUser) {
-                  await sendMessage(currentWorkspace.id, {
-                    recipientId: activeDMUser.id,
-                    content,
-                    attachments,
-                  })
+                if (!currentWorkspace?.id || isSendingMessageRef.current) return
+                isSendingMessageRef.current = true
+                try {
+                  if (activeChannel) {
+                    await sendMessage(currentWorkspace.id, {
+                      channelId: activeChannel.id,
+                      content,
+                      attachments,
+                    })
+                  } else if (activeDMUser) {
+                    await sendMessage(currentWorkspace.id, {
+                      recipientId: activeDMUser.id,
+                      content,
+                      attachments,
+                    })
+                  }
+                } finally {
+                  setTimeout(() => {
+                    isSendingMessageRef.current = false
+                  }, 400)
                 }
               }}
             />
@@ -1814,7 +1922,10 @@ export default function MessagesPage() {
           isOpen={isProfilePanelOpen}
           initialTab={profileInitialTab}
           onClose={() => setIsProfilePanelOpen(false)}
-          user={activeDMUser}
+          user={{
+            ...activeDMUser,
+            avatarUrl: activeDMUser.avatarUrl || resolveAvatar(activeDMUser.id, activeDMUser.name) || undefined,
+          }}
           tasks={tasks}
           currentWorkspaceId={currentWorkspace?.id}
           currentWorkspaceName={currentWorkspace?.name}
@@ -1852,12 +1963,15 @@ export default function MessagesPage() {
       />
 
       {/* Modal: Krya Whiteboard */}
-      <KryaWhiteboardModal
-        isOpen={Boolean(activeWhiteboard)}
-        boardId={activeWhiteboard?.id}
-        boardTitle={activeWhiteboard?.title || 'Whiteboard'}
-        onClose={() => setActiveWhiteboard(null)}
-      />
+      {activeWhiteboard && (
+        <KryaWhiteboardModal
+          key={activeWhiteboard.id}
+          isOpen={true}
+          boardId={activeWhiteboard.id}
+          boardTitle={activeWhiteboard.title || 'Whiteboard'}
+          onClose={() => setActiveWhiteboard(null)}
+        />
+      )}
 
       {/* Modal: Document Viewer / Editor (matching Image 4) */}
       {activeDocModal && (
@@ -1971,19 +2085,29 @@ export default function MessagesPage() {
                 <div className="flex items-center justify-end gap-2.5 pt-2">
                   <button
                     type="button"
+                    disabled={isDeletingSingle}
                     onClick={() => setDeletingMessage(null)}
-                    className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                    className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
+                    disabled={isDeletingSingle}
                     onClick={handleConfirmDeleteMessage}
-                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {isDeletingSingle ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                     <span>
-                      {deleteMode === 'everyone' ? 'Delete for Everyone' : 'Delete for Me'}
+                      {isDeletingSingle
+                        ? 'Deleting...'
+                        : deleteMode === 'everyone'
+                        ? 'Delete for Everyone'
+                        : 'Delete for Me'}
                     </span>
                   </button>
                 </div>
@@ -2013,7 +2137,7 @@ export default function MessagesPage() {
               <div className="space-y-2.5">
                 <div
                   onClick={() => {
-                    if (canBulkDeleteForEveryone) {
+                    if (canBulkDeleteForEveryone && !isDeletingBulk) {
                       setBulkDeleteMode('everyone')
                     }
                   }}
@@ -2025,15 +2149,15 @@ export default function MessagesPage() {
                       : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer'
                   }`}
                 >
-                  <label className={`flex items-center gap-3 ${!canBulkDeleteForEveryone ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <label className={`flex items-center gap-3 ${!canBulkDeleteForEveryone || isDeletingBulk ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                     <input
                       type="radio"
                       name="bulkDeleteMode"
                       value="everyone"
                       checked={bulkDeleteMode === 'everyone'}
-                      disabled={!canBulkDeleteForEveryone}
+                      disabled={!canBulkDeleteForEveryone || isDeletingBulk}
                       onChange={() => {
-                        if (canBulkDeleteForEveryone) setBulkDeleteMode('everyone')
+                        if (canBulkDeleteForEveryone && !isDeletingBulk) setBulkDeleteMode('everyone')
                       }}
                       className="accent-red-500 cursor-pointer w-4 h-4"
                     />
@@ -2044,20 +2168,25 @@ export default function MessagesPage() {
                 </div>
 
                 <div
-                  onClick={() => setBulkDeleteMode('me')}
+                  onClick={() => {
+                    if (!isDeletingBulk) setBulkDeleteMode('me')
+                  }}
                   className={`p-3 rounded-xl border cursor-pointer transition-all ${
                     bulkDeleteMode === 'me'
                       ? 'border-primary/50 bg-primary/10 text-foreground'
                       : 'border-border bg-card/60 hover:bg-accent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  <label className={`flex items-center gap-3 ${isDeletingBulk ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                     <input
                       type="radio"
                       name="bulkDeleteMode"
                       value="me"
                       checked={bulkDeleteMode === 'me'}
-                      onChange={() => setBulkDeleteMode('me')}
+                      disabled={isDeletingBulk}
+                      onChange={() => {
+                        if (!isDeletingBulk) setBulkDeleteMode('me')
+                      }}
                       className="accent-primary cursor-pointer w-4 h-4"
                     />
                     <span className="text-xs font-bold text-foreground">
@@ -2071,19 +2200,29 @@ export default function MessagesPage() {
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
+                  disabled={isDeletingBulk}
                   onClick={() => setIsBulkDeleteModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-accent text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
+                  disabled={isDeletingBulk}
                   onClick={handleConfirmBulkDelete}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  {isDeletingBulk ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
                   <span>
-                    {bulkDeleteMode === 'everyone' ? 'Delete for Everyone' : 'Delete for Me'}
+                    {isDeletingBulk
+                      ? 'Deleting...'
+                      : bulkDeleteMode === 'everyone'
+                      ? 'Delete for Everyone'
+                      : 'Delete for Me'}
                   </span>
                 </button>
               </div>

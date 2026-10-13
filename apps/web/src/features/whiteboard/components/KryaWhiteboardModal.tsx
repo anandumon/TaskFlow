@@ -49,6 +49,8 @@ import {
   Calendar,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { ImageStudioModal, ImageAdjustments } from './ImageStudioModal'
+import { FlowchartTemplatesModal } from './FlowchartTemplatesModal'
 
 export interface KryaWhiteboardModalProps {
   isOpen: boolean
@@ -86,7 +88,7 @@ type ShapeType =
 
 type ConnectorType = 'straight' | 'curved' | 'arrow'
 
-interface CanvasElement {
+export interface CanvasElement {
   id: string
   type:
     | 'sticky'
@@ -103,6 +105,7 @@ interface CanvasElement {
     | 'star'
     | 'arrow'
     | 'frame'
+    | 'image'
   x: number
   y: number
   width: number
@@ -115,6 +118,12 @@ interface CanvasElement {
   thickness?: number
   fontSize?: string
   alignment?: 'left' | 'center' | 'right'
+  imageUrl?: string
+  imageRotation?: number
+  imageOpacity?: number
+  imageBrightness?: number
+  imageContrast?: number
+  imageBorderRadius?: number
 }
 
 interface DrawStroke {
@@ -199,6 +208,11 @@ export function KryaWhiteboardModal({
   const [penType, setPenType] = useState<PenType>('pen')
   const [strokeThickness, setStrokeThickness] = useState<'thin' | 'medium' | 'thick'>('thin')
   const [isStrokeDropdownOpen, setIsStrokeDropdownOpen] = useState(false)
+  // Dedicated Size Adjuster States for Pencil, Marker/Highlighter, Eraser
+  const [penSize, setPenSize] = useState<number>(3)
+  const [markerSize, setMarkerSize] = useState<number>(24)
+  const [eraserSize, setEraserSize] = useState<number>(24)
+  const [activeSizePopup, setActiveSizePopup] = useState<'pen' | 'marker' | 'eraser' | null>(null)
 
   // Shape Tool Sub-options (Image 4)
   const [activeShape, setActiveShape] = useState<ShapeType>('square')
@@ -235,13 +249,129 @@ export function KryaWhiteboardModal({
   const [selectedTemplateTab, setSelectedTemplateTab] = useState<'featured' | 'workspace' | 'taskflow'>('featured')
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('Whiteboard')
 
+  // Image Studio Modal state (upload any format, crop & adjust)
+  const [isImageStudioOpen, setIsImageStudioOpen] = useState(false)
+  const [editingImageElementId, setEditingImageElementId] = useState<string | null>(null)
+
+  // Flowcharts & Diagrams Modal state (Figma standards)
+  const [isFlowchartsModalOpen, setIsFlowchartsModalOpen] = useState(false)
+
+  // Welcome Guide for blank canvas
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(true)
+
+  // Full history state for Undo and Redo (Elements and Strokes)
+  const [history, setHistory] = useState<{ elements: CanvasElement[]; strokes: DrawStroke[] }[]>([])
+  const [redoHistory, setRedoHistory] = useState<{ elements: CanvasElement[]; strokes: DrawStroke[] }[]>([])
+
+  // Floating canvas elements (sticky notes, task cards, text, shapes, frames)
+  // Clean default or loaded from localStorage
+  const [elements, setElements] = useState<CanvasElement[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`tf_wb_elements_${boardId}`)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed)) {
+            return parsed.map((el: CanvasElement) => {
+              if (el.content === 'Add text here...' || el.content === 'New Idea Note') {
+                return { ...el, content: '' }
+              }
+              if (typeof el.content === 'string' && el.content.endsWith('Add text here...')) {
+                return { ...el, content: el.content.replace(/Add text here\.\.\.$/, '').trimEnd() }
+              }
+              return el
+            })
+          }
+        }
+      } catch {}
+    }
+    return []
+  })
+
+  // Save elements to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && boardId) {
+      try {
+        localStorage.setItem(`tf_wb_elements_${boardId}`, JSON.stringify(elements))
+      } catch {}
+    }
+  }, [elements, boardId])
+
   // Interactive element selection, editing, dragging & resizing state
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([])
   const [editingElementId, setEditingElementId] = useState<string | null>(null)
   const [activeColorPickerId, setActiveColorPickerId] = useState<string | null>(null)
+  const canvasViewportRef = useRef<HTMLDivElement>(null)
+
+  const isAllSelected = elements.length > 0 && selectedElementIds.length === elements.length
+
+  const selectedElements = useMemo(() => {
+    return elements.filter((el) => selectedElementIds.includes(el.id) || selectedElementId === el.id)
+  }, [elements, selectedElementIds, selectedElementId])
+
+  const selectionBounds = useMemo(() => {
+    if (selectedElements.length <= 1) return null
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    selectedElements.forEach((el) => {
+      minX = Math.min(minX, el.x)
+      minY = Math.min(minY, el.y)
+      maxX = Math.max(maxX, el.x + (el.width || 120))
+      maxY = Math.max(maxY, el.y + (el.height || 80))
+    })
+    return {
+      x: minX,
+      y: minY,
+      width: Math.max(40, maxX - minX),
+      height: Math.max(40, maxY - minY),
+    }
+  }, [selectedElements])
+
+  const selectAllElements = useCallback(() => {
+    if (elements.length === 0) return
+    const allIds = elements.map((el) => el.id)
+    setSelectedElementIds(allIds)
+    setSelectedElementId(allIds[0] || null)
+    setActiveTool('select')
+    setSaveToast(`Selected all ${allIds.length} items`)
+    setTimeout(() => setSaveToast(null), 1500)
+  }, [elements])
+
+  const deselectAll = useCallback(() => {
+    setSelectedElementIds([])
+    setSelectedElementId(null)
+  }, [])
+
+  const scaleSelectedElements = useCallback(
+    (ratio: number) => {
+      if (!selectionBounds || selectedElements.length === 0) return
+      const centerX = selectionBounds.x + selectionBounds.width / 2
+      const centerY = selectionBounds.y + selectionBounds.height / 2
+      setElements((prev) =>
+        prev.map((el) => {
+          if (!selectedElementIds.includes(el.id) && selectedElementId !== el.id) return el
+          const relX = el.x - centerX
+          const relY = el.y - centerY
+          return {
+            ...el,
+            x: Math.round(centerX + relX * ratio),
+            y: Math.round(centerY + relY * ratio),
+            width: Math.max(40, Math.round((el.width || 120) * ratio)),
+            height: Math.max(30, Math.round((el.height || 80) * ratio)),
+          }
+        })
+      )
+    },
+    [selectionBounds, selectedElements, selectedElementIds, selectedElementId]
+  )
 
   const [dragState, setDragState] = useState<{
-    elementId: string
+    elementId?: string
+    isMultiple?: boolean
+    elementPositions?: { id: string; initialX: number; initialY: number }[]
     startX: number
     startY: number
     initialX: number
@@ -259,32 +389,80 @@ export function KryaWhiteboardModal({
     initialHeight: number
   } | null>(null)
 
+  const [multiResizeState, setMultiResizeState] = useState<{
+    handle: 'nw' | 'ne' | 'se' | 'sw' | 'e' | 's' | 'w' | 'n'
+    startX: number
+    startY: number
+    initialBounds: { x: number; y: number; width: number; height: number }
+    initialElements: { id: string; x: number; y: number; width: number; height: number }[]
+  } | null>(null)
+
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // Wheel listener for smooth pinch-to-zoom and canvas panning
+  useEffect(() => {
+    const el = canvasViewportRef.current
+    if (!el) return
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch zoom or ctrl+wheel
+        const delta = e.deltaY < 0 ? 10 : -10
+        setZoom((z) => Math.min(200, Math.max(25, z + delta)))
+      } else {
+        // Two-finger scroll or wheel panning
+        setPanOffset((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY,
+        }))
+      }
+    }
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [])
+
   // Global drag and resize tracking
   useEffect(() => {
-    if (!dragState && !resizeState) return
+    if (!dragState && !resizeState && !multiResizeState) return
 
     const handleGlobalMouseMove = (e: MouseEvent) => {
+      const scale = Math.max(0.2, zoom / 100)
+
       if (dragState) {
-        const dx = e.clientX - dragState.startX
-        const dy = e.clientY - dragState.startY
-        setElements((prev) =>
-          prev.map((el) => {
-            if (el.id !== dragState.elementId) return el
-            return {
-              ...el,
-              x: Math.round(dragState.initialX + dx),
-              y: Math.round(dragState.initialY + dy),
-            }
-          })
-        )
+        const dx = (e.clientX - dragState.startX) / scale
+        const dy = (e.clientY - dragState.startY) / scale
+
+        if (dragState.isMultiple && dragState.elementPositions) {
+          const posMap = new Map(dragState.elementPositions.map((p) => [p.id, p]))
+          setElements((prev) =>
+            prev.map((el) => {
+              const init = posMap.get(el.id)
+              if (!init) return el
+              return {
+                ...el,
+                x: Math.round(init.initialX + dx),
+                y: Math.round(init.initialY + dy),
+              }
+            })
+          )
+        } else if (dragState.elementId) {
+          setElements((prev) =>
+            prev.map((el) => {
+              if (el.id !== dragState.elementId) return el
+              return {
+                ...el,
+                x: Math.round(dragState.initialX + dx),
+                y: Math.round(dragState.initialY + dy),
+              }
+            })
+          )
+        }
       } else if (resizeState) {
-        const dx = e.clientX - resizeState.startX
-        const dy = e.clientY - resizeState.startY
+        const dx = (e.clientX - resizeState.startX) / scale
+        const dy = (e.clientY - resizeState.startY) / scale
         const { elementId, handle, initialX, initialY, initialWidth, initialHeight } = resizeState
 
         setElements((prev) =>
@@ -329,13 +507,60 @@ export function KryaWhiteboardModal({
             }
           })
         )
+      } else if (multiResizeState) {
+        const dx = (e.clientX - multiResizeState.startX) / scale
+        const dy = (e.clientY - multiResizeState.startY) / scale
+        const { handle, initialBounds, initialElements } = multiResizeState
+
+        let newX = initialBounds.x
+        let newY = initialBounds.y
+        let newW = initialBounds.width
+        let newH = initialBounds.height
+
+        if (handle.includes('e')) newW = Math.max(60, initialBounds.width + dx)
+        if (handle.includes('s')) newH = Math.max(40, initialBounds.height + dy)
+        if (handle.includes('w')) {
+          const possibleW = initialBounds.width - dx
+          if (possibleW >= 60) {
+            newW = possibleW
+            newX = initialBounds.x + dx
+          }
+        }
+        if (handle.includes('n')) {
+          const possibleH = initialBounds.height - dy
+          if (possibleH >= 40) {
+            newH = possibleH
+            newY = initialBounds.y + dy
+          }
+        }
+
+        const scaleX = newW / initialBounds.width
+        const scaleY = newH / initialBounds.height
+        const initMap = new Map(initialElements.map((el) => [el.id, el]))
+
+        setElements((prev) =>
+          prev.map((el) => {
+            const init = initMap.get(el.id)
+            if (!init) return el
+            const relX = init.x - initialBounds.x
+            const relY = init.y - initialBounds.y
+            return {
+              ...el,
+              x: Math.round(newX + relX * scaleX),
+              y: Math.round(newY + relY * scaleY),
+              width: Math.max(20, Math.round(init.width * scaleX)),
+              height: Math.max(20, Math.round(init.height * scaleY)),
+            }
+          })
+        )
       }
     }
 
     const handleGlobalMouseUp = () => {
-      if (dragState || resizeState) {
+      if (dragState || resizeState || multiResizeState) {
         setDragState(null)
         setResizeState(null)
+        setMultiResizeState(null)
       }
     }
 
@@ -345,7 +570,7 @@ export function KryaWhiteboardModal({
       window.removeEventListener('mousemove', handleGlobalMouseMove)
       window.removeEventListener('mouseup', handleGlobalMouseUp)
     }
-  }, [dragState, resizeState])
+  }, [dragState, resizeState, multiResizeState, zoom])
 
   // Lock body scroll when whiteboard is open to prevent underlying page from scrolling
   useEffect(() => {
@@ -389,31 +614,104 @@ export function KryaWhiteboardModal({
     }
   }, [strokes, boardId])
 
+  // Reload elements and strokes whenever boardId changes (ensures clean separation between whiteboards)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && boardId) {
+      try {
+        const savedElements = localStorage.getItem(`tf_wb_elements_${boardId}`)
+        if (savedElements) {
+          const parsed = JSON.parse(savedElements)
+          if (Array.isArray(parsed)) {
+            setElements(
+              parsed.map((el: CanvasElement) => {
+                if (el.content === 'Add text here...' || el.content === 'New Idea Note') {
+                  return { ...el, content: '' }
+                }
+                if (typeof el.content === 'string' && el.content.endsWith('Add text here...')) {
+                  return { ...el, content: el.content.replace(/Add text here\.\.\.$/, '').trimEnd() }
+                }
+                return el
+              })
+            )
+          } else {
+            setElements([])
+          }
+        } else {
+          // Newly created whiteboard starts empty by default
+          setElements([])
+        }
+
+        const savedStrokes = localStorage.getItem(`tf_wb_strokes_${boardId}`)
+        if (savedStrokes) {
+          const parsedStrokes = JSON.parse(savedStrokes)
+          setStrokes(Array.isArray(parsedStrokes) ? parsedStrokes : [])
+        } else {
+          setStrokes([])
+        }
+
+        setShowWelcomeGuide(true)
+        setSelectedElementId(null)
+        setSelectedElementIds([])
+        setEditingElementId(null)
+      } catch {
+        setElements([])
+        setStrokes([])
+      }
+    }
+  }, [boardId])
+
+  const saveSnapshot = useCallback(() => {
+    setHistory((prev) => [...prev.slice(-30), { elements, strokes }])
+    setRedoHistory([])
+  }, [elements, strokes])
+
+  const handleUndo = useCallback(() => {
+    if (history.length > 0) {
+      const prevState = history[history.length - 1]
+      setRedoHistory((prev) => [{ elements, strokes }, ...prev])
+      setHistory((prev) => prev.slice(0, prev.length - 1))
+      setElements(prevState.elements)
+      setStrokes(prevState.strokes)
+      setSelectedElementId(null)
+      setSelectedElementIds([])
+      setEditingElementId(null)
+      setSaveToast('Undo')
+      setTimeout(() => setSaveToast(null), 1000)
+    } else if (strokes.length > 0) {
+      const last = strokes[strokes.length - 1]
+      setRedoStrokes((prev) => [...prev, last])
+      setStrokes((prev) => prev.slice(0, prev.length - 1))
+      setSaveToast('Undo stroke')
+      setTimeout(() => setSaveToast(null), 1000)
+    }
+  }, [history, elements, strokes])
+
+  const handleRedo = useCallback(() => {
+    if (redoHistory.length > 0) {
+      const nextState = redoHistory[0]
+      setRedoHistory((prev) => prev.slice(1))
+      setHistory((prev) => [...prev, { elements, strokes }])
+      setElements(nextState.elements)
+      setStrokes(nextState.strokes)
+      setSelectedElementId(null)
+      setSelectedElementIds([])
+      setEditingElementId(null)
+      setSaveToast('Redo')
+      setTimeout(() => setSaveToast(null), 1000)
+    } else if (redoStrokes.length > 0) {
+      const next = redoStrokes[redoStrokes.length - 1]
+      setRedoStrokes((prev) => prev.slice(0, prev.length - 1))
+      setStrokes((prev) => [...prev, next])
+      setSaveToast('Redo stroke')
+      setTimeout(() => setSaveToast(null), 1000)
+    }
+  }, [redoHistory, elements, strokes, redoStrokes])
+
   // Pan canvas state
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef({ x: 0, y: 0 })
 
-  // Floating canvas elements (sticky notes, task cards, text, shapes, frames)
-  // Clean default or loaded from localStorage
-  const [elements, setElements] = useState<CanvasElement[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(`tf_wb_elements_${boardId}`)
-        if (saved) return JSON.parse(saved)
-      } catch {}
-    }
-    return []
-  })
-
-  // Save elements to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined' && boardId) {
-      try {
-        localStorage.setItem(`tf_wb_elements_${boardId}`, JSON.stringify(elements))
-      } catch {}
-    }
-  }, [elements, boardId])
 
   // Repaint canvas when strokes change
   const redrawCanvas = useCallback(() => {
@@ -472,89 +770,18 @@ export function KryaWhiteboardModal({
     redrawCanvas()
   }, [strokes, redrawCanvas])
 
-  // Keyboard Shortcuts (Matches Reference: V, H, D, R, A, N, T, F, Shift+T, Ctrl+Z, Ctrl+Y, Delete)
-  useEffect(() => {
-    if (!isOpen) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement as HTMLElement | null
-      const isTyping =
-        editingElementId !== null ||
-        activeEl?.tagName === 'INPUT' ||
-        activeEl?.tagName === 'TEXTAREA' ||
-        activeEl?.isContentEditable ||
-        Boolean(activeEl?.closest('[contenteditable="true"]')) ||
-        Boolean(activeEl?.closest('textarea')) ||
-        Boolean(activeEl?.closest('input'))
-
-      if (isTyping) {
-        return
-      }
-
-      // Handle Delete & Backspace for selected element
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
-        e.preventDefault()
-        setElements((prev) => prev.filter((item) => item.id !== selectedElementId))
-        setSelectedElementId(null)
-        setSaveToast('Element deleted')
-        setTimeout(() => setSaveToast(null), 1500)
-        return
-      }
-
-      if (e.key === 'v' || e.key === 'V') {
-        setActiveTool('select')
-      } else if (e.key === 'h' || e.key === 'H') {
-        setActiveTool('hand')
-      } else if (e.key === 'd' || e.key === 'D') {
-        setActiveTool('draw')
-      } else if (e.key === 'r' || e.key === 'R') {
-        setActiveTool('rect')
-      } else if (e.key === 'a' || e.key === 'A') {
-        setActiveTool('arrow')
-      } else if (e.key === 'n' || e.key === 'N') {
-        setActiveTool('sticky')
-      } else if (e.key === 't' || e.key === 'T') {
-        setActiveTool('text')
-      } else if (e.key === 'f' || e.key === 'F') {
-        setActiveTool('folder')
-      } else if (e.shiftKey && (e.key === 'T' || e.key === 't')) {
-        handleAddTaskCard()
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault()
-        if (e.shiftKey) {
-          handleRedo()
-        } else {
-          handleUndo()
-        }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
-        e.preventDefault()
-        handleRedo()
-      } else if (e.key === 'Escape') {
-        if (editingElementId) {
-          setEditingElementId(null)
-        } else if (selectedElementId) {
-          setSelectedElementId(null)
-        } else if (isTemplateCenterOpen) {
-          setIsTemplateCenterOpen(false)
-        } else {
-          onClose()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, isTemplateCenterOpen, onClose, selectedElementId, editingElementId])
-
   // Mouse handlers for drawing & panning
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setSelectedElementId(null)
+    setSelectedElementIds([])
     setEditingElementId(null)
     setActiveColorPickerId(null)
 
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const scale = Math.max(0.2, zoom / 100)
+    const x = (e.clientX - rect.left) / scale
+    const y = (e.clientY - rect.top) / scale
 
     if (activeTool === 'hand') {
       setIsPanning(true)
@@ -570,14 +797,7 @@ export function KryaWhiteboardModal({
       }
 
       setIsDrawing(true)
-      const strokeSize =
-        penType === 'highlighter'
-          ? 16
-          : strokeThickness === 'thin'
-          ? 2.5
-          : strokeThickness === 'medium'
-          ? 5
-          : 9
+      const strokeSize = penType === 'highlighter' ? markerSize : penSize
 
       const newStroke = {
         color: currentColor,
@@ -594,12 +814,12 @@ export function KryaWhiteboardModal({
         if (newStroke.isHighlighter) {
           ctx.globalAlpha = 0.45
           ctx.strokeStyle = currentColor
-          ctx.lineWidth = 15
+          ctx.lineWidth = markerSize
           ctx.lineCap = 'square'
         } else {
           ctx.globalAlpha = 1.0
           ctx.strokeStyle = currentColor
-          ctx.lineWidth = strokeSize
+          ctx.lineWidth = penSize
           ctx.lineCap = 'round'
         }
         ctx.moveTo(x, y)
@@ -651,8 +871,9 @@ export function KryaWhiteboardModal({
     if (!isDrawing || activeTool !== 'draw') return
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const scale = Math.max(0.2, zoom / 100)
+    const x = (e.clientX - rect.left) / scale
+    const y = (e.clientY - rect.top) / scale
 
     if (penType === 'eraser') {
       eraseStrokesNear(x, y)
@@ -679,6 +900,8 @@ export function KryaWhiteboardModal({
     setIsDrawing(false)
 
     if (currentStrokeRef.current) {
+      saveSnapshot()
+      setShowWelcomeGuide(false)
       const finished = currentStrokeRef.current
       setStrokes((prev) => [...prev, finished])
       setRedoStrokes([])
@@ -688,35 +911,22 @@ export function KryaWhiteboardModal({
   }
 
   const eraseStrokesNear = (x: number, y: number) => {
+    const radius = Math.max(10, eraserSize / 2)
     setStrokes((prev) =>
       prev.filter((stroke) => {
         return !stroke.points.some((p) => {
           const dx = p.x - x
           const dy = p.y - y
-          return Math.sqrt(dx * dx + dy * dy) < 22
+          return Math.sqrt(dx * dx + dy * dy) < radius
         })
       })
     )
   }
 
-  const handleUndo = () => {
-    if (strokes.length === 0) return
-    const last = strokes[strokes.length - 1]
-    setRedoStrokes((prev) => [...prev, last])
-    setStrokes((prev) => prev.slice(0, prev.length - 1))
-  }
-
-  const handleRedo = () => {
-    if (redoStrokes.length === 0) return
-    const next = redoStrokes[redoStrokes.length - 1]
-    setRedoStrokes((prev) => prev.slice(0, prev.length - 1))
-    setStrokes((prev) => [...prev, next])
-  }
 
   const handleElementMouseDown = (e: React.MouseEvent, el: CanvasElement) => {
     e.stopPropagation()
     setActiveTool('select')
-    setSelectedElementId(el.id)
 
     const target = e.target as HTMLElement
     if (
@@ -728,12 +938,55 @@ export function KryaWhiteboardModal({
       return
     }
 
+    let nextSelected = selectedElementIds
+    if (e.shiftKey) {
+      if (selectedElementIds.includes(el.id)) {
+        nextSelected = selectedElementIds.filter((id) => id !== el.id)
+      } else {
+        nextSelected = [...selectedElementIds, el.id]
+      }
+      setSelectedElementIds(nextSelected)
+      setSelectedElementId(el.id)
+    } else if (selectedElementIds.includes(el.id) && selectedElementIds.length > 1) {
+      setSelectedElementId(el.id)
+    } else {
+      setSelectedElementId(el.id)
+      setSelectedElementIds([el.id])
+      nextSelected = [el.id]
+    }
+
+    const isGroup = nextSelected.includes(el.id) && nextSelected.length > 1
+    const groupElements = isGroup ? elements.filter((item) => nextSelected.includes(item.id)) : [el]
+
     setDragState({
       elementId: el.id,
+      isMultiple: isGroup,
+      elementPositions: groupElements.map((item) => ({ id: item.id, initialX: item.x, initialY: item.y })),
       startX: e.clientX,
       startY: e.clientY,
       initialX: el.x,
       initialY: el.y,
+    })
+  }
+
+  const handleMultiResizeStart = (
+    e: React.MouseEvent,
+    handle: 'nw' | 'ne' | 'se' | 'sw' | 'e' | 's' | 'w' | 'n'
+  ) => {
+    e.stopPropagation()
+    if (!selectionBounds) return
+    setMultiResizeState({
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialBounds: { ...selectionBounds },
+      initialElements: selectedElements.map((item) => ({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        width: item.width || 120,
+        height: item.height || 80,
+      })),
     })
   }
 
@@ -768,6 +1021,7 @@ export function KryaWhiteboardModal({
   }
 
   const updateElementColor = (id: string, color: string) => {
+    saveSnapshot()
     setElements((prev) =>
       prev.map((el) => (el.id === id ? { ...el, color } : el))
     )
@@ -778,6 +1032,7 @@ export function KryaWhiteboardModal({
   const duplicateElement = (id: string) => {
     const el = elements.find((item) => item.id === id)
     if (!el) return
+    saveSnapshot()
     const newEl: CanvasElement = {
       ...el,
       id: `${el.type}-${Date.now()}`,
@@ -791,6 +1046,7 @@ export function KryaWhiteboardModal({
   }
 
   const deleteElement = (id: string) => {
+    saveSnapshot()
     setElements((prev) => prev.filter((item) => item.id !== id))
     if (selectedElementId === id) setSelectedElementId(null)
     if (editingElementId === id) setEditingElementId(null)
@@ -828,6 +1084,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddStickyNoteAt = (x: number, y: number) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `sticky-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -838,7 +1096,7 @@ export function KryaWhiteboardModal({
         y,
         width: 190,
         height: 150,
-        content: 'New Idea Note',
+        content: '',
         color: stickyColor,
         fontSize: stickyFontSize,
         alignment: stickyAlignment,
@@ -850,6 +1108,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddTextAt = (x: number, y: number) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `text-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -860,7 +1120,7 @@ export function KryaWhiteboardModal({
         y,
         width: 180,
         height: 60,
-        content: 'Add text here...',
+        content: '',
         color: textColor,
         fontSize: textFontSize,
         alignment: textAlignment,
@@ -872,6 +1132,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddFrameAt = (x: number, y: number) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `frame-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -891,6 +1153,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddTaskCard = () => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `task-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -910,6 +1174,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddShape = (x: number, y: number, shape: ShapeType) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `shape-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -934,6 +1200,8 @@ export function KryaWhiteboardModal({
   }
 
   const handleAddConnector = (x: number, y: number, connType: ConnectorType) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
     const id = `conn-${Date.now()}`
     setElements((prev) => [
       ...prev,
@@ -952,15 +1220,213 @@ export function KryaWhiteboardModal({
   }
 
   const handleClearCanvas = () => {
+    if (elements.length === 0 && strokes.length === 0) return
+    saveSnapshot()
     setStrokes([])
     setRedoStrokes([])
     setElements([])
+    setSelectedElementId(null)
+    setEditingElementId(null)
+    setShowWelcomeGuide(true)
     if (typeof window !== 'undefined' && boardId) {
       try {
         localStorage.removeItem(`tf_wb_elements_${boardId}`)
         localStorage.removeItem(`tf_wb_strokes_${boardId}`)
       } catch {}
     }
+    setSaveToast('Canvas cleared (Undo available)')
+    setTimeout(() => setSaveToast(null), 2500)
+  }
+
+  const handleLoadSampleBoard = () => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
+    const now = Date.now()
+    const sampleElements: CanvasElement[] = [
+      {
+        id: `sample-sticky-${now}`,
+        type: 'sticky',
+        x: 60,
+        y: 80,
+        width: 220,
+        height: 170,
+        content: '🚀 Welcome to TaskFlow Whiteboard!\n\n• Ideate with sticky notes\n• Build Figma flowcharts\n• Crop & adjust images\n• Freehand draw with pen',
+        color: '#fef08a',
+        fontSize: 'Medium',
+        alignment: 'left',
+      },
+      {
+        id: `sample-step1-${now}`,
+        type: 'rect',
+        x: 320,
+        y: 90,
+        width: 180,
+        height: 60,
+        content: '🟢 Start: User Request',
+        color: '#10b981',
+        borderColor: '#059669',
+        thickness: 2,
+        alignment: 'center',
+      },
+      {
+        id: `sample-conn1-${now}`,
+        type: 'arrow',
+        x: 510,
+        y: 100,
+        width: 80,
+        height: 40,
+        content: 'straight',
+        color: '#ffffff',
+      },
+      {
+        id: `sample-decision-${now}`,
+        type: 'diamond',
+        x: 610,
+        y: 75,
+        width: 130,
+        height: 90,
+        content: 'Authorized?',
+        color: '#f59e0b',
+        borderColor: '#d97706',
+        thickness: 2,
+        alignment: 'center',
+      },
+      {
+        id: `sample-conn2-${now}`,
+        type: 'arrow',
+        x: 750,
+        y: 100,
+        width: 80,
+        height: 40,
+        content: 'straight',
+        color: '#ffffff',
+      },
+      {
+        id: `sample-step2-${now}`,
+        type: 'rect',
+        x: 850,
+        y: 90,
+        width: 180,
+        height: 60,
+        content: '⚡ Next.js App View',
+        color: '#3b82f6',
+        borderColor: '#2563eb',
+        thickness: 2,
+        alignment: 'center',
+      },
+      {
+        id: `sample-task-${now}`,
+        type: 'task',
+        x: 320,
+        y: 210,
+        width: 260,
+        height: 130,
+        content: 'Verify real-time whiteboard synchronization and image crop studio',
+        title: 'Active Sprint Item',
+        color: '#18181b',
+        borderColor: '#38bdf8',
+      },
+      {
+        id: `sample-sticky2-${now}`,
+        type: 'sticky',
+        x: 620,
+        y: 210,
+        width: 220,
+        height: 150,
+        content: '💡 Flowcharts & Diagrams:\nClick Flowcharts on the dock below to insert complete Swimlane or Architecture diagrams!',
+        color: '#a7f3d0',
+        fontSize: 'Medium',
+        alignment: 'left',
+      },
+    ]
+    setElements(sampleElements)
+    setSaveToast('Sample showcase board loaded')
+    setTimeout(() => setSaveToast(null), 2000)
+  }
+
+  const handleApplyImageFromStudio = (adjustments: ImageAdjustments) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
+    const effectiveUrl = adjustments.croppedUrl || adjustments.url
+    if (editingImageElementId) {
+      setElements((prev) =>
+        prev.map((el) => {
+          if (el.id !== editingImageElementId) return el
+          return {
+            ...el,
+            imageUrl: effectiveUrl,
+            imageRotation: adjustments.rotation,
+            imageOpacity: Math.round(adjustments.opacity * 100),
+            imageBrightness: adjustments.brightness,
+            imageContrast: adjustments.contrast,
+            imageBorderRadius: adjustments.borderRadius,
+          }
+        })
+      )
+      setEditingImageElementId(null)
+      setSaveToast('Image adjustments applied')
+    } else {
+      const id = `img-${Date.now()}`
+      const newEl: CanvasElement = {
+        id,
+        type: 'image',
+        x: 260,
+        y: 160,
+        width: 320,
+        height: 240,
+        imageUrl: effectiveUrl,
+        imageRotation: adjustments.rotation,
+        imageOpacity: Math.round(adjustments.opacity * 100),
+        imageBrightness: adjustments.brightness,
+        imageContrast: adjustments.contrast,
+        imageBorderRadius: adjustments.borderRadius,
+      }
+      setElements((prev) => [...prev, newEl])
+      setSelectedElementId(id)
+      setSaveToast('Image added to canvas')
+    }
+    setIsImageStudioOpen(false)
+    setTimeout(() => setSaveToast(null), 2000)
+  }
+
+  const handleInsertFlowchartDiagram = (diagramElements: CanvasElement[]) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
+    const now = Date.now()
+    const inserted: CanvasElement[] = diagramElements.map((el) => ({
+      ...el,
+      id: `${el.id}-${now}`,
+    }))
+    setElements((prev) => [...prev, ...inserted])
+    setIsFlowchartsModalOpen(false)
+    setSaveToast('Flowchart diagram inserted')
+    setTimeout(() => setSaveToast(null), 2000)
+  }
+
+  const handleInsertFlowchartShape = (shapeType: CanvasElement['type'], title: string) => {
+    saveSnapshot()
+    setShowWelcomeGuide(false)
+    const id = `fc-shape-${Date.now()}`
+    const newEl: CanvasElement = {
+      id,
+      type: shapeType,
+      x: 300,
+      y: 180,
+      width: shapeType === 'diamond' ? 140 : shapeType === 'cloud' ? 170 : 150,
+      height: shapeType === 'diamond' ? 100 : 90,
+      content: title,
+      color: 'transparent',
+      borderColor: '#a855f7',
+      thickness: 2,
+      borderStyle: 'solid',
+      alignment: 'center',
+      fontSize: 'Medium',
+    }
+    setElements((prev) => [...prev, newEl])
+    setSelectedElementId(id)
+    setIsFlowchartsModalOpen(false)
+    setSaveToast(`Added ${title}`)
+    setTimeout(() => setSaveToast(null), 1500)
   }
 
   const toggleFullscreen = () => {
@@ -1303,6 +1769,101 @@ export function KryaWhiteboardModal({
     setTimeout(() => setSaveToast(null), 2500)
   }
 
+  // Keyboard Shortcuts (Matches Reference: V, H, D, R, A, N, T, F, Shift+T, Ctrl+Z, Ctrl+Y, Delete)
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null
+      const isTyping =
+        editingElementId !== null ||
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.isContentEditable ||
+        Boolean(activeEl?.closest('[contenteditable="true"]')) ||
+        Boolean(activeEl?.closest('textarea')) ||
+        Boolean(activeEl?.closest('input'))
+
+      if (isTyping) {
+        return
+      }
+
+      // Handle Select All (Ctrl+A / Cmd+A)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault()
+        selectAllElements()
+        return
+      }
+
+      // Handle Delete & Backspace for selected element(s)
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedElementId || selectedElementIds.length > 0)) {
+        e.preventDefault()
+        saveSnapshot()
+        const idsToDelete = selectedElementIds.length > 0 ? selectedElementIds : selectedElementId ? [selectedElementId] : []
+        setElements((prev) => prev.filter((item) => !idsToDelete.includes(item.id)))
+        setSelectedElementId(null)
+        setSelectedElementIds([])
+        setSaveToast(`${idsToDelete.length} item(s) deleted`)
+        setTimeout(() => setSaveToast(null), 1500)
+        return
+      }
+
+      // Handle Arrow keys to nudge selected element(s)
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && (selectedElementId || selectedElementIds.length > 0)) {
+        e.preventDefault()
+        const step = e.shiftKey ? 10 : 2
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+        const idsToMove = selectedElementIds.length > 0 ? selectedElementIds : selectedElementId ? [selectedElementId] : []
+        setElements((prev) => prev.map((el) => idsToMove.includes(el.id) ? { ...el, x: el.x + dx, y: el.y + dy } : el))
+        return
+      }
+
+      if (e.key === 'v' || e.key === 'V') {
+        setActiveTool('select')
+      } else if (e.key === 'h' || e.key === 'H') {
+        setActiveTool('hand')
+      } else if (e.key === 'd' || e.key === 'D') {
+        setActiveTool('draw')
+      } else if (e.key === 'r' || e.key === 'R') {
+        setActiveTool('rect')
+      } else if (e.key === 'a' || e.key === 'A') {
+        setActiveTool('arrow')
+      } else if (e.key === 'n' || e.key === 'N') {
+        setActiveTool('sticky')
+      } else if (e.key === 't' || e.key === 'T') {
+        setActiveTool('text')
+      } else if (e.key === 'f' || e.key === 'F') {
+        setActiveTool('folder')
+      } else if (e.shiftKey && (e.key === 'T' || e.key === 't')) {
+        handleAddTaskCard()
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        if (e.shiftKey) {
+          handleRedo()
+        } else {
+          handleUndo()
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault()
+        handleRedo()
+      } else if (e.key === 'Escape') {
+        if (editingElementId) {
+          setEditingElementId(null)
+        } else if (selectedElementIds.length > 0 || selectedElementId) {
+          setSelectedElementId(null)
+          setSelectedElementIds([])
+        } else if (isTemplateCenterOpen) {
+          setIsTemplateCenterOpen(false)
+        } else {
+          onClose()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, isTemplateCenterOpen, onClose, selectedElementId, selectedElementIds, editingElementId, selectAllElements, saveSnapshot, handleUndo, handleRedo, handleAddTaskCard])
+
   // Comprehensive 30+ Template Catalog (matching ClickUp & Template.net/whiteboard)
   const templatesList = useMemo(() => {
     const list = [
@@ -1431,10 +1992,11 @@ export function KryaWhiteboardModal({
             <button
               type="button"
               onClick={handleClearCanvas}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer"
-              title="Clear Canvas"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 border border-zinc-700/50 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+              title="Clear All Canvas Elements & Drawings"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Clear All</span>
             </button>
 
             <button
@@ -1459,43 +2021,114 @@ export function KryaWhiteboardModal({
         </header>
 
         {/* ── CANVAS AREA (Dot grid background matching Reference Images) ── */}
-        <div className="relative flex-1 w-full h-full overflow-hidden bg-[#0d0e12]">
-          {/* Subtle dot-grid pattern background */}
+        <div ref={canvasViewportRef} className="relative flex-1 w-full h-full overflow-hidden bg-[#0d0e12]">
+          {/* Subtle dot-grid pattern background that scales and pans */}
           <div
             className="absolute inset-0 pointer-events-none opacity-40"
             style={{
               backgroundImage: 'radial-gradient(circle, #45474e 1.2px, transparent 1.2px)',
-              backgroundSize: '24px 24px',
+              backgroundSize: `${24 * (zoom / 100)}px ${24 * (zoom / 100)}px`,
+              backgroundPosition: `${panOffset.x}px ${panOffset.y}px`,
             }}
           />
 
-          {/* Interactive HTML5 drawing canvas */}
-          <canvas
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            className={`absolute inset-0 w-full h-full z-10 ${
-              activeTool === 'draw'
-                ? penType === 'eraser'
-                  ? 'cursor-cell'
-                  : 'cursor-crosshair'
-                : activeTool === 'hand'
-                ? isPanning
-                  ? 'cursor-grabbing'
-                  : 'cursor-grab'
-                : activeTool === 'rect' || activeTool === 'arrow' || activeTool === 'sticky' || activeTool === 'folder'
-                ? 'cursor-crosshair'
-                : 'cursor-default'
-            }`}
-          />
+          {/* Welcome Guide for Plain / Empty Whiteboard */}
+          {elements.length === 0 && strokes.length === 0 && showWelcomeGuide && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 p-4">
+              <div className="pointer-events-auto max-w-lg w-full bg-[#14151a]/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-6 shadow-2xl text-center flex flex-col items-center animate-fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg mb-4">
+                  <Sparkles className="w-7 h-7" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Plain Canvas Ready</h3>
+                <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
+                  Your whiteboard is ready for freehand drawing, Figma flowcharts & diagrams, ideation stickies, and image cropping.
+                </p>
 
-          {/* Movable & Editable Canvas Elements */}
-          <div className="absolute inset-0 pointer-events-none z-20">
-            {elements.map((el) => {
-              const isSelected = selectedElementId === el.id
-              const isEditing = editingElementId === el.id
+                <div className="grid grid-cols-2 gap-2.5 w-full text-left mb-6">
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="text-xs font-semibold text-purple-400 flex items-center gap-1.5 mb-1">
+                      <GitBranch className="w-3.5 h-3.5" /> Flowcharts & DFD
+                    </div>
+                    <div className="text-[11px] text-zinc-400">Process, Swimlane, Decision & Architecture templates</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="text-xs font-semibold text-amber-400 flex items-center gap-1.5 mb-1">
+                      <StickyNote className="w-3.5 h-3.5" /> Sticky Notes & Tasks
+                    </div>
+                    <div className="text-[11px] text-zinc-400">12 pastel color themes with interactive editing</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="text-xs font-semibold text-sky-400 flex items-center gap-1.5 mb-1">
+                      <ImageIcon className="w-3.5 h-3.5" /> Image Studio
+                    </div>
+                    <div className="text-[11px] text-zinc-400">Upload PNG, JPG, SVG, WebP with live Crop & Adjust</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 mb-1">
+                      <Undo2 className="w-3.5 h-3.5" /> History & Clear All
+                    </div>
+                    <div className="text-[11px] text-zinc-400">Full undo, redo, and safe clear canvas actions</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 w-full">
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleBoard}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Explore Sample Board</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowWelcomeGuide(false)}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-medium text-xs transition-colors cursor-pointer border border-zinc-700"
+                  >
+                    Start Blank
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Zoomed & Panned Canvas Viewport */}
+          <div
+            className="absolute inset-0 origin-top-left"
+            style={{
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom / 100})`,
+              transformOrigin: '0 0',
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            {/* Interactive HTML5 drawing canvas */}
+            <canvas
+              ref={canvasRef}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              className={`absolute inset-0 w-full h-full z-10 ${
+                activeTool === 'draw'
+                  ? penType === 'eraser'
+                    ? 'cursor-cell'
+                    : 'cursor-crosshair'
+                  : activeTool === 'hand'
+                  ? isPanning
+                    ? 'cursor-grabbing'
+                    : 'cursor-grab'
+                  : activeTool === 'rect' || activeTool === 'arrow' || activeTool === 'sticky' || activeTool === 'folder'
+                  ? 'cursor-crosshair'
+                  : 'cursor-default'
+              }`}
+            />
+
+            {/* Movable & Editable Canvas Elements */}
+            <div className="absolute inset-0 pointer-events-none z-20">
+              {elements.map((el) => {
+                const isSelected = selectedElementId === el.id || selectedElementIds.includes(el.id)
+                const isEditing = editingElementId === el.id
 
               const renderResizeHandles = () => (
                 <>
@@ -1549,7 +2182,7 @@ export function KryaWhiteboardModal({
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   {/* Edit text button */}
-                  {el.type !== 'arrow' && (
+                  {el.type !== 'arrow' && el.type !== 'image' && (
                     <button
                       type="button"
                       onClick={() => setEditingElementId(el.id)}
@@ -1558,6 +2191,22 @@ export function KryaWhiteboardModal({
                     >
                       <Type className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Edit</span>
+                    </button>
+                  )}
+
+                  {/* Crop & Adjust button for image */}
+                  {el.type === 'image' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingImageElementId(el.id)
+                        setIsImageStudioOpen(true)
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors cursor-pointer"
+                      title="Crop & Adjust Image"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>Crop & Adjust</span>
                     </button>
                   )}
 
@@ -1572,36 +2221,38 @@ export function KryaWhiteboardModal({
                   </button>
 
                   {/* Color picker dropdown */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setActiveColorPickerId(activeColorPickerId === el.id ? null : el.id)}
-                      className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-                      title="Change Color"
-                    >
-                      <div
-                        className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-xs"
-                        style={{ backgroundColor: el.color || '#38bdf8' }}
-                      />
-                    </button>
+                  {el.type !== 'image' && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setActiveColorPickerId(activeColorPickerId === el.id ? null : el.id)}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                        title="Change Color"
+                      >
+                        <div
+                          className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-xs"
+                          style={{ backgroundColor: el.color || '#38bdf8' }}
+                        />
+                      </button>
 
-                    {activeColorPickerId === el.id && (
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 rounded-2xl bg-zinc-900/98 backdrop-blur-2xl border border-zinc-700 shadow-2xl flex items-center gap-1.5 z-50 animate-scale-in">
-                        {(el.type === 'sticky' ? STICKY_PASTEL_COLORS : el.type === 'text' ? TEXT_COLORS : PEN_COLORS).map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => {
-                              updateElementColor(el.id, c)
-                              setActiveColorPickerId(null)
-                            }}
-                            style={{ backgroundColor: c }}
-                            className="w-4 h-4 rounded-full border border-black/30 hover:scale-130 transition-transform cursor-pointer"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      {activeColorPickerId === el.id && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 rounded-2xl bg-zinc-900/98 backdrop-blur-2xl border border-zinc-700 shadow-2xl flex items-center gap-1.5 z-50 animate-scale-in">
+                          {(el.type === 'sticky' ? STICKY_PASTEL_COLORS : el.type === 'text' ? TEXT_COLORS : PEN_COLORS).map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => {
+                                updateElementColor(el.id, c)
+                                setActiveColorPickerId(null)
+                              }}
+                              style={{ backgroundColor: c }}
+                              className="w-4 h-4 rounded-full border border-black/30 hover:scale-130 transition-transform cursor-pointer"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
 
@@ -1678,6 +2329,85 @@ export function KryaWhiteboardModal({
                     >
                       <X className="w-3 h-3" />
                     </button>
+                  </div>
+                )
+              }
+
+              if (el.type === 'image') {
+                const rotation = el.imageRotation || 0
+                const opacity = el.imageOpacity ?? 100
+                const brightness = el.imageBrightness ?? 100
+                const contrast = el.imageContrast ?? 100
+                const radius = el.imageBorderRadius ?? 8
+
+                return (
+                  <div
+                    key={el.id}
+                    onMouseDown={(e) => handleElementMouseDown(e, el)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedElementId(el.id)
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedElementId(el.id)
+                      setEditingImageElementId(el.id)
+                      setIsImageStudioOpen(true)
+                    }}
+                    style={{
+                      left: el.x,
+                      top: el.y,
+                      width: el.width,
+                      height: el.height,
+                    }}
+                    className={`absolute pointer-events-auto select-none group transition-shadow ${
+                      dragState?.elementId === el.id ? 'cursor-grabbing' : 'cursor-move'
+                    } ${
+                      isSelected ? 'ring-2 ring-sky-500 shadow-2xl shadow-sky-500/20' : ''
+                    }`}
+                  >
+                    {/* Floating toolbar when selected */}
+                    {isSelected && renderFloatingToolbar()}
+
+                    {/* 8 Resize handles when selected */}
+                    {isSelected && renderResizeHandles()}
+
+                    {/* Delete button on hover */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteElement(el.id)
+                      }}
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-md z-30"
+                      title="Remove Image"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+
+                    {/* Image presentation container */}
+                    <div
+                      className="w-full h-full overflow-hidden flex items-center justify-center bg-black/30 border border-white/10"
+                      style={{
+                        borderRadius: `${radius}px`,
+                        transform: `rotate(${rotation}deg)`,
+                        opacity: opacity / 100,
+                        filter: `brightness(${brightness}%) contrast(${contrast}%)`,
+                      }}
+                    >
+                      {el.imageUrl ? (
+                        <img
+                          src={el.imageUrl}
+                          alt="Whiteboard Element"
+                          className="w-full h-full object-contain pointer-events-none select-none"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-zinc-800/80 border border-dashed border-zinc-600 flex items-center justify-center text-zinc-400 text-xs">
+                          No Image
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               }
@@ -1767,70 +2497,213 @@ export function KryaWhiteboardModal({
                     </div>
                   )}
 
-                  {el.type !== 'arrow' && (
-                    <div className="w-full flex-1 flex flex-col justify-center min-h-[30px]">
-                      {isEditing ? (
-                        <textarea
-                          autoFocus
-                          value={el.content || ''}
-                          onChange={(e) => updateElementContent(el.id, e.target.value)}
-                          onBlur={() => setEditingElementId(null)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              setEditingElementId(null)
-                            }
-                            e.stopPropagation()
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          className="w-full h-full min-h-[40px] bg-transparent resize-none outline-none border-none leading-relaxed font-medium select-text cursor-text p-0.5"
-                          style={{
-                            color: getContrastTextColor(el.color),
-                            textAlign: el.alignment || 'left',
-                            fontSize: el.fontSize === 'Large' ? '15px' : el.fontSize === 'Small' ? '11px' : '13px',
-                          }}
-                          placeholder="Add text here..."
-                        />
-                      ) : (
-                        <div
-                          onDoubleClick={(e) => {
-                            e.stopPropagation()
-                            setActiveTool('select')
-                            setSelectedElementId(el.id)
-                            setEditingElementId(el.id)
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setActiveTool('select')
-                            setSelectedElementId(el.id)
-                            if (isSelected || el.type === 'text') {
+                  {el.type !== 'arrow' && (() => {
+                    const cleanContent =
+                      el.content === 'Add text here...' || el.content === 'New Idea Note'
+                        ? ''
+                        : typeof el.content === 'string' && el.content.endsWith('Add text here...')
+                        ? el.content.replace(/Add text here\.\.\.$/, '').trimEnd()
+                        : (el.content || '')
+
+                    return (
+                      <div className="w-full flex-1 flex flex-col justify-center min-h-[30px]">
+                        {isEditing ? (
+                          <textarea
+                            autoFocus
+                            value={cleanContent}
+                            onChange={(e) => updateElementContent(el.id, e.target.value)}
+                            onBlur={() => setEditingElementId(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                setEditingElementId(null)
+                              }
+                              e.stopPropagation()
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="w-full h-full min-h-[40px] bg-transparent resize-none outline-none border-none leading-relaxed font-medium select-text cursor-text p-0.5 placeholder:text-zinc-500/60"
+                            style={{
+                              color: getContrastTextColor(el.color),
+                              textAlign: el.alignment || 'left',
+                              fontSize: el.fontSize === 'Large' ? '15px' : el.fontSize === 'Small' ? '11px' : '13px',
+                            }}
+                            placeholder={el.type === 'sticky' ? 'Write note here...' : 'Add text here...'}
+                          />
+                        ) : (
+                          <div
+                            onDoubleClick={(e) => {
+                              e.stopPropagation()
+                              setActiveTool('select')
+                              setSelectedElementId(el.id)
                               setEditingElementId(el.id)
-                            }
-                          }}
-                          className={`w-full h-full leading-relaxed outline-none font-medium cursor-text select-text ${
-                            el.fontSize === 'Large' ? 'text-sm' : el.fontSize === 'Small' ? 'text-[11px]' : 'text-xs'
-                          } ${
-                            el.alignment === 'center' ? 'text-center' : el.alignment === 'right' ? 'text-right' : 'text-left'
-                          }`}
-                          style={{
-                            color: getContrastTextColor(el.color),
-                          }}
-                        >
-                          {el.content ? (
-                            el.content
-                          ) : (
-                            <span className="opacity-40 italic select-none">
-                              {el.type === 'text' ? 'Add text here...' : 'Click to add text...'}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setActiveTool('select')
+                              setSelectedElementId(el.id)
+                              if (isSelected || el.type === 'text') {
+                                setEditingElementId(el.id)
+                              }
+                            }}
+                            className={`w-full h-full leading-relaxed outline-none font-medium cursor-text select-text ${
+                              el.fontSize === 'Large' ? 'text-sm' : el.fontSize === 'Small' ? 'text-[11px]' : 'text-xs'
+                            } ${
+                              el.alignment === 'center' ? 'text-center' : el.alignment === 'right' ? 'text-right' : 'text-left'
+                            }`}
+                            style={{
+                              color: getContrastTextColor(el.color),
+                            }}
+                          >
+                            {cleanContent ? (
+                              cleanContent
+                            ) : (
+                              <span className="opacity-40 italic select-none">
+                                {el.type === 'text' ? 'Add text here...' : el.type === 'sticky' ? 'Write note here...' : 'Click to add text...'}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
+
+            {/* Multi-Selection Bounding Box & Group Controls */}
+            {selectedElementIds.length > 1 && selectionBounds && (
+              <div
+                style={{
+                  left: selectionBounds.x,
+                  top: selectionBounds.y,
+                  width: selectionBounds.width,
+                  height: selectionBounds.height,
+                }}
+                className="absolute pointer-events-auto border-2 border-dashed border-sky-400 bg-sky-500/10 rounded-xl shadow-xl select-none z-35"
+              >
+                {/* Floating Group Toolbar */}
+                <div
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#14151a]/95 backdrop-blur-2xl border border-white/20 shadow-2xl z-40 text-xs font-semibold text-white pointer-events-auto whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[11px] font-bold">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>{selectedElementIds.length} Selected</span>
+                  </div>
+
+                  {/* Move All Handle */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      const groupElements = elements.filter((item) => selectedElementIds.includes(item.id))
+                      setDragState({
+                        isMultiple: true,
+                        elementPositions: groupElements.map((item) => ({ id: item.id, initialX: item.x, initialY: item.y })),
+                        startX: e.clientX,
+                        startY: e.clientY,
+                        initialX: selectionBounds.x,
+                        initialY: selectionBounds.y,
+                      })
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs cursor-move transition-colors"
+                    title="Drag to reposition all selected elements"
+                  >
+                    <Hand className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Move All</span>
+                  </div>
+
+                  {/* Quick Scale Buttons */}
+                  <div className="flex items-center gap-1 border-l border-white/10 pl-1.5">
+                    <button
+                      type="button"
+                      onClick={() => scaleSelectedElements(1.1)}
+                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition-colors cursor-pointer text-[11px] font-mono"
+                      title="Scale selected elements up +10%"
+                    >
+                      +10%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scaleSelectedElements(0.9)}
+                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition-colors cursor-pointer text-[11px] font-mono"
+                      title="Scale selected elements down -10%"
+                    >
+                      -10%
+                    </button>
+                  </div>
+
+                  {/* Delete All Selected */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveSnapshot()
+                      setElements((prev) => prev.filter((el) => !selectedElementIds.includes(el.id)))
+                      setSelectedElementIds([])
+                      setSelectedElementId(null)
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Delete All Selected Elements"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Deselect All */}
+                  <button
+                    type="button"
+                    onClick={deselectAll}
+                    className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    title="Deselect All (Esc)"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* 8 Multi-Resize Handles */}
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'nw')}
+                  className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group NW"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'ne')}
+                  className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group NE"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'se')}
+                  className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group SE"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'sw')}
+                  className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group SW"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'n')}
+                  className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group Height"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 's')}
+                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group Height"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'w')}
+                  className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group Width"
+                />
+                <div
+                  onMouseDown={(e) => handleMultiResizeStart(e, 'e')}
+                  className="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize z-40 pointer-events-auto hover:scale-125 transition-transform"
+                  title="Resize Group Width"
+                />
+              </div>
+            )}
           </div>
+        </div>
 
           {/* Toast Notification */}
           {saveToast && (
@@ -1850,52 +2723,230 @@ export function KryaWhiteboardModal({
           {/* MODE 1: PEN / DRAW CONTEXTUAL BAR (Image 3) */}
           {activeTool === 'draw' && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#14151a]/95 backdrop-blur-2xl border border-white/10 shadow-2xl animate-fade-in text-xs">
-              <button
-                type="button"
-                onClick={() => setPenType('pen')}
-                className={`flex items-center gap-1 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  penType === 'pen'
-                    ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Fine Pen Tip"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L9 8H15L12 2Z" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" />
-                  <rect x="9" y="8" width="6" height="12" rx="1" fill="#3f3f46" stroke="#52525b" />
-                </svg>
-                <ChevronDown className="w-2.5 h-2.5 opacity-70" />
-              </button>
+              {/* Pencil / Fine Pen Tip Button with Size Adjuster */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPenType('pen')
+                    setActiveSizePopup(activeSizePopup === 'pen' ? null : 'pen')
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    penType === 'pen'
+                      ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                  }`}
+                  title="Pencil / Fine Pen Tip (Click to adjust size)"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L9 8H15L12 2Z" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" />
+                    <rect x="9" y="8" width="6" height="12" rx="1" fill="#3f3f46" stroke="#52525b" />
+                  </svg>
+                  <ChevronDown className={`w-2.5 h-2.5 transition-transform ${activeSizePopup === 'pen' ? 'rotate-180' : 'opacity-70'}`} />
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setPenType('highlighter')}
-                className={`flex items-center gap-1 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  penType === 'highlighter'
-                    ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Chisel Highlighter Tip"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M8 3L14 3L16 8L8 8Z" fill="#eab308" />
-                  <rect x="8" y="8" width="8" height="12" rx="1" fill="#3f3f46" stroke="#52525b" />
-                </svg>
-                <ChevronDown className="w-2.5 h-2.5 opacity-70" />
-              </button>
+                {activeSizePopup === 'pen' && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-full left-0 mb-3 p-3 rounded-2xl bg-[#14151a] border border-white/20 shadow-2xl flex flex-col gap-2.5 z-50 text-xs w-48 animate-fade-in"
+                  >
+                    <div className="flex items-center justify-between text-zinc-300 font-bold">
+                      <span>Pencil Size</span>
+                      <span className="font-mono text-[11px] text-sky-400">{penSize}px</span>
+                    </div>
 
-              <button
-                type="button"
-                onClick={() => setPenType('eraser')}
-                className={`p-1.5 rounded-xl transition-all cursor-pointer ${
-                  penType === 'eraser'
-                    ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Eraser"
-              >
-                <Eraser className="w-4 h-4" />
-              </button>
+                    <div className="w-full h-8 rounded-xl bg-black/50 border border-white/5 flex items-center justify-center overflow-hidden">
+                      <div
+                        style={{
+                          height: `${Math.min(24, Math.max(2, penSize))}px`,
+                          width: '80%',
+                          backgroundColor: currentColor,
+                          borderRadius: '999px',
+                        }}
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={1}
+                      max={36}
+                      step={1}
+                      value={penSize}
+                      onChange={(e) => setPenSize(Number(e.target.value))}
+                      className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                    />
+
+                    <div className="grid grid-cols-4 gap-1">
+                      {[
+                        { label: 'Fine', size: 2 },
+                        { label: 'Med', size: 4 },
+                        { label: 'Bold', size: 8 },
+                        { label: 'Max', size: 16 },
+                      ].map((p) => (
+                        <button
+                          key={p.size}
+                          type="button"
+                          onClick={() => setPenSize(p.size)}
+                          className={`py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                            penSize === p.size ? 'bg-sky-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Marker / Chisel Highlighter Button with Size Adjuster */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPenType('highlighter')
+                    setActiveSizePopup(activeSizePopup === 'marker' ? null : 'marker')
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    penType === 'highlighter'
+                      ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                  }`}
+                  title="Marker / Chisel Highlighter (Click to adjust size)"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <path d="M8 3L14 3L16 8L8 8Z" fill="#eab308" />
+                    <rect x="8" y="8" width="8" height="12" rx="1" fill="#3f3f46" stroke="#52525b" />
+                  </svg>
+                  <ChevronDown className={`w-2.5 h-2.5 transition-transform ${activeSizePopup === 'marker' ? 'rotate-180' : 'opacity-70'}`} />
+                </button>
+
+                {activeSizePopup === 'marker' && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-full left-0 mb-3 p-3 rounded-2xl bg-[#14151a] border border-white/20 shadow-2xl flex flex-col gap-2.5 z-50 text-xs w-48 animate-fade-in"
+                  >
+                    <div className="flex items-center justify-between text-zinc-300 font-bold">
+                      <span>Marker Size</span>
+                      <span className="font-mono text-[11px] text-amber-400">{markerSize}px</span>
+                    </div>
+
+                    <div className="w-full h-8 rounded-xl bg-black/50 border border-white/5 flex items-center justify-center overflow-hidden">
+                      <div
+                        style={{
+                          height: `${Math.min(24, Math.max(6, markerSize))}px`,
+                          width: '80%',
+                          backgroundColor: currentColor,
+                          opacity: 0.5,
+                          borderRadius: '2px',
+                        }}
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={8}
+                      max={64}
+                      step={2}
+                      value={markerSize}
+                      onChange={(e) => setMarkerSize(Number(e.target.value))}
+                      className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                    />
+
+                    <div className="grid grid-cols-4 gap-1">
+                      {[
+                        { label: 'Thin', size: 12 },
+                        { label: 'Med', size: 24 },
+                        { label: 'Wide', size: 36 },
+                        { label: 'Chisel', size: 50 },
+                      ].map((p) => (
+                        <button
+                          key={p.size}
+                          type="button"
+                          onClick={() => setMarkerSize(p.size)}
+                          className={`py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                            markerSize === p.size ? 'bg-amber-400 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Eraser Button with Size Adjuster */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPenType('eraser')
+                    setActiveSizePopup(activeSizePopup === 'eraser' ? null : 'eraser')
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    penType === 'eraser'
+                      ? 'bg-zinc-700/80 text-white border border-white/20 shadow-xs'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                  }`}
+                  title="Eraser (Click to adjust size)"
+                >
+                  <Eraser className="w-4 h-4" />
+                  <ChevronDown className={`w-2.5 h-2.5 transition-transform ${activeSizePopup === 'eraser' ? 'rotate-180' : 'opacity-70'}`} />
+                </button>
+
+                {activeSizePopup === 'eraser' && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-full left-0 mb-3 p-3 rounded-2xl bg-[#14151a] border border-white/20 shadow-2xl flex flex-col gap-2.5 z-50 text-xs w-48 animate-fade-in"
+                  >
+                    <div className="flex items-center justify-between text-zinc-300 font-bold">
+                      <span>Eraser Size</span>
+                      <span className="font-mono text-[11px] text-rose-400">{eraserSize}px</span>
+                    </div>
+
+                    <div className="w-full h-12 rounded-xl bg-black/50 border border-white/5 flex items-center justify-center overflow-hidden">
+                      <div
+                        style={{
+                          width: `${Math.min(38, Math.max(10, eraserSize))}px`,
+                          height: `${Math.min(38, Math.max(10, eraserSize))}px`,
+                        }}
+                        className="rounded-full border-2 border-dashed border-rose-400/80 bg-rose-500/20"
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={8}
+                      max={80}
+                      step={2}
+                      value={eraserSize}
+                      onChange={(e) => setEraserSize(Number(e.target.value))}
+                      className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-rose-400"
+                    />
+
+                    <div className="grid grid-cols-4 gap-1">
+                      {[
+                        { label: 'Fine', size: 12 },
+                        { label: 'Normal', size: 24 },
+                        { label: 'Large', size: 45 },
+                        { label: 'Jumbo', size: 70 },
+                      ].map((p) => (
+                        <button
+                          key={p.size}
+                          type="button"
+                          onClick={() => setEraserSize(p.size)}
+                          className={`py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                            eraserSize === p.size ? 'bg-rose-500 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"
@@ -2468,6 +3519,21 @@ export function KryaWhiteboardModal({
               <MousePointer2 className="w-4 h-4" />
             </button>
 
+            {/* Select All Elements Button */}
+            <button
+              type="button"
+              onClick={selectAllElements}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all cursor-pointer ${
+                isAllSelected
+                  ? 'bg-sky-500/30 text-sky-300 shadow-xs border border-sky-400/50'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+              }`}
+              title="Select All (Ctrl+A)"
+            >
+              <span className="text-[10px] font-semibold text-zinc-400">All</span>
+              <CheckSquare className="w-4 h-4" />
+            </button>
+
             {/* 2. H: Hand Tool */}
             <button
               type="button"
@@ -2604,31 +3670,15 @@ export function KryaWhiteboardModal({
               </div>
             </button>
 
-            {/* 10. Image Upload Tool */}
+            {/* 10. Image Studio Tool (Upload any format, Crop & Adjust) */}
             <button
               type="button"
               onClick={() => {
-                const url = prompt(
-                  'Enter image URL or choose default mock image:',
-                  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500'
-                )
-                if (url) {
-                  setElements((prev) => [
-                    ...prev,
-                    {
-                      id: `img-${Date.now()}`,
-                      type: 'rect',
-                      x: 320,
-                      y: 220,
-                      width: 220,
-                      height: 140,
-                      content: url,
-                    },
-                  ])
-                }
+                setEditingImageElementId(null)
+                setIsImageStudioOpen(true)
               }}
-              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors cursor-pointer"
-              title="Insert Image"
+              className="p-2 rounded-xl text-zinc-400 hover:text-sky-300 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+              title="Image Studio (Upload, Crop & Adjust)"
             >
               <div className="w-5 h-4 rounded bg-gradient-to-b from-sky-400 to-sky-600 p-0.5 flex flex-col justify-between relative overflow-hidden border border-zinc-600">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-300 self-end" />
@@ -2636,26 +3686,12 @@ export function KryaWhiteboardModal({
               </div>
             </button>
 
-            {/* 11. Diagram / Flowchart Tool */}
+            {/* 11. Diagram / Flowchart Tool (Figma Standards) */}
             <button
               type="button"
-              onClick={() => {
-                setElements((prev) => [
-                  ...prev,
-                  {
-                    id: `flow-${Date.now()}`,
-                    type: 'rect',
-                    x: 300,
-                    y: 200,
-                    width: 260,
-                    height: 140,
-                    content: 'Flowchart: [API Gateway] ➔ [Auth Service] ➔ [Database]',
-                    color: '#8b5cf6',
-                  },
-                ])
-              }}
+              onClick={() => setIsFlowchartsModalOpen(true)}
               className="p-2 rounded-xl text-zinc-400 hover:text-purple-400 hover:bg-zinc-800/60 transition-colors cursor-pointer"
-              title="Flowchart & Diagrams"
+              title="Flowchart & Diagrams (Figma Standards)"
             >
               <div className="w-5 h-4 rounded bg-zinc-800 border border-zinc-600 p-0.5 flex items-center justify-between">
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
@@ -2682,7 +3718,7 @@ export function KryaWhiteboardModal({
             <button
               type="button"
               onClick={handleUndo}
-              disabled={strokes.length === 0}
+              disabled={strokes.length === 0 && history.length === 0}
               className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
               title="Undo (Ctrl+Z)"
             >
@@ -2693,11 +3729,24 @@ export function KryaWhiteboardModal({
             <button
               type="button"
               onClick={handleRedo}
-              disabled={redoStrokes.length === 0}
+              disabled={redoStrokes.length === 0 && redoHistory.length === 0}
               className="p-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
               title="Redo (Ctrl+Y)"
             >
               <Redo2 className="w-4 h-4" />
+            </button>
+
+            <div className="w-[1px] h-6 bg-white/10 mx-1" />
+
+            {/* Clear All */}
+            <button
+              type="button"
+              onClick={handleClearCanvas}
+              disabled={elements.length === 0 && strokes.length === 0}
+              className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+              title="Clear Canvas (Undo available)"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -2708,18 +3757,30 @@ export function KryaWhiteboardModal({
             type="button"
             onClick={() => setZoom((z) => Math.max(25, z - 10))}
             className="p-1 rounded-lg hover:bg-zinc-700/60 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
-            title="Zoom Out"
+            title="Zoom Out (-10%)"
           >
             <Minus className="w-3.5 h-3.5" />
           </button>
 
-          <span className="w-12 text-center font-bold text-xs">{zoom}%</span>
+          <button
+            type="button"
+            onClick={() => {
+              setZoom(100)
+              setPanOffset({ x: 0, y: 0 })
+              setSaveToast('Zoom reset to 100%')
+              setTimeout(() => setSaveToast(null), 1000)
+            }}
+            className="w-12 text-center font-bold text-xs hover:text-sky-400 transition-colors cursor-pointer"
+            title="Click to reset zoom & pan to 100%"
+          >
+            {zoom}%
+          </button>
 
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(200, z + 10))}
             className="p-1 rounded-lg hover:bg-zinc-700/60 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
-            title="Zoom In"
+            title="Zoom In (+10%)"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
@@ -2993,6 +4054,27 @@ export function KryaWhiteboardModal({
             </div>
           </div>
         )}
+
+        {/* Image Studio Modal for uploading, cropping and adjusting images */}
+        <ImageStudioModal
+          isOpen={isImageStudioOpen}
+          onClose={() => {
+            setIsImageStudioOpen(false)
+            setEditingImageElementId(null)
+          }}
+          onApplyImage={handleApplyImageFromStudio}
+          initialUrl={
+            elements.find((el) => el.id === editingImageElementId)?.imageUrl
+          }
+        />
+
+        {/* Figma Flowcharts & Diagrams Modal */}
+        <FlowchartTemplatesModal
+          isOpen={isFlowchartsModalOpen}
+          onClose={() => setIsFlowchartsModalOpen(false)}
+          onInsertDiagram={handleInsertFlowchartDiagram}
+          onInsertShape={handleInsertFlowchartShape}
+        />
       </div>
     </div>,
     document.body

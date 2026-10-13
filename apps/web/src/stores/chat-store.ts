@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
+import { useAuthStore } from './auth-store'
 
 export interface ChatChannel {
   id: string
@@ -48,6 +49,7 @@ interface ChatState {
   activeChannel: ChatChannel | null
   activeDMUser: DMContact | null
   messages: ChatMessage[]
+  recentlyDeletedIds: Set<string>
   isLoadingChannels: boolean
   isLoadingMessages: boolean
   isSendingMessage: boolean
@@ -91,6 +93,11 @@ interface ChatState {
     messageId: string,
     mode: 'everyone' | 'me'
   ) => Promise<boolean>
+  deleteMessagesBulk: (
+    workspaceId: string,
+    messageIds: string[],
+    mode: 'everyone' | 'me'
+  ) => Promise<boolean>
   receiveNewMessage: (msg: ChatMessage) => void
   receiveEditMessage: (msg: ChatMessage) => void
   receiveDeleteMessage: (messageId: string) => void
@@ -106,6 +113,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeChannel: null,
   activeDMUser: null,
   messages: [],
+  recentlyDeletedIds: new Set<string>(),
   isLoadingChannels: false,
   isLoadingMessages: false,
   isSendingMessage: false,
@@ -168,7 +176,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const res = await apiClient.get<ChatMessage[]>(
         `/api/v1/workspaces/${workspaceId}/messages?${queryParam}`
       )
-      const messages = res.data || []
+      const rawMessages = res.data || []
+      const deletedIds = get().recentlyDeletedIds
+      // Exclude any messages that were recently deleted
+      const messages = rawMessages.filter((m) => !deletedIds.has(m.id))
       set({ messages, isLoadingMessages: false })
       return messages
     } catch (err) {
@@ -178,20 +189,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (workspaceId, data) => {
-    set({ isSendingMessage: true })
+    const authUser = useAuthStore.getState().user
+    const currentUserId = authUser?.id || (authUser as any)?.sub || 'current-user'
+    const currentUserName = authUser
+      ? `${authUser.firstName || ''} ${authUser.lastName || ''}`.trim() || authUser.email?.split('@')[0] || 'You'
+      : 'You'
+    const currentUserAvatar = authUser?.avatarUrl
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      workspaceId,
+      channelId: data.channelId,
+      recipientId: data.recipientId,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      senderAvatar: currentUserAvatar,
+      content: data.content,
+      attachments: data.attachments || [],
+      createdAt: new Date().toISOString(),
+      isPinned: false,
+      isEdited: false,
+    }
+    set((state) => ({
+      messages: [...state.messages, optimisticMsg],
+      isSendingMessage: true,
+    }))
     try {
       const res = await apiClient.post<ChatMessage>(
         `/api/v1/workspaces/${workspaceId}/messages`,
         data
       )
       const newMsg = res.data
-      set((state) => ({
-        messages: [...state.messages, newMsg],
-        isSendingMessage: false,
-      }))
+      set((state) => {
+        // If the server-sent event (SSE) already added/reconciled this message, drop tempId to avoid duplicate
+        const alreadyHasNewMsg = state.messages.some((m) => m.id === newMsg.id)
+        if (alreadyHasNewMsg) {
+          return {
+            messages: state.messages.filter((m) => m.id !== tempId),
+            isSendingMessage: false,
+          }
+        }
+        return {
+          messages: state.messages.map((m) =>
+            m.id === tempId
+              ? {
+                  ...newMsg,
+                  senderId: currentUserId,
+                  senderName: currentUserName,
+                  senderAvatar: currentUserAvatar,
+                }
+              : m
+          ),
+          isSendingMessage: false,
+        }
+      })
       return newMsg
     } catch (err: any) {
-      set({ isSendingMessage: false })
+      set((state) => ({
+        messages: state.messages.filter((m) => m.id !== tempId),
+        isSendingMessage: false,
+      }))
       throw err
     }
   },
@@ -242,13 +300,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   deleteMessage: async (workspaceId, messageId, mode) => {
+    // 1. Instantly tombstone the message ID so polling & sync can NEVER resurrect it
+    const updatedDeletedIds = new Set(get().recentlyDeletedIds)
+    updatedDeletedIds.add(messageId)
+
+    // 2. Instant optimistic removal from UI with zero delay
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== messageId),
+      recentlyDeletedIds: updatedDeletedIds,
+    }))
+
+    // 3. Auto-expire tombstone after 30 seconds
+    setTimeout(() => {
+      const current = get().recentlyDeletedIds
+      if (current.has(messageId)) {
+        const next = new Set(current)
+        next.delete(messageId)
+        set({ recentlyDeletedIds: next })
+      }
+    }, 30000)
+
+    if (messageId.startsWith('temp-')) {
+      return true
+    }
     try {
       await apiClient.delete(
         `/api/v1/workspaces/${workspaceId}/messages/${messageId}?mode=${mode}`
       )
-      set((state) => ({
-        messages: state.messages.filter((m) => m.id !== messageId),
-      }))
       return true
     } catch (err) {
       console.error('Failed to delete message:', err)
@@ -256,12 +334,102 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  deleteMessagesBulk: async (workspaceId, messageIds, mode) => {
+    if (!messageIds || messageIds.length === 0) return true
+    const idSet = new Set(messageIds)
+    const updatedDeletedIds = new Set(get().recentlyDeletedIds)
+    messageIds.forEach((id) => updatedDeletedIds.add(id))
+
+    // Instant optimistic removal from UI
+    set((state) => ({
+      messages: state.messages.filter((m) => !idSet.has(m.id)),
+      recentlyDeletedIds: updatedDeletedIds,
+    }))
+
+    // Auto-expire tombstones after 30 seconds
+    setTimeout(() => {
+      const current = get().recentlyDeletedIds
+      let changed = false
+      const next = new Set(current)
+      messageIds.forEach((id) => {
+        if (next.has(id)) {
+          next.delete(id)
+          changed = true
+        }
+      })
+      if (changed) {
+        set({ recentlyDeletedIds: next })
+      }
+    }, 30000)
+
+    try {
+      await apiClient.delete(
+        `/api/v1/workspaces/${workspaceId}/messages`,
+        {
+          messageIds,
+          mode,
+        }
+      )
+      return true
+    } catch (err) {
+      console.error('Failed to bulk delete messages:', err)
+      return false
+    }
+  },
+
   receiveNewMessage: (msg: ChatMessage) => {
     set((state) => {
-      // Check if message already exists
+      // 1. Ignore if message was recently deleted
+      if (state.recentlyDeletedIds.has(msg.id)) {
+        return state
+      }
+
+      // 2. Ignore if message with this exact id already exists
       if (state.messages.some((m) => m.id === msg.id)) {
         return state
       }
+
+      // 3. Reconcile with optimistic temp-* message to eliminate duplicates completely!
+      const authUser = useAuthStore.getState().user
+      const currentUserId = authUser?.id || (authUser as any)?.sub
+      const isFromMe = Boolean(
+        currentUserId &&
+          (msg.senderId === currentUserId ||
+            msg.senderId === 'current-user' ||
+            msg.senderId === 'me' ||
+            (authUser?.email && msg.senderName?.toLowerCase() === authUser.email.toLowerCase()))
+      )
+
+      const tempIdx = state.messages.findIndex((m) => {
+        if (!m.id.startsWith('temp-')) return false
+        const matchesTarget =
+          (msg.channelId && m.channelId === msg.channelId) ||
+          (msg.recipientId && m.recipientId === msg.recipientId) ||
+          (!msg.channelId && !msg.recipientId)
+        if (!matchesTarget) return false
+
+        if (isFromMe || m.senderId === msg.senderId) return true
+
+        const hasMatchingVoiceNote =
+          Array.isArray(m.attachments) &&
+          Array.isArray(msg.attachments) &&
+          m.attachments.some((a1: any) =>
+            msg.attachments?.some((a2: any) => a1.type === 'audio_memo' && a2.type === 'audio_memo')
+          )
+        return hasMatchingVoiceNote || m.content === msg.content
+      })
+
+      if (tempIdx !== -1) {
+        const nextMessages = [...state.messages]
+        nextMessages[tempIdx] = {
+          ...msg,
+          senderId: isFromMe && currentUserId ? currentUserId : msg.senderId,
+          senderName: nextMessages[tempIdx].senderName || msg.senderName,
+          senderAvatar: nextMessages[tempIdx].senderAvatar || msg.senderAvatar,
+        }
+        return { messages: nextMessages }
+      }
+
       return {
         messages: [...state.messages, msg],
       }
@@ -277,9 +445,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   receiveDeleteMessage: (messageId: string) => {
+    const updatedDeletedIds = new Set(get().recentlyDeletedIds)
+    updatedDeletedIds.add(messageId)
     set((state) => ({
       messages: state.messages.filter((m) => m.id !== messageId),
+      recentlyDeletedIds: updatedDeletedIds,
     }))
+    setTimeout(() => {
+      const current = get().recentlyDeletedIds
+      if (current.has(messageId)) {
+        const next = new Set(current)
+        next.delete(messageId)
+        set({ recentlyDeletedIds: next })
+      }
+    }, 30000)
   },
 
   receivePinMessage: (msg: ChatMessage) => {
@@ -299,14 +478,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const res = await apiClient.get<ChatMessage[]>(
         `/api/v1/workspaces/${workspaceId}/messages?${queryParam}`
       )
-      const freshMessages = res.data || []
+      const rawMessages = res.data || []
+      const deletedIds = get().recentlyDeletedIds
+
+      // 1. Filter out tombstoned messages so deleted items NEVER flash or reappear
+      let freshMessages = rawMessages.filter((m) => !deletedIds.has(m.id))
+
+      // 2. Preserve any in-flight optimistic temp-* messages that have not finished server-roundtrip yet
+      const currentTempMessages = get().messages.filter((m) => m.id.startsWith('temp-'))
+      if (currentTempMessages.length > 0) {
+        const nonReconciledTemps = currentTempMessages.filter((tm) => {
+          return !freshMessages.some(
+            (fm) =>
+              fm.senderId === tm.senderId &&
+              (fm.content === tm.content ||
+                (Array.isArray(fm.attachments) &&
+                  Array.isArray(tm.attachments) &&
+                  fm.attachments.some((a1: any) =>
+                    tm.attachments?.some((a2: any) => a1.type === a2.type)
+                  )))
+          )
+        })
+        if (nonReconciledTemps.length > 0) {
+          freshMessages = [...freshMessages, ...nonReconciledTemps]
+        }
+      }
+
       set((state) => {
         // Fast shallow equality check by IDs, count, and updated timestamps
         if (
           state.messages.length === freshMessages.length &&
           state.messages.every((m, i) => {
             const f = freshMessages[i]
-            return f && m.id === f.id && m.content === f.content && m.isPinned === f.isPinned && m.isEdited === f.isEdited
+            return (
+              f &&
+              m.id === f.id &&
+              m.content === f.content &&
+              m.isPinned === f.isPinned &&
+              m.isEdited === f.isEdited
+            )
           })
         ) {
           return state

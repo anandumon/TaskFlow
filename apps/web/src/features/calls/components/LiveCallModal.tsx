@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useCallStore } from '@/stores/call-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { CallSkeleton } from '@/components/loading'
 import {
   useCallWebRTC,
   useStreamRef,
@@ -455,25 +456,20 @@ export function LiveCallModal() {
 
       {/* ── MAIN CONTENT AREA ── */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
-        {activeCall.status === 'RINGING' ? (
-          <div className="flex-1 bg-black flex flex-col items-center justify-center space-y-6 p-4">
-            <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-500/30 to-teal-500/30 border-2 border-emerald-400/40 flex items-center justify-center text-white text-5xl font-extrabold shadow-2xl">
-                {(remoteParticipant?.name || 'U').charAt(0).toUpperCase()}
-              </div>
-              <span className="absolute -inset-3 rounded-full border-2 border-emerald-400/50 animate-ping pointer-events-none" />
-              <span className="absolute -inset-6 rounded-full border border-emerald-400/20 animate-pulse pointer-events-none" />
-            </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-extrabold text-white">
-                Calling {remoteParticipant?.name || 'User'}...
-              </h3>
-              <p className="text-xs text-emerald-400 flex items-center justify-center gap-2 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Ringing &bull; Waiting for recipient to answer
-              </p>
-            </div>
-          </div>
+        {activeCall.status === 'RINGING' || (connectionState !== 'connected' && !isScreenSharing) ? (
+          <CallSkeleton
+            isGroup={isGroupCall}
+            isVoiceOnly={isVoiceOnly}
+            participantName={remoteParticipant?.name || activeCall.createdByName || 'Participant'}
+            channelName={activeCall.roomName || 'Channel'}
+            statusText={
+              activeCall.status === 'RINGING'
+                ? 'Ringing participant, waiting for answer...'
+                : connectionState === 'connecting'
+                ? 'Securing end-to-end encrypted connection & media stream...'
+                : 'Initializing live media stream...'
+            }
+          />
         ) : isScreenSharing ? (
           /* ── GOOGLE MEET STYLE PRESENTATION LAYOUT ── */
           <div className="flex-1 h-full min-h-0 flex flex-col lg:flex-row overflow-hidden relative bg-[#090a10]">

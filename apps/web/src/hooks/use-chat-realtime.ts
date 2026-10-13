@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useChatStore } from '@/stores/chat-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { useNotificationStore } from '@/stores/notification-store'
 
 export function useChatRealtime() {
   const { user } = useAuthStore()
@@ -92,6 +93,34 @@ export function useChatRealtime() {
                 if (msg.channelId && (!currentChannel || msg.channelId !== currentChannel.id)) {
                   fetchChannels(wsId)
                 }
+
+                // Add unread notification if message is from someone else and not actively in this view
+                const myId = userRef.current?.id
+                if (myId && msg.senderId && msg.senderId !== myId) {
+                  const isActivelyViewing =
+                    (msg.channelId && currentChannel?.id === msg.channelId) ||
+                    (currentDM && (msg.senderId === currentDM.id || msg.recipientId === currentDM.id))
+
+                  if (!isActivelyViewing) {
+                    const hasVoiceNote =
+                      Array.isArray(msg.attachments) &&
+                      msg.attachments.some((a: any) => a.type === 'audio_memo')
+
+                    useNotificationStore.getState().addMessageNotification({
+                      id: msg.id,
+                      senderId: msg.senderId,
+                      senderName: msg.senderName || 'Team Member',
+                      senderAvatar: msg.senderAvatar,
+                      workspaceId: msg.workspaceId || wsId,
+                      channelId: msg.channelId,
+                      recipientId: msg.recipientId,
+                      content: hasVoiceNote ? '🎙️ Voice Note' : (msg.content || 'New attachment'),
+                      hasVoiceNote,
+                      createdAt: msg.createdAt || new Date().toISOString(),
+                      read: false,
+                    })
+                  }
+                }
                 break
               }
 
@@ -103,14 +132,20 @@ export function useChatRealtime() {
 
               case 'delete_message': {
                 const msgData = payload.data
-                if (msgData?.id) {
+                const targetIds: string[] = Array.isArray(msgData?.ids)
+                  ? msgData.ids
+                  : msgData?.id
+                  ? [msgData.id]
+                  : []
+
+                if (targetIds.length > 0) {
                   if (msgData.mode === 'me') {
                     const currentId = userRef.current?.id
                     if (currentId && msgData.userId === currentId) {
-                      receiveDeleteMessage(msgData.id)
+                      targetIds.forEach((id) => receiveDeleteMessage(id))
                     }
                   } else {
-                    receiveDeleteMessage(msgData.id)
+                    targetIds.forEach((id) => receiveDeleteMessage(id))
                   }
                 }
                 break
@@ -126,7 +161,9 @@ export function useChatRealtime() {
               case 'call_incoming':
               case 'call_accepted':
               case 'call_declined':
-              case 'call_ended': {
+              case 'call_ended':
+              case 'call_participant_left':
+              case 'call_signal': {
                 if (typeof window !== 'undefined') {
                   const { useCallStore, handledCallIds } = require('@/stores/call-store')
                   const callStore = useCallStore.getState()

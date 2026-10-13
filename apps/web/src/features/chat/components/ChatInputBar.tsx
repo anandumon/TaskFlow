@@ -30,6 +30,9 @@ import {
   FilePlus,
   LayoutTemplate,
   Edit2,
+  Play,
+  Pause,
+  Trash2,
 } from 'lucide-react'
 import { DMContact } from '@/stores/chat-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -87,6 +90,7 @@ export function ChatInputBar({
   const [isRecordingVideo, setIsRecordingVideo] = useState(false)
   const [videoTimer, setVideoTimer] = useState(0)
   const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+  const [isAudioPaused, setIsAudioPaused] = useState(false)
   const [audioTimer, setAudioTimer] = useState(0)
 
   // Attachments staging
@@ -108,6 +112,13 @@ export function ChatInputBar({
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioTimerRef = useRef(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmittingRef = useRef(false)
+  const isSendingAudioRef = useRef(false)
 
   // Auto close popovers when clicking outside
   useEffect(() => {
@@ -125,6 +136,30 @@ export function ChatInputBar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Clear all staged inputs and attachments whenever active chat changes
+  const activeChatKey = `${targetType}-${activeChannel?.id || activeDMUser?.id || targetName}`
+  useEffect(() => {
+    setInputText('')
+    setStagedAttachments([])
+    setIsWhiteboardMode(false)
+    setWhiteboardName('')
+    setIsDocMode(false)
+    setDocName('')
+    setIsDocConfigured(false)
+    setDocMessageText('')
+    setIsMenuOpen(false)
+    setIsAiOpen(false)
+    setIsEmojiPickerOpen(false)
+    setIsSlashOpen(false)
+    setIsResourceMentionOpen(false)
+    setIsTypeDropdownOpen(false)
+    setIsRecordingVideo(false)
+    setVideoTimer(0)
+    setIsRecordingAudio(false)
+    setIsAudioPaused(false)
+    setAudioTimer(0)
+  }, [activeChatKey])
+
   // Timers for recording simulations
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -138,24 +173,36 @@ export function ChatInputBar({
 
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (isRecordingAudio) {
-      interval = setInterval(() => setAudioTimer((t) => t + 1), 1000)
-    } else {
-      setAudioTimer(0)
+    if (isRecordingAudio && !isAudioPaused) {
+      interval = setInterval(() => {
+        setAudioTimer((t) => {
+          const next = t + 1
+          audioTimerRef.current = next
+          return next
+        })
+      }, 1000)
     }
     return () => clearInterval(interval)
-  }, [isRecordingAudio])
+  }, [isRecordingAudio, isAudioPaused])
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+    if (isRecordingAudio) {
+      handleSendVoiceNoteDirectly()
+      return
+    }
+    if (isSending || isSubmitting || isSubmittingRef.current) return
     if (!inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode) return
+
+    isSubmittingRef.current = true
+    setIsSubmitting(true)
 
     let finalAttachments = [...stagedAttachments]
     let content = inputText.trim()
 
     if (isWhiteboardMode) {
       const boardTitle = whiteboardName.trim() || 'Whiteboard'
-      const boardId = `board-${Math.random().toString(36).substring(2, 8)}`
+      const boardId = `board-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
       finalAttachments.push({
         id: crypto.randomUUID(),
         type: 'whiteboard',
@@ -166,7 +213,7 @@ export function ChatInputBar({
         createdAt: new Date().toISOString(),
       })
       if (!content) {
-        content = `/Create Whiteboard ${boardTitle}`
+        content = boardTitle
       }
       setIsWhiteboardMode(false)
       setWhiteboardName('')
@@ -200,7 +247,7 @@ export function ChatInputBar({
       if (docMessageText.trim()) {
         content = docMessageText.trim()
       } else if (!content) {
-        content = `/Create Doc ${finalDocTitle}`
+        content = finalDocTitle
       }
       setIsDocMode(false)
       setDocName('')
@@ -212,6 +259,11 @@ export function ChatInputBar({
       onSendMessage(content, finalAttachments.length > 0 ? finalAttachments : undefined)
     } catch (err) {
       console.error('[ChatInputBar] failed to send message:', err)
+    } finally {
+      setTimeout(() => {
+        isSubmittingRef.current = false
+        setIsSubmitting(false)
+      }, 500)
     }
     setInputText('')
     setStagedAttachments([])
@@ -362,19 +414,178 @@ export function ChatInputBar({
     setVideoTimer(0)
   }
 
-  const handleFinishAudioMemo = () => {
+  const startAudioRecording = async () => {
+    isSendingAudioRef.current = false
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        audioStreamRef.current = stream
+        audioChunksRef.current = []
+        audioTimerRef.current = 0
+        setAudioTimer(0)
+        setIsAudioPaused(false)
+
+        let mimeType = 'audio/webm'
+        if (typeof MediaRecorder !== 'undefined') {
+          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            mimeType = 'audio/webm;codecs=opus'
+          } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+            mimeType = 'audio/ogg;codecs=opus'
+          } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4'
+          }
+        }
+
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data)
+          }
+        }
+        mediaRecorderRef.current = recorder
+        recorder.start(100)
+        setIsRecordingAudio(true)
+      } else {
+        audioTimerRef.current = 0
+        setAudioTimer(0)
+        setIsAudioPaused(false)
+        setIsRecordingAudio(true)
+      }
+    } catch (err) {
+      console.warn('[ChatInputBar] Microphone access error:', err)
+      audioTimerRef.current = 0
+      setAudioTimer(0)
+      setIsAudioPaused(false)
+      setIsRecordingAudio(true)
+    }
+  }
+
+  const togglePauseResumeAudio = () => {
+    if (!isRecordingAudio) return
+    if (isAudioPaused) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+        try {
+          mediaRecorderRef.current.resume()
+        } catch {}
+      }
+      setIsAudioPaused(false)
+    } else {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        try {
+          mediaRecorderRef.current.pause()
+        } catch {}
+      }
+      setIsAudioPaused(true)
+    }
+  }
+
+  const cancelAudioRecording = () => {
+    isSendingAudioRef.current = false
     setIsRecordingAudio(false)
-    setStagedAttachments((prev) => [
-      ...prev,
-      {
+    setIsAudioPaused(false)
+    setAudioTimer(0)
+    audioTimerRef.current = 0
+    audioChunksRef.current = []
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop()
+      } catch {}
+    }
+    if (audioStreamRef.current) {
+      try {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop())
+      } catch {}
+      audioStreamRef.current = null
+    }
+  }
+
+  const handleSendVoiceNoteDirectly = () => {
+    if (!isRecordingAudio || isSendingAudioRef.current) return
+    isSendingAudioRef.current = true
+    const dur = Math.max(1, audioTimerRef.current || audioTimer || 1)
+    setIsRecordingAudio(false)
+    setIsAudioPaused(false)
+    setAudioTimer(0)
+    audioTimerRef.current = 0
+
+    let hasDispatched = false
+    const dispatchAttachment = (url: string, dataUrl: string) => {
+      if (hasDispatched) return
+      hasDispatched = true
+      const voiceAtt = {
         id: crypto.randomUUID(),
         type: 'audio_memo',
-        title: `Voice Note (${audioTimer}s)`,
-        duration: `${audioTimer}s`,
-      },
-    ])
-    setAudioTimer(0)
+        title: `Voice Note (${dur}s)`,
+        duration: `${dur}s`,
+        url: url || dataUrl,
+        dataUrl: dataUrl || url,
+      }
+      try {
+        onSendMessage('', [voiceAtt])
+      } catch (err) {
+        console.error('[ChatInputBar] Failed to send voice note:', err)
+      } finally {
+        setTimeout(() => {
+          isSendingAudioRef.current = false
+        }, 500)
+      }
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      const recorder = mediaRecorderRef.current
+      recorder.onstop = () => {
+        if (audioStreamRef.current) {
+          try {
+            audioStreamRef.current.getTracks().forEach((track) => track.stop())
+          } catch {}
+          audioStreamRef.current = null
+        }
+        const mime = recorder.mimeType || 'audio/webm'
+        const audioBlob = new Blob(audioChunksRef.current, { type: mime })
+        let blobUrl = ''
+        try {
+          blobUrl = URL.createObjectURL(audioBlob)
+        } catch {}
+
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const base64 = (reader.result as string) || blobUrl
+          dispatchAttachment(blobUrl || base64, base64)
+        }
+        reader.onerror = () => {
+          dispatchAttachment(blobUrl, blobUrl)
+        }
+        reader.readAsDataURL(audioBlob)
+      }
+      try {
+        recorder.stop()
+      } catch {
+        dispatchAttachment('', '')
+      }
+    } else {
+      if (audioStreamRef.current) {
+        try {
+          audioStreamRef.current.getTracks().forEach((track) => track.stop())
+        } catch {}
+        audioStreamRef.current = null
+      }
+      dispatchAttachment('', '')
+    }
   }
+
+  // Window keydown listener to send voice note on Enter during recording
+  useEffect(() => {
+    if (!isRecordingAudio) return
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        handleSendVoiceNoteDirectly()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKey, true)
+    return () => window.removeEventListener('keydown', handleGlobalKey, true)
+  }, [isRecordingAudio, audioTimer, isAudioPaused])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -383,16 +594,20 @@ export function ChatInputBar({
     Array.from(files).forEach((file) => {
       const isImg = file.type.startsWith('image/')
       const isVid = file.type.startsWith('video/')
+      const isAud = file.type.startsWith('audio/')
+      const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')
       const url = URL.createObjectURL(file)
 
       setStagedAttachments((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
-          type: isImg ? 'image' : isVid ? 'video' : 'document',
+          type: isGif ? 'gif' : isImg ? 'image' : isVid ? 'video' : isAud ? 'audio' : 'document',
           name: file.name,
+          title: file.name,
           size: `${(file.size / 1024).toFixed(1)} KB`,
           url: url,
+          dataUrl: url,
         },
       ])
     })
@@ -477,18 +692,65 @@ export function ChatInputBar({
       )}
 
       {isRecordingAudio && (
-        <div className="mx-2 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-400 font-bold animate-pulse">
-          <div className="flex items-center gap-2">
-            <Mic className="w-4 h-4 text-amber-500 animate-bounce" />
-            <span>Recording Audio Note... {audioTimer}s</span>
+        <div className="mx-2 p-2.5 sm:p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-400 font-bold animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-3 w-3">
+              {!isAudioPaused && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+              )}
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${isAudioPaused ? 'bg-amber-400' : 'bg-rose-500'}`} />
+            </span>
+            <Mic className={`w-4 h-4 ${isAudioPaused ? 'text-amber-400' : 'text-rose-500 animate-pulse'}`} />
+            <span className="font-semibold text-foreground">
+              {isAudioPaused ? 'Voice Note Paused' : 'Recording Voice Note...'}
+            </span>
+            <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300">
+              {audioTimer}s
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={handleFinishAudioMemo}
-            className="px-3 py-1 rounded-xl bg-amber-600 text-white hover:bg-amber-500 cursor-pointer shadow-sm text-xs font-bold"
-          >
-            Attach Voice Note
-          </button>
+
+          <div className="flex items-center gap-2">
+            {/* Pause / Resume Button */}
+            <button
+              type="button"
+              onClick={togglePauseResumeAudio}
+              className="px-2.5 py-1.5 rounded-xl bg-card border border-border/80 hover:bg-accent text-foreground text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title={isAudioPaused ? 'Resume recording' : 'Pause recording'}
+            >
+              {isAudioPaused ? (
+                <>
+                  <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
+                  <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <Pause className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <span>Pause</span>
+                </>
+              )}
+            </button>
+
+            {/* Discard / Delete Recording Button */}
+            <button
+              type="button"
+              onClick={cancelAudioRecording}
+              className="p-1.5 rounded-xl hover:bg-rose-500/20 text-muted-foreground hover:text-rose-400 transition-colors cursor-pointer"
+              title="Discard recording"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Send Voice Note Button */}
+            <button
+              type="button"
+              onClick={() => handleSendVoiceNoteDirectly()}
+              className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Send voice note immediately (Enter)"
+            >
+              <Send className="w-3.5 h-3.5 fill-current" />
+              <span>Send Voice Note</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -713,7 +975,7 @@ export function ChatInputBar({
             <input
               ref={inputRef}
               type="text"
-              placeholder={`Write to ${targetName}, press 'space' for AI, '/' for commands`}
+              placeholder={`Write to ${targetName}, '/' for commands, '@' to mention`}
               value={inputText}
               onChange={(e) => {
                 const val = e.target.value
@@ -767,10 +1029,7 @@ export function ChatInputBar({
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === ' ' && inputText === '') {
-                  e.preventDefault()
-                  setIsAiOpen(true)
-                } else if (e.key === 'Enter' && !e.shiftKey && !isSlashOpen && !isResourceMentionOpen) {
+                if (e.key === 'Enter' && !e.shiftKey && !isSlashOpen && !isResourceMentionOpen) {
                   e.preventDefault()
                   handleSend()
                 } else if (e.key === 'Escape') {
@@ -836,48 +1095,7 @@ export function ChatInputBar({
                     <span>Image or Video File</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={addGif}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <Film className="w-4 h-4 text-pink-500" />
-                    <span>Insert Animated GIF</span>
-                  </button>
-
                   <div className="my-1 border-t border-border/50" />
-
-                  <button
-                    type="button"
-                    onClick={() => addDoc()}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <FileText className="w-4 h-4 text-sky-400" />
-                    <span>Create / Attach Document</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={addZoomMeeting}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <Video className="w-4 h-4 text-blue-500" />
-                    <span>Start Zoom Meeting</span>
-                  </button>
-
-                  <div className="my-1 border-t border-border/50" />
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRecordingVideo(true)
-                      setIsMenuOpen(false)
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all cursor-pointer text-left"
-                  >
-                    <Camera className="w-4 h-4 text-purple-500" />
-                    <span>Record Video Clip</span>
-                  </button>
 
                   <button
                     type="button"
@@ -933,57 +1151,6 @@ export function ChatInputBar({
                       {t.label}
                     </button>
                   ))}
-                </div>
-              )}
-            </div>
-
-            {/* Sparkles / AI Assistant */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAiOpen(!isAiOpen)
-                  setIsMenuOpen(false)
-                  setIsEmojiPickerOpen(false)
-                  setIsSlashOpen(false)
-                  setIsResourceMentionOpen(false)
-                }}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                title="AI Copilot: Ask AI or generate draft"
-              >
-                <Sparkles className="w-4 h-4 text-amber-500" />
-              </button>
-
-              {isAiOpen && (
-                <div className="absolute bottom-full left-0 mb-2 w-72 bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl p-2.5 z-50 space-y-2 animate-scale-in text-xs">
-                  <div className="flex items-center gap-2 text-foreground font-bold text-xs">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    <span>TaskFlow AI Copilot (Brain²)</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Choose a quick AI generation prompt:
-                  </p>
-                  <div className="space-y-1">
-                    {[
-                      'Summarize today’s sprint blockers',
-                      'Draft a friendly greeting to the team',
-                      'Create a status report checklist',
-                      'Draft a project standup update',
-                    ].map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => {
-                          setInputText(prompt)
-                          setIsAiOpen(false)
-                          inputRef.current?.focus()
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-primary/10 text-xs text-foreground transition-colors cursor-pointer"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
             </div>
@@ -1136,9 +1303,9 @@ export function ChatInputBar({
               type="button"
               onClick={() => {
                 if (isRecordingAudio) {
-                  handleFinishAudioMemo()
+                  handleSendVoiceNoteDirectly()
                 } else {
-                  setIsRecordingAudio(true)
+                  startAudioRecording()
                 }
               }}
               className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
@@ -1146,7 +1313,7 @@ export function ChatInputBar({
                   ? 'bg-rose-500 text-white animate-pulse'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
-              title={isRecordingAudio ? 'Stop recording voice note' : 'Record voice note'}
+              title={isRecordingAudio ? 'Send voice note (Enter)' : 'Record voice note'}
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -1155,17 +1322,37 @@ export function ChatInputBar({
             <div className="flex items-center shadow-xs">
               <button
                 type="button"
-                onClick={() => handleSend()}
-                disabled={isSending || (!inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)}
+                onClick={() => {
+                  if (isRecordingAudio) {
+                    handleSendVoiceNoteDirectly()
+                  } else {
+                    handleSend()
+                  }
+                }}
+                disabled={
+                  isSending ||
+                  isSubmitting ||
+                  (!isRecordingAudio && !inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)
+                }
                 className="px-3 py-1.5 rounded-l-xl bg-white text-zinc-950 text-xs font-semibold hover:bg-zinc-100 transition-all disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center cursor-pointer active:scale-95"
-                title="Send message (Enter)"
+                title={isRecordingAudio ? 'Send voice note (Enter)' : 'Send message (Enter)'}
               >
                 <Send className="w-3.5 h-3.5 fill-zinc-950" />
               </button>
               <button
                 type="button"
-                onClick={() => handleSend()}
-                disabled={isSending || (!inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)}
+                onClick={() => {
+                  if (isRecordingAudio) {
+                    handleSendVoiceNoteDirectly()
+                  } else {
+                    handleSend()
+                  }
+                }}
+                disabled={
+                  isSending ||
+                  isSubmitting ||
+                  (!isRecordingAudio && !inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)
+                }
                 className="px-1.5 py-1.5 rounded-r-xl bg-white hover:bg-zinc-100 text-zinc-800 border-l border-zinc-200/80 text-xs font-bold transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                 title="Message sending options"
               >

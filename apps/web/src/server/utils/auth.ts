@@ -123,10 +123,17 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
         nativePayload.name
       )
       if (canonicalId) {
+        const uRow = await queryOne(
+          `SELECT avatar_url, first_name, last_name FROM users WHERE id = $1 LIMIT 1`,
+          [canonicalId]
+        )
         return {
           id: canonicalId,
           email: nativePayload.email,
           fullName: nativePayload.name,
+          firstName: uRow?.first_name,
+          lastName: uRow?.last_name,
+          avatarUrl: uRow?.avatar_url || undefined,
         }
       }
     }
@@ -144,10 +151,17 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
           const canonicalId = await ensureDbUser(user.id, email, fullName)
 
           if (canonicalId) {
+            const uRow = await queryOne(
+              `SELECT avatar_url, first_name, last_name FROM users WHERE id = $1 LIMIT 1`,
+              [canonicalId]
+            )
             return {
               id: canonicalId,
               email,
               fullName,
+              firstName: uRow?.first_name,
+              lastName: uRow?.last_name,
+              avatarUrl: uRow?.avatar_url || user.user_metadata?.avatar_url || undefined,
             }
           }
         }

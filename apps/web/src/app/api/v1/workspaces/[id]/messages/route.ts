@@ -5,6 +5,8 @@ import {
   getChannelMessages,
   getDirectMessages,
   sendMessage,
+  deleteMessagesBulkForEveryone,
+  deleteMessagesBulkForMe,
 } from '@/server/services/chat.service'
 import { broadcastChatEvent } from '@/server/events/chat-events'
 
@@ -80,5 +82,59 @@ export async function POST(
     return apiSuccess(message, 201)
   } catch (err: any) {
     return apiError(err.message || 'Failed to send message', 500)
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authUser = await getAuthUser(req)
+    if (!authUser?.id) {
+      return apiError('Unauthorized', 401)
+    }
+
+    const body = await req.json()
+    const { messageIds, mode = 'everyone' } = body
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return apiError('messageIds array is required', 400)
+    }
+
+    if (mode === 'me') {
+      const success = await deleteMessagesBulkForMe(params.id, messageIds, authUser.id)
+      if (!success) {
+        return apiError('Failed to delete messages for current user', 500)
+      }
+
+      broadcastChatEvent({
+        type: 'delete_message',
+        workspaceId: params.id,
+        senderId: authUser.id,
+        data: { ids: messageIds, mode: 'me', userId: authUser.id },
+        timestamp: new Date().toISOString(),
+      })
+
+      return apiSuccess({ deleted: true, count: messageIds.length, mode: 'me' })
+    }
+
+    // Default: 'everyone'
+    const success = await deleteMessagesBulkForEveryone(params.id, messageIds)
+    if (!success) {
+      return apiError('Failed to delete messages for everyone', 500)
+    }
+
+    broadcastChatEvent({
+      type: 'delete_message',
+      workspaceId: params.id,
+      senderId: authUser.id,
+      data: { ids: messageIds, mode: 'everyone' },
+      timestamp: new Date().toISOString(),
+    })
+
+    return apiSuccess({ deleted: true, count: messageIds.length, mode: 'everyone' })
+  } catch (err: any) {
+    return apiError(err.message || 'Failed to bulk delete messages', 500)
   }
 }

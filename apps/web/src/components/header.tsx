@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Bell, Plus, Sparkles, Command, HelpCircle, Calendar, CheckCircle2, Clock, Menu, Mail, Loader2, X, ArrowRight, ShieldCheck, Building2, FolderKanban } from 'lucide-react'
+import { Search, Bell, Plus, Sparkles, Command, HelpCircle, Calendar, CheckCircle2, Clock, Menu, Mail, Loader2, X, ArrowRight, ShieldCheck, Building2, FolderKanban, MessageSquare, CheckCheck } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useTaskStore } from '@/stores/task-store'
+import { useNotificationStore } from '@/stores/notification-store'
 import { UserGuideModal } from '@/components/user-guide-modal'
 import { AcceptInviteModal } from '@/components/accept-invite-modal'
 import { apiClient } from '@/lib/api-client'
@@ -33,6 +34,25 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
   const [headerToast, setHeaderToast] = useState<string | null>(null)
   const [clearedNotifications, setClearedNotifications] = useState(false)
   const [inviteForAcceptModal, setInviteForAcceptModal] = useState<any | null>(null)
+
+  const {
+    messageNotifications,
+    markAsRead: markMessageAsRead,
+    markAllAsRead: markAllMessagesAsRead,
+    clearAll: clearAllMessageNotifs,
+    initNotifications,
+  } = useNotificationStore()
+
+  useEffect(() => {
+    if (user?.id) {
+      initNotifications(user.id)
+    }
+  }, [user?.id, initNotifications])
+
+  const unreadMessages = useMemo(
+    () => (clearedNotifications ? [] : messageNotifications.filter((n) => !n.read)),
+    [messageNotifications, clearedNotifications]
+  )
 
   // Ensure organization and workspace are always loaded for both users
   useEffect(() => {
@@ -390,9 +410,9 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
               title="Notifications"
             >
               <Bell className="w-4 h-4" />
-              {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)) > 0 ? (
+              {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length) + unreadMessages.length) > 0 ? (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center shadow-md animate-pulse">
-                  {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)}
+                  {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length) + unreadMessages.length}
                 </span>
               ) : (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-muted-foreground/30" />
@@ -404,9 +424,9 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                 <div className="flex items-center justify-between pb-2 border-b border-border">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-foreground">Notifications &amp; Alerts</span>
-                    {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)) > 0 && (
+                    {(pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length) + unreadMessages.length) > 0 && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
-                        {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length)} active
+                        {pendingInvitations.length + (clearedNotifications ? 0 : taskDueAlerts.length) + unreadMessages.length} active
                       </span>
                     )}
                   </div>
@@ -415,6 +435,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                       onClick={() => {
                         setClearedNotifications(true)
                         setPendingInvitations([])
+                        clearAllMessageNotifs()
                         setHeaderToast('All notifications cleared')
                         setTimeout(() => setHeaderToast(null), 2500)
                       }}
@@ -433,6 +454,93 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                 </div>
 
                 <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                  {/* New Messages Section */}
+                  {unreadMessages.length > 0 && (
+                    <div className="space-y-2 pb-2 border-b border-border/80">
+                      <div className="text-[11px] font-bold text-foreground flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-sky-500">
+                          <MessageSquare className="w-3.5 h-3.5" /> New Messages ({unreadMessages.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => markAllMessagesAsRead()}
+                          className="text-[10px] text-muted-foreground hover:text-sky-500 transition-colors font-medium cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                        {unreadMessages.map((notif) => (
+                          <div
+                            key={notif.id}
+                            className="p-2.5 rounded-xl bg-card border border-border/70 hover:border-sky-500/40 text-xs space-y-2 transition-all shadow-xs"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {notif.senderAvatar ? (
+                                <img
+                                  src={notif.senderAvatar}
+                                  alt={notif.senderName}
+                                  className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5"
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                                  {notif.senderName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-bold text-foreground truncate text-xs">
+                                    {notif.senderName}
+                                  </span>
+                                  <span className="text-[9px] text-muted-foreground shrink-0 font-mono">
+                                    {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-sky-500 font-semibold truncate">
+                                  {notif.channelId ? `#${notif.channelName || 'channel'}` : 'Direct Message'}
+                                </div>
+                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                  {notif.content}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  markMessageAsRead(notif.id)
+                                  setNotificationsOpen(false)
+                                  if (notif.channelId) {
+                                    router.push(`/app/messages?channelId=${encodeURIComponent(notif.channelId)}`)
+                                  } else if (notif.senderId) {
+                                    router.push(`/app/messages?dmUserId=${encodeURIComponent(notif.senderId)}`)
+                                  } else {
+                                    router.push('/app/messages')
+                                  }
+                                }}
+                                className="flex-1 py-1 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                              >
+                                <ArrowRight className="w-3 h-3" />
+                                <span>Read now</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => markMessageAsRead(notif.id)}
+                                className="py-1 px-2 rounded-lg border border-border hover:bg-muted text-[11px] font-semibold text-muted-foreground transition-all cursor-pointer flex items-center gap-1"
+                                title="Mark as read"
+                              >
+                                <CheckCheck className="w-3 h-3 text-emerald-500" />
+                                <span>Mark as read</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Pending Team Invitations Section */}
                   {pendingInvitations.length > 0 && (
                     <div className="space-y-2 pb-2 border-b border-border/80">

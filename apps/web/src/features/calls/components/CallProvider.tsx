@@ -100,9 +100,9 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
           }
         }
 
-        // 2. If caller is in RINGING state, check if recipient accepted, declined, or call ended
+        // 2. Synchronize active and ringing calls (handles 1:1 end-for-both and group host termination)
         const curActive = activeCallRef.current
-        if (curActive && curActive.status === 'RINGING') {
+        if (curActive) {
           const res = await fetch(
             `/api/v1/workspaces/${curActive.workspaceId}/calls/${curActive.id}`,
             {
@@ -113,16 +113,33 @@ export function CallProvider({ children }: { children?: React.ReactNode }) {
             const json = await res.json()
             const freshSession = json?.data
             if (freshSession) {
-              if (freshSession.status === 'ACTIVE') {
-                setActiveCall(freshSession)
-              } else if (freshSession.status === 'DECLINED') {
-                setErrorMessage('Call was declined')
-                endActiveCall()
-              } else if (
+              if (
                 freshSession.status === 'ENDED' ||
-                freshSession.status === 'CANCELLED'
+                freshSession.status === 'CANCELLED' ||
+                freshSession.status === 'DECLINED'
               ) {
-                endActiveCall()
+                // Call was ended by other party, host, or cancelled
+                if (freshSession.status === 'DECLINED' && curActive.status === 'RINGING') {
+                  setErrorMessage('Call was declined')
+                }
+                endActiveCall(false)
+              } else if (curActive.status === 'RINGING' && freshSession.status === 'ACTIVE') {
+                setActiveCall(freshSession)
+              } else if (freshSession.status === 'ACTIVE') {
+                const isGroup =
+                  freshSession.callType === 'GROUP_VOICE' ||
+                  freshSession.callType === 'GROUP_VIDEO' ||
+                  freshSession.callType === 'CHANNEL_CALL'
+                if (isGroup && freshSession.participants) {
+                  const amIActive = freshSession.participants.some(
+                    (p: any) => p.userId === userId && p.status !== 'LEFT' && p.status !== 'DECLINED'
+                  )
+                  if (!amIActive) {
+                    endActiveCall(false)
+                  } else if (freshSession.participants.length !== curActive.participants?.length) {
+                    setActiveCall(freshSession)
+                  }
+                }
               }
             }
           }
