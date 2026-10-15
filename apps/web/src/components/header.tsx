@@ -312,37 +312,37 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
         </div>
       )}
 
-      <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-40 shadow-xs">
+      <header className="h-14 border-b border-border/80 bg-card/95 backdrop-blur-xl px-3 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-40 shadow-xs">
         {/* Left: Mobile hamburger & Breadcrumbs */}
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs min-w-0">
           {onToggleMobileSidebar && (
             <button
               onClick={onToggleMobileSidebar}
-              className="lg:hidden p-1.5 rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+              className="lg:hidden p-2 rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
               title="Toggle navigation"
             >
               <Menu className="w-4 h-4" />
             </button>
           )}
 
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            {/* Organization */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/80 text-foreground font-semibold shadow-xs hover:border-primary/40 transition-colors">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs min-w-0">
+            {/* Organization (Hidden on narrow phone viewports to prevent overflow, shown on sm+) */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/80 text-foreground font-semibold shadow-xs hover:border-primary/40 transition-colors shrink-0">
               <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span className="truncate max-w-[120px] sm:max-w-[160px]">
+              <span className="truncate max-w-[100px] sm:max-w-[140px] md:max-w-[160px]">
                 {currentOrg?.name || 'My Organization'}
               </span>
             </div>
 
-            <span className="text-muted-foreground/50 font-bold">/</span>
+            <span className="text-muted-foreground/50 font-bold hidden sm:inline">/</span>
 
             {/* Workspace */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-card border border-border/80 text-foreground font-semibold shadow-xs hover:border-primary/40 transition-colors">
+            <div className="flex items-center gap-1.5 px-2 py-1 sm:px-2.5 rounded-xl bg-card border border-border/80 text-foreground font-semibold shadow-xs hover:border-primary/40 transition-colors shrink min-w-0">
               <div
                 className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
                 style={{ backgroundColor: currentWorkspace?.color || '#00638E' }}
               />
-              <span className="truncate max-w-[120px] sm:max-w-[160px]">
+              <span className="truncate max-w-[85px] xs:max-w-[120px] sm:max-w-[150px]">
                 {currentWorkspace?.name || 'Primary Workspace'}
               </span>
             </div>
@@ -350,10 +350,10 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
             {/* Project / Section Context */}
             {activeProjectOrSection && (
               <>
-                <span className="text-muted-foreground/50 font-bold hidden sm:inline">/</span>
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/15 border border-primary/35 text-primary font-bold shadow-xs">
+                <span className="text-muted-foreground/50 font-bold hidden md:inline">/</span>
+                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/15 border border-primary/35 text-primary font-bold shadow-xs shrink-0">
                   <FolderKanban className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate max-w-[140px] sm:max-w-[180px]">
+                  <span className="truncate max-w-[120px] lg:max-w-[180px]">
                     {activeProjectOrSection}
                   </span>
                 </div>
@@ -363,27 +363,28 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
         </div>
 
         {/* Center: Search & Command Palette trigger */}
-        <div className="flex-1 max-w-xl mx-4 sm:mx-8">
+        <div className="flex-1 sm:max-w-xl mx-1.5 sm:mx-6 min-w-0 flex justify-end sm:justify-start">
           <button
             onClick={onOpenCommand}
-            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-muted/60 hover:bg-muted/90 border border-border/70 text-xs text-muted-foreground hover:text-foreground transition-all shadow-xs group cursor-pointer"
+            className="w-9 h-9 sm:w-full flex items-center justify-center sm:justify-between p-2 sm:px-3.5 sm:py-2 rounded-xl bg-muted/60 hover:bg-muted/90 border border-border/70 text-xs text-muted-foreground hover:text-foreground transition-all shadow-xs group cursor-pointer shrink-0"
+            title="Search tasks, projects, roadmap, team (Ctrl+K / Cmd+K)"
           >
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-primary group-hover:scale-105 transition-transform" />
-              <span>Search tasks, projects, roadmap, team...</span>
+            <div className="flex items-center gap-2 truncate">
+              <Search className="w-3.5 h-3.5 text-primary group-hover:scale-105 transition-transform shrink-0" />
+              <span className="truncate hidden sm:inline">Search tasks, projects, roadmap, team...</span>
             </div>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-mono font-bold rounded-lg bg-background border border-border/80 text-foreground shadow-xs">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-mono font-bold rounded-lg bg-background border border-border/80 text-foreground shadow-xs shrink-0">
               <Command className="w-2.5 h-2.5" /> K
             </kbd>
           </button>
         </div>
 
         {/* Right: Actions, User Guide & Notifications */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* User Guide Button */}
           <button
             onClick={() => setGuideModalOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/80 bg-card hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
             title="Open Platform Guide & Feature Tour"
           >
             <HelpCircle className="w-3.5 h-3.5 text-primary" />
@@ -395,7 +396,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
             <Link
               href="/app/tasks"
               prefetch={true}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 active:scale-95 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Task</span>
@@ -406,7 +407,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
           <div className="relative">
             <button
               onClick={() => setNotificationsOpen(!notificationsOpen)}
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent border border-border/70 bg-card/60 relative transition-all shadow-xs cursor-pointer"
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent border border-border/70 bg-card/60 relative transition-all shadow-xs cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
               title="Notifications"
             >
               <Bell className="w-4 h-4" />
@@ -420,7 +421,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
             </button>
 
             {notificationsOpen && (
-              <div className="absolute right-0 top-full mt-2 w-88 max-w-[90vw] sm:w-96 bg-popover border border-border rounded-2xl shadow-2xl z-50 p-4 animate-scale-in space-y-3">
+              <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] sm:w-96 max-w-sm sm:max-w-md bg-popover border border-border rounded-2xl shadow-2xl z-50 p-3.5 sm:p-4 animate-scale-in space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-border">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-foreground">Notifications &amp; Alerts</span>

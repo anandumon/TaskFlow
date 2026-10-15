@@ -843,7 +843,7 @@ export default function TeamsPage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                       {filteredAndSortedMembers.map((member) => (
                         <MemberGridCard
                           key={member.id}
@@ -874,8 +874,9 @@ export default function TeamsPage() {
                     </div>
                   </div>
 
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/40 border-b border-border text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                  <div className="overflow-x-auto w-full custom-scrollbar">
+                    <table className="w-full text-left text-xs min-w-[580px]">
+                      <thead className="bg-muted/40 border-b border-border text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
                       <tr>
                         <th className="p-3 pl-4 sm:pl-6">User</th>
                         <th className="p-3">Project / Team</th>
@@ -994,6 +995,7 @@ export default function TeamsPage() {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -1005,7 +1007,7 @@ export default function TeamsPage() {
       {isModalOpen && (
         <Portal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+            <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in max-h-[min(90dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar">
               <div className="flex items-center justify-between pb-3 border-b border-border">
                 <h3 className="text-base font-bold text-foreground">
                   Invite people for free

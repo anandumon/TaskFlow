@@ -692,40 +692,40 @@ export function ChatInputBar({
       )}
 
       {isRecordingAudio && (
-        <div className="mx-2 p-2.5 sm:p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-400 font-bold animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5">
-            <span className="relative flex h-3 w-3">
+        <div className="mx-2 mb-2 p-2 sm:p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-1.5 sm:gap-2 text-xs text-amber-400 font-bold animate-in fade-in duration-200">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
               {!isAudioPaused && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
               )}
-              <span className={`relative inline-flex rounded-full h-3 w-3 ${isAudioPaused ? 'bg-amber-400' : 'bg-rose-500'}`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isAudioPaused ? 'bg-amber-400' : 'bg-rose-500'}`} />
             </span>
-            <Mic className={`w-4 h-4 ${isAudioPaused ? 'text-amber-400' : 'text-rose-500 animate-pulse'}`} />
-            <span className="font-semibold text-foreground">
-              {isAudioPaused ? 'Voice Note Paused' : 'Recording Voice Note...'}
+            <Mic className={`w-3.5 h-3.5 shrink-0 ${isAudioPaused ? 'text-amber-400' : 'text-rose-500 animate-pulse'}`} />
+            <span className="font-semibold text-foreground truncate text-[11px] sm:text-xs">
+              {isAudioPaused ? 'Paused' : 'Recording...'}
             </span>
-            <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300">
+            <span className="font-mono text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 shrink-0">
               {audioTimer}s
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Pause / Resume Button */}
             <button
               type="button"
               onClick={togglePauseResumeAudio}
-              className="px-2.5 py-1.5 rounded-xl bg-card border border-border/80 hover:bg-accent text-foreground text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-card border border-border/80 hover:bg-accent text-foreground text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
               title={isAudioPaused ? 'Resume recording' : 'Pause recording'}
             >
               {isAudioPaused ? (
                 <>
                   <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-                  <span>Resume</span>
+                  <span className="hidden sm:inline">Resume</span>
                 </>
               ) : (
                 <>
                   <Pause className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  <span>Pause</span>
+                  <span className="hidden sm:inline">Pause</span>
                 </>
               )}
             </button>
@@ -744,11 +744,11 @@ export function ChatInputBar({
             <button
               type="button"
               onClick={() => handleSendVoiceNoteDirectly()}
-              className="px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
               title="Send voice note immediately (Enter)"
             >
               <Send className="w-3.5 h-3.5 fill-current" />
-              <span>Send Voice Note</span>
+              <span className="hidden xs:inline">Send</span>
             </button>
           </div>
         </div>
@@ -1047,7 +1047,7 @@ export function ChatInputBar({
         {/* BOTTOM: RICH ACTION TOOLBAR */}
         <div className="px-2 py-1.5 flex items-center justify-between gap-1 border-t border-border/40 mt-1">
           {/* Action icon buttons row */}
-          <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap">
+          <div className="flex items-center gap-0.5 sm:gap-1 py-0.5 min-w-0 pr-1 overflow-visible">
             {/* + Main Attachment Action Menu */}
             <div className="relative">
               <button
@@ -1122,11 +1122,18 @@ export function ChatInputBar({
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsTypeDropdownOpen(!isTypeDropdownOpen)
+                  setIsMenuOpen(false)
+                  setIsAiOpen(false)
+                  setIsEmojiPickerOpen(false)
+                  setIsSlashOpen(false)
+                  setIsResourceMentionOpen(false)
+                }}
+                className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                 title="Message type"
               >
-                <span className="capitalize">{messageType === 'task_note' ? 'Task Note' : messageType}</span>
+                <span className="capitalize text-xs font-semibold">{messageType === 'task_note' ? 'Task Note' : messageType}</span>
                 <ChevronDown className="w-3 h-3 text-muted-foreground" />
               </button>
 
@@ -1201,7 +1208,7 @@ export function ChatInputBar({
               <Hash className="w-4 h-4 text-blue-400" />
             </button>
 
-            {/* User mention shortcut */}
+            {/* User mention shortcut (hidden on mobile, in @ palette) */}
             <button
               type="button"
               onClick={() => {
@@ -1211,7 +1218,7 @@ export function ChatInputBar({
                 setIsEmojiPickerOpen(false)
                 setIsMenuOpen(false)
               }}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              className="hidden sm:flex w-7 h-7 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Add member / Mention user"
             >
               <UserPlus className="w-4 h-4 text-zinc-400" />
@@ -1236,21 +1243,21 @@ export function ChatInputBar({
               <Smile className="w-4 h-4 text-amber-400" />
             </button>
 
-            {/* Checklist shortcut button */}
+            {/* Checklist shortcut button (available in + menu on mobile) */}
             <button
               type="button"
               onClick={addChecklist}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              className="hidden sm:flex w-7 h-7 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               title="Add checklist"
             >
               <CheckCheck className="w-4 h-4 text-blue-400" />
             </button>
 
-            {/* Document / Page shortcut button (matches Image 1 & 2) */}
+            {/* Document / Page shortcut button (available in + menu on mobile) */}
             <button
               type="button"
               onClick={() => addDoc()}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+              className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-colors cursor-pointer ${
                 isDocMode
                   ? 'bg-sky-500/20 text-sky-400'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -1260,11 +1267,11 @@ export function ChatInputBar({
               <FilePlus className="w-4 h-4 text-sky-400" />
             </button>
 
-            {/* Whiteboard shortcut button (matches Image 2) */}
+            {/* Whiteboard shortcut button (available in + menu on mobile) */}
             <button
               type="button"
               onClick={addWhiteboard}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+              className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-colors cursor-pointer ${
                 isWhiteboardMode
                   ? 'bg-purple-500/20 text-purple-400'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'

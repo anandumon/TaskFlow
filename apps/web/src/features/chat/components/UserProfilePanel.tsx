@@ -147,8 +147,15 @@ export function UserProfilePanel({
   const managerObj = workspaceMembers.find((m) => m.id === selectedManager || m.email === selectedManager)
 
   return (
-    <aside className="w-full md:w-[380px] lg:w-[410px] shrink-0 border-l border-border bg-sidebar/95 backdrop-blur-xl flex flex-col h-full z-20 shadow-2xl transition-all duration-300">
-      {/* ── TOP HEADER / USER AVATAR & BASIC DETAILS ── */}
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className="fixed inset-0 bg-background/80 backdrop-blur-xs z-40 md:hidden animate-fade-in"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[min(100vw,420px)] md:relative md:inset-auto md:w-[380px] lg:w-[410px] shrink-0 border-l border-border bg-sidebar/98 md:bg-sidebar/95 backdrop-blur-xl flex flex-col h-full shadow-2xl transition-all duration-300">
+        {/* ── TOP HEADER / USER AVATAR & BASIC DETAILS ── */}
       <div className="p-4 sm:p-5 border-b border-border/70 space-y-3.5 shrink-0 bg-card/40">
         <div className="flex items-start justify-between gap-3">
           {/* Large Square Avatar */}
@@ -728,5 +735,6 @@ export function UserProfilePanel({
         )}
       </div>
     </aside>
+    </>
   )
 }

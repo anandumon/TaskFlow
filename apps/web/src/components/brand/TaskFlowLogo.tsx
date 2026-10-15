@@ -48,9 +48,22 @@ export function TaskFlowLogo({
     xl: { iconSize: 64, textClass: 'text-3xl tracking-tight' },
   }[size]
 
+  // Determine exact stroke colors based on colorScheme
+  const strokeColor =
+    colorScheme === 'dark'
+      ? '#ffffff'
+      : colorScheme === 'light'
+      ? '#0a192f'
+      : undefined
+
+  const strokeClass =
+    colorScheme === 'adaptive'
+      ? 'stroke-slate-900 dark:stroke-slate-100 transition-colors duration-300'
+      : 'transition-colors duration-300'
+
   return (
     <div
-      className={`inline-flex items-center gap-3 select-none group transition-all duration-300 ${className}`}
+      className={`inline-flex items-center gap-2.5 sm:gap-3 select-none group transition-all duration-300 ${className}`}
       style={{ cursor: 'pointer' }}
     >
       {/* ── Monogram Icon (Intertwined Script "TF") ────────── */}
@@ -125,11 +138,11 @@ export function TaskFlowLogo({
             <path
               d="M 45 68 C 65 52, 95 44, 130 46 C 152 47, 168 55, 164 64 C 160 72, 142 74, 126 73 C 98 71, 74 88, 66 112 C 58 136, 70 158, 92 161 C 114 163, 136 148, 144 130"
               stroke="url(#tfGoldGrad)"
-              strokeWidth="5"
+              strokeWidth="5.5"
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
-              className={animated ? 'opacity-90 transition-opacity' : ''}
+              className={animated ? 'opacity-95 transition-opacity' : ''}
               filter={animated ? 'url(#tfGlow)' : undefined}
             />
 
@@ -146,38 +159,41 @@ export function TaskFlowLogo({
               />
             )}
 
-            {/* 2. Main Calligraphic "T" and "F" Intertwined Stroke (Deep Navy / Midnight) */}
+            {/* 2. Main Calligraphic "T" and "F" Intertwined Stroke */}
             {/* Elegant upper terminal loop */}
             <path
               d="M 48 72 C 34 68, 32 52, 44 42 C 58 30, 84 38, 110 40 C 138 42, 164 45, 172 58 C 178 68, 168 76, 148 74 C 118 71, 98 88, 86 114 C 74 140, 82 166, 104 166 C 122 166, 140 152, 148 134"
-              stroke={colorScheme === 'light' ? '#0a192f' : colorScheme === 'dark' ? '#f8fafc' : 'currentColor'}
+              stroke={strokeColor || 'currentColor'}
               strokeWidth="10"
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
-              className="dark:stroke-slate-100 stroke-slate-900 transition-colors duration-300"
+              className={strokeClass}
+              style={strokeColor ? { stroke: strokeColor } : undefined}
             />
 
             {/* The sweeping descending downstroke with tapered flourish */}
             <path
               d="M 124 50 C 116 76, 88 134, 76 156 C 70 168, 62 172, 54 168 C 44 162, 46 146, 56 136 C 68 124, 86 122, 102 124"
-              stroke={colorScheme === 'light' ? '#0a192f' : colorScheme === 'dark' ? '#f8fafc' : 'currentColor'}
+              stroke={strokeColor || 'currentColor'}
               strokeWidth="9"
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
-              className="dark:stroke-slate-100 stroke-slate-900 transition-colors duration-300"
+              className={strokeClass}
+              style={strokeColor ? { stroke: strokeColor } : undefined}
             />
 
             {/* Crossbar of the "F" with graceful calligraphic serif loop */}
             <path
               d="M 88 114 C 104 112, 126 110, 142 108 C 148 107, 150 114, 144 118 C 136 122, 120 125, 108 125"
-              stroke={colorScheme === 'light' ? '#0a192f' : colorScheme === 'dark' ? '#f8fafc' : 'currentColor'}
+              stroke={strokeColor || 'currentColor'}
               strokeWidth="6"
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
-              className="dark:stroke-slate-100 stroke-slate-900 transition-colors duration-300"
+              className={strokeClass}
+              style={strokeColor ? { stroke: strokeColor } : undefined}
             />
 
             {/* Golden decorative accent dot on the crossbar loop */}

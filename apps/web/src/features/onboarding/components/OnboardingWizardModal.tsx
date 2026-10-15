@@ -226,7 +226,7 @@ export function OnboardingWizardModal({ onComplete }: OnboardingWizardModalProps
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-fade-in">
       {/* Modal Card */}
-      <div className="relative w-full max-w-lg rounded-3xl bg-[#0f1015]/95 border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-col justify-between overflow-hidden">
+      <div className="relative w-full max-w-lg max-h-[min(92dvh,calc(100dvh-1.5rem))] overflow-y-auto custom-scrollbar rounded-3xl bg-[#0f1015]/95 border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-col justify-between">
         
         {/* Subtle Ambient Radial Glow */}
         <div className="absolute -top-12 left-1/3 w-80 h-40 bg-primary/20 rounded-full blur-3xl pointer-events-none" />

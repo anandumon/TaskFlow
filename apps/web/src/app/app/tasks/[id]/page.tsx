@@ -371,7 +371,7 @@ export default function TaskDetailsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-12">
+    <div className="space-y-6 max-w-6xl w-full max-w-full mx-auto animate-fade-in pb-12 overflow-x-hidden">
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4" />
@@ -380,40 +380,40 @@ export default function TaskDetailsPage() {
       )}
 
       {/* 1st: Top Breadcrumb & Task Title Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/70">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/70 max-w-full">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <Link
             href={project ? `/app/projects/${project.id}` : '/app/tasks'}
-            className="p-2.5 rounded-xl border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+            className="p-2.5 rounded-xl border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold shrink-0"
             title={project ? `Back to ${project.name}` : 'Back to Tasks Board'}
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">{project ? `Back to ${project.name}` : 'Back'}</span>
           </Link>
-          <div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Link href="/app/projects" className="hover:underline">Projects</Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+              <Link href="/app/projects" className="hover:underline shrink-0">Projects</Link>
               <span>/</span>
               {project ? (
                 <Link
                   href={`/app/projects/${project.id}`}
-                  className="text-primary font-bold hover:underline flex items-center gap-1.5"
+                  className="text-primary font-bold hover:underline flex items-center gap-1.5 truncate"
                 >
                   {project.icon && (project.icon.startsWith('data:image') || project.icon.startsWith('http') || project.icon.startsWith('/')) ? (
-                    <img src={project.icon} alt={project.name} className="w-3.5 h-3.5 rounded object-cover" />
+                    <img src={project.icon} alt={project.name} className="w-3.5 h-3.5 rounded object-cover shrink-0" />
                   ) : (
-                    <FolderKanban className="w-3.5 h-3.5" />
+                    <FolderKanban className="w-3.5 h-3.5 shrink-0" />
                   )}
-                  {project.name}
+                  <span className="truncate">{project.name}</span>
                 </Link>
               ) : (
                 <span>Standalone</span>
               )}
             </div>
-            <h1 className="text-xl font-bold text-foreground mt-0.5 flex items-center gap-2">
-              <span>{task.title}</span>
+            <h1 className="text-lg sm:text-xl font-bold text-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              <span className="break-words">{task.title}</span>
               {!canEdit && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
                   <Lock className="w-3 h-3" /> View Only
                 </span>
               )}
@@ -422,14 +422,14 @@ export default function TaskDetailsPage() {
         </div>
 
         {/* Status & Environment Selectors */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-muted/80 px-3 py-1.5 rounded-xl border border-border text-xs">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold">Status:</span>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 bg-muted/80 px-2.5 sm:px-3 py-1.5 rounded-xl border border-border text-xs">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold shrink-0">Status:</span>
             <select
               value={task.status}
               disabled={!canEdit}
               onChange={(e) => handleStatusUpdate(e.target.value as TaskStatus)}
-              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed max-w-[120px] truncate"
             >
               {workspaceStatuses.map((st) => (
                 <option key={st.id} value={st.id} className="bg-background text-foreground">
@@ -439,13 +439,13 @@ export default function TaskDetailsPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-muted/80 px-3 py-1.5 rounded-xl border border-border text-xs">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold">Env:</span>
+          <div className="flex items-center gap-1.5 bg-muted/80 px-2.5 sm:px-3 py-1.5 rounded-xl border border-border text-xs">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold shrink-0">Env:</span>
             <select
               value={currentEnv}
               disabled={!canEdit}
               onChange={(e) => handleEnvUpdate(e.target.value)}
-              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed max-w-[120px] truncate"
             >
               {envOptions.map((env) => (
                 <option key={env} value={env} className="bg-background text-foreground">
@@ -465,7 +465,7 @@ export default function TaskDetailsPage() {
                 await deleteTask(task.id)
                 router.push('/app/tasks')
               }}
-              className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
               title="Delete Task (Admin Only)"
             >
               <Trash2 className="w-4 h-4" />

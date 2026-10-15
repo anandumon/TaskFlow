@@ -50,7 +50,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
       <div
-        className="w-full max-w-md rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-7 space-y-5 animate-scale-in transition-all relative overflow-hidden"
+        className="w-full max-w-md max-h-[min(90dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar rounded-3xl bg-card border border-border shadow-2xl p-5 sm:p-7 space-y-5 animate-scale-in transition-all relative"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute -top-12 -right-12 w-36 h-36 bg-primary/10 rounded-full blur-2xl pointer-events-none" />

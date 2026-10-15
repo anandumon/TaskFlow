@@ -24,9 +24,9 @@ export function TaskDiscussionCard({ notes, onAddNote }: TaskDiscussionCardProps
   }
 
   return (
-    <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-sm space-y-4">
+    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-sm space-y-4 max-w-full w-full overflow-hidden">
       <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-        <MessageSquare className="w-4 h-4 text-primary" /> Notes & Team Discussion
+        <MessageSquare className="w-4 h-4 text-primary shrink-0" /> Notes & Team Discussion
       </h3>
 
       <div className="p-4 rounded-2xl bg-muted/40 border border-border/60 text-xs text-foreground whitespace-pre-wrap font-sans leading-relaxed min-h-[80px]">

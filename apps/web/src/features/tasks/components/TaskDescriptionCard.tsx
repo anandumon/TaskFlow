@@ -194,7 +194,7 @@ export function TaskDescriptionCard({
   }
 
   return (
-    <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-sm space-y-6">
+    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-sm space-y-6 max-w-full w-full overflow-hidden">
       {/* 1. Description Header & Content */}
       <div className="space-y-3">
         <div className="flex items-center justify-between pb-2 border-b border-border/60">
@@ -273,12 +273,12 @@ export function TaskDescriptionCard({
 
       {/* 2. Documents & File Attachments Upload / Download */}
       <div className="space-y-3.5 pt-2 border-t border-border/60">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <Paperclip className="w-3.5 h-3.5 text-primary" /> Task Documents & Specifications ({attachments.length})
+              <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" /> Task Documents & Specifications ({attachments.length})
             </h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
               Upload any documents related to this task (PDF, Excel, Word, SQL, TXT, PEM, P12, keys, configs). Team members can download them anytime.
             </p>
           </div>
@@ -288,7 +288,7 @@ export function TaskDescriptionCard({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs shrink-0 self-start sm:self-auto cursor-pointer disabled:opacity-50"
             >
               {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
               <span>{isUploading ? 'Uploading...' : 'Upload File'}</span>

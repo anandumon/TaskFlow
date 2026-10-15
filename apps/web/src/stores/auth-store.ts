@@ -12,6 +12,7 @@ export interface User {
   firstName: string
   lastName: string
   displayName?: string
+  name?: string
   avatarUrl?: string
   emailVerified: boolean
   isNewUser?: boolean

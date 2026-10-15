@@ -36,6 +36,7 @@ import {
   EyeOff,
   FileText,
   Loader2,
+  X,
 } from 'lucide-react'
 import { useUserTheme } from '@/hooks/useUserTheme'
 import { UserGuideModal } from '@/components/user-guide-modal'
@@ -284,9 +285,9 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           setIsLockedExpanded(true)
         }
       }}
-      className={`h-full max-h-screen bg-sidebar border-r border-border flex flex-col shrink-0 select-none overflow-hidden transition-[width,box-shadow] duration-300 ease-in-out ${
+      className={`h-full max-h-screen max-h-[100dvh] bg-sidebar border-r border-border flex flex-col shrink-0 select-none overflow-hidden transition-[width,box-shadow] duration-300 ease-in-out ${
         isExpanded
-          ? 'w-64 shadow-2xl shadow-black/70 z-50'
+          ? 'w-64 max-w-[85vw] shadow-2xl shadow-black/70 z-50'
           : 'w-[68px] z-30'
       } ${!mobileOpen ? 'absolute top-0 left-0' : 'relative'}`}
     >
@@ -304,9 +305,25 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
             <div className="flex items-center gap-2.5 min-w-0">
               <TaskFlowLogo variant="full" size="sm" animated={true} />
             </div>
-            <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
-              {currentOrg?.plan || 'ENTERPRISE'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                {currentOrg?.plan || 'ENTERPRISE'}
+              </span>
+              {mobileOpen && onCloseMobile && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onCloseMobile()
+                  }}
+                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  title="Close navigation"
+                  aria-label="Close navigation"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Org Switcher Card */}
@@ -1040,13 +1057,14 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
       {/* Mobile Drawer Sidebar Overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="relative z-10 shadow-2xl">
+          <div className="relative z-10 shadow-2xl h-full max-h-[100dvh] pb-[env(safe-area-inset-bottom,0px)]">
             {renderContent()}
           </div>
           <div
             className="flex-1 h-full cursor-pointer"
             onClick={onCloseMobile}
             title="Close navigation"
+            aria-label="Close navigation overlay"
           />
         </div>
       )}

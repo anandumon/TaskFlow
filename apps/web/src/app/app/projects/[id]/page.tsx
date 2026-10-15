@@ -1066,52 +1066,59 @@ export default function ProjectDetailsPage() {
         {/* HEADER SECTION: Matching My Tasks & Board Structure (Screenshot 4)        */}
         {/* ========================================================================= */}
         <div
-          className="p-6 rounded-3xl border shadow-sm relative overflow-hidden space-y-4"
+          className="p-3.5 sm:p-4 rounded-2xl border shadow-xs relative overflow-hidden space-y-3"
           style={{
-            backgroundColor: `${projColor}14`,
-            borderColor: `${projColor}55`,
+            backgroundColor: `${projColor}10`,
+            borderColor: `${projColor}40`,
           }}
         >
           <div
-            className="absolute top-0 left-0 right-0 h-1 rounded-t-3xl"
+            className="absolute top-0 left-0 right-0 h-0.5"
             style={{ backgroundColor: projColor }}
           />
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
               <Link
                 href="/app/projects"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors mb-1"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
               >
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Projects &amp; Pipelines
+                <ArrowLeft className="w-3 h-3" /> Back to Projects &amp; Pipelines
               </Link>
-              <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2.5" style={{ color: projColor }}>
-                {isImageLogo ? (
-                  <img
-                    src={project?.icon}
-                    alt={project?.name}
-                    className="w-8 h-8 rounded-xl object-cover border border-border shadow-xs shrink-0"
-                  />
-                ) : (
-                  <div
-                    className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
-                    style={{ backgroundColor: projColor }}
-                  />
-                )}
-                <span>{project?.name || 'Project'} Deliverables</span>
-              </h1>
-              <p className="text-xs text-muted-foreground max-w-2xl">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2" style={{ color: projColor }}>
+                  {isImageLogo ? (
+                    <img
+                      src={project?.icon}
+                      alt={project?.name}
+                      className="w-6 h-6 rounded-lg object-cover border border-border shadow-xs shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                      style={{ backgroundColor: projColor }}
+                    />
+                  )}
+                  <span>{project?.name || 'Project'} Deliverables</span>
+                </h1>
+                <span className="text-xs text-muted-foreground hidden md:inline">
+                  • {project?.description && project.description !== 'Comprehensive project milestones & deliverables'
+                    ? project.description
+                    : 'Sprint tracking, bugs triage, and feature progress.'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground line-clamp-1 md:hidden">
                 {project?.description && project.description !== 'Comprehensive project milestones & deliverables'
                   ? project.description
-                  : 'Comprehensive project deliverables overview, sprint tracking, bugs triage, and feature progress.'}
+                  : 'Comprehensive project deliverables overview and sprint tracking.'}
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 self-start sm:self-auto flex-wrap">
               <button
                 type="button"
                 onClick={openEditProjectModal}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card/80 hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="Edit project details, color, logo & description"
               >
                 <Pencil className="w-3.5 h-3.5 text-primary" />
@@ -1121,7 +1128,7 @@ export default function ProjectDetailsPage() {
               <button
                 type="button"
                 onClick={() => setGuideModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card/80 hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="Open Workspace Guide"
               >
                 <Workflow className="w-3.5 h-3.5 text-primary" />
@@ -1131,7 +1138,7 @@ export default function ProjectDetailsPage() {
               <button
                 type="button"
                 onClick={() => setIsInviteModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card/80 hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="Invite a team member to this project via email"
               >
                 <UserPlus className="w-3.5 h-3.5 text-primary" />
@@ -1141,7 +1148,7 @@ export default function ProjectDetailsPage() {
               <button
                 type="button"
                 onClick={() => setStatusModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-card/80 hover:bg-accent text-xs font-bold text-foreground transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card/80 hover:bg-accent text-xs font-semibold text-foreground transition-all shadow-xs active:scale-95 cursor-pointer"
                 title="Edit Space Statuses (ClickUp style)"
               >
                 <Sliders className="w-3.5 h-3.5 text-primary" />
@@ -1157,38 +1164,60 @@ export default function ProjectDetailsPage() {
                   setAutoDetectedCategory(null)
                   setIsModalOpen(true)
                 }}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs active:scale-95 cursor-pointer"
               >
-                <Plus className="w-4 h-4" /> Add Task
+                <Plus className="w-3.5 h-3.5" /> Add Task
               </button>
             </div>
           </div>
 
-          {/* 4 KPI Metrics Summary Strip (Scoped strictly to this project) */}
-          <div className="pt-3 border-t border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Total Deliverables</span>
-              <div className="text-lg font-extrabold text-foreground mt-0.5">{projectTasks.length}</div>
+          {/* 4 KPI Metrics Summary Strip (Compact horizontal tiles) */}
+          <div className="pt-2.5 border-t border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+            <div className="px-3 py-2 rounded-xl bg-background/60 border border-border/60 hover:border-border transition-colors flex items-center justify-between">
+              <div className="min-w-0">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block truncate">Total Deliverables</span>
+                <div className="text-base sm:text-lg font-bold text-foreground leading-tight mt-0.5">{projectTasks.length}</div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <CheckSquare className="w-3.5 h-3.5" />
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
-              <span className="text-[10px] font-bold text-rose-500 uppercase flex items-center gap-1">
-                <Bug className="w-3 h-3" /> Bugs &amp; Fixes
-              </span>
-              <div className="text-lg font-extrabold text-rose-500 mt-0.5">{bugTasks.length}</div>
+            <div className="px-3 py-2 rounded-xl bg-background/60 border border-border/60 hover:border-border transition-colors flex items-center justify-between">
+              <div className="min-w-0">
+                <span className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider block truncate">Bugs &amp; Fixes</span>
+                <div className="text-base sm:text-lg font-bold text-rose-500 leading-tight mt-0.5">{bugTasks.length}</div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                <Bug className="w-3.5 h-3.5" />
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
-              <span className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Feature Tasks
-              </span>
-              <div className="text-lg font-extrabold text-blue-500 mt-0.5">{featureTasks.length}</div>
+            <div className="px-3 py-2 rounded-xl bg-background/60 border border-border/60 hover:border-border transition-colors flex items-center justify-between">
+              <div className="min-w-0">
+                <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider block truncate">Feature Tasks</span>
+                <div className="text-base sm:text-lg font-bold text-blue-500 leading-tight mt-0.5">{featureTasks.length}</div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-background/80 border border-border/60">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Weighted Progress</span>
-              <div className="text-lg font-extrabold mt-0.5" style={{ color: projColor }}>
-                {weightedProgress}%
+            <div className="px-3 py-2 rounded-xl bg-background/60 border border-border/60 hover:border-border transition-colors flex items-center justify-between">
+              <div className="min-w-0 flex-1 mr-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block truncate">Progress</span>
+                  <span className="text-xs font-bold" style={{ color: projColor }}>{weightedProgress}%</span>
+                </div>
+                <div className="w-full bg-muted/80 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, weightedProgress))}%`,
+                      backgroundColor: projColor,
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1272,7 +1301,7 @@ export default function ProjectDetailsPage() {
             </div>
 
             {/* View Switcher: Minimal Grid, List, Tree / Graph, and Board */}
-            <div className="flex items-center p-1 bg-black/80 backdrop-blur-md rounded-xl border border-border/80 shadow-xs">
+            <div className="flex items-center p-1 bg-black/80 backdrop-blur-md rounded-xl border border-border/80 shadow-xs overflow-x-auto max-w-full no-scrollbar">
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
@@ -2115,7 +2144,7 @@ export default function ProjectDetailsPage() {
         {/* VIEW MODE 4: BOARD (KANBAN COLUMNS)                                       */}
         {/* ========================================================================= */}
         {viewMode === 'board' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory lg:snap-none custom-scrollbar -mx-2 px-2 sm:mx-0 sm:px-0">
             {columns.map((col, colIndex) => {
               const colTasks = displayTasks.filter((t) => isTaskInColumn(t, col, colIndex === 0))
               const isDropTarget = dragOverColId === col.id && draggedTaskId !== null
@@ -2126,7 +2155,7 @@ export default function ProjectDetailsPage() {
                   onDragOver={(e) => handleColumnDragOver(e, col.id)}
                   onDragLeave={(e) => handleColumnDragLeave(e, col.id)}
                   onDrop={(e) => handleColumnDrop(e, col.id)}
-                  className={`bg-card/70 border rounded-3xl p-4 flex flex-col min-h-[400px] shadow-sm space-y-4 transition-all duration-150 ${
+                  className={`min-w-[280px] sm:min-w-[320px] max-w-[360px] flex-1 shrink-0 snap-start bg-card/70 border rounded-3xl p-4 flex flex-col min-h-[400px] shadow-sm space-y-4 transition-all duration-150 ${
                     isDropTarget
                       ? 'ring-2 ring-primary/70 border-primary bg-primary/5 scale-[1.01] shadow-lg'
                       : 'border-border/80'
@@ -2462,7 +2491,7 @@ export default function ProjectDetailsPage() {
         {editingTask && (
           <Portal>
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-              <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in">
+              <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-in max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar">
                 <div className="flex items-center justify-between pb-3 border-b border-border">
                   <h3 className="text-base font-bold text-foreground flex items-center gap-2">
                     <Edit2 className="w-4 h-4 text-primary" /> Edit Deliverable

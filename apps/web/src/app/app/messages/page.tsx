@@ -1066,7 +1066,7 @@ export default function MessagesPage() {
                       setProfileInitialTab('activity')
                       setIsProfilePanelOpen(true)
                     }}
-                    className="flex items-center gap-2.5 truncate cursor-pointer hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-2.5 truncate min-w-0 cursor-pointer hover:opacity-90 transition-opacity"
                     title="Click to view profile"
                   >
                     <div className="relative shrink-0">
@@ -1089,7 +1089,7 @@ export default function MessagesPage() {
                         }`}
                       />
                     </div>
-                    <div className="truncate">
+                    <div className="truncate min-w-0">
                       <div className="font-bold text-sm text-foreground flex items-center gap-1.5">
                         <span className="truncate">{activeDMUser.name || activeDMUser.email}</span>
                         {isYou && (
@@ -1296,7 +1296,7 @@ export default function MessagesPage() {
                 const senderAvatar = isMe
                   ? user?.avatarUrl || resolveAvatar(msg.senderId, msg.senderName, msg.senderAvatar)
                   : resolveAvatar(msg.senderId, msg.senderName, msg.senderAvatar)
-                const initials = isMe && user ? getInitials(user.firstName || user.name, user.email) : getInitials(msg.senderName)
+                const initials = isMe && user ? getInitials(user.displayName || user.firstName || user.name, user.email) : getInitials(msg.senderName)
                 const docAtt = msg.attachments?.find((a: any) => a.type === 'doc')
                 const nonDocAttachments = msg.attachments?.filter((a: any) => a.type !== 'doc') || []
 
@@ -1347,11 +1347,11 @@ export default function MessagesPage() {
                     )}
 
                   {/* Message Content */}
-                  <div className={`space-y-1 max-w-[75%] relative ${isMe ? 'items-end text-right' : ''}`}>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <div className={`space-y-1 max-w-[85%] sm:max-w-[75%] relative flex flex-col ${isMe ? 'items-end text-right' : 'items-start text-left'}`}>
+                    <div className={`flex items-center gap-2 text-[11px] text-muted-foreground ${isMe ? 'justify-end' : 'justify-start'}`}>
                       <span className="font-bold text-foreground">
                         {isMe && user
-                          ? (user.name || user.firstName || user.email?.split('@')[0] || msg.senderName)
+                          ? (user.displayName || user.firstName || user.name || user.email?.split('@')[0] || msg.senderName)
                           : msg.senderName}
                       </span>
                       <span>

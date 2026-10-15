@@ -98,8 +98,15 @@ export function DocViewerModal({
   const [showShareModal, setShowShareModal] = useState(false)
 
   // UI Panels state (matching Screenshot 5)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // Initialize sidebar based on screen width
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsSidebarOpen(window.innerWidth >= 768)
+    }
+  }, [])
   const [settingsTab, setSettingsTab] = useState<'entire' | 'page'>('entire')
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -466,7 +473,7 @@ export function DocViewerModal({
   if (!isMounted || typeof document === 'undefined') return null
 
   const modalContent = (
-    <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[99999] flex flex-col bg-background text-foreground animate-fade-in select-none">
+    <div className="fixed inset-0 top-0 left-0 w-full h-full max-w-full z-[99999] flex flex-col bg-background text-foreground animate-fade-in select-none overflow-hidden">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[250] px-4 py-2 rounded-2xl bg-card text-foreground text-xs font-semibold shadow-2xl border border-border flex items-center gap-2 animate-slide-down">
@@ -475,31 +482,31 @@ export function DocViewerModal({
         </div>
       )}
 
-      {/* TOP HEADER BAR (Matching Screenshot 5) */}
-      <div className="h-14 border-b border-border px-4 sm:px-6 flex items-center justify-between shrink-0 bg-card select-none shadow-xs">
+      {/* TOP HEADER BAR */}
+      <div className="h-14 border-b border-border px-3 sm:px-6 flex items-center justify-between shrink-0 bg-card select-none shadow-xs gap-2">
         {/* Left: Sidebar toggle, Breadcrumbs */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"
             title={isSidebarOpen ? 'Hide doc pages' : 'Show doc pages'}
           >
             {isSidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </button>
 
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <span className="hover:text-foreground transition-colors cursor-pointer" onClick={handleAttemptClose}>
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-medium text-muted-foreground min-w-0">
+            <span className="hover:text-foreground transition-colors cursor-pointer shrink-0" onClick={handleAttemptClose}>
               Docs
             </span>
-            <span>/</span>
-            <div className="flex items-center gap-1.5 text-white font-semibold truncate">
-              <span className="text-sky-400">📄</span>
-              <span className="truncate max-w-[200px]">{currentDoc?.title || title || 'demo'}</span>
+            <span className="shrink-0">/</span>
+            <div className="flex items-center gap-1.5 text-foreground font-semibold truncate min-w-0">
+              <span className="text-sky-500 shrink-0">📄</span>
+              <span className="truncate max-w-[110px] sm:max-w-[200px]">{currentDoc?.title || title || 'demo'}</span>
               {activeSubpageId && (
                 <>
-                  <span className="text-zinc-600">/</span>
-                  <span className="text-purple-300 truncate max-w-[150px]">{title}</span>
+                  <span className="text-muted-foreground shrink-0">/</span>
+                  <span className="text-primary truncate max-w-[80px] sm:max-w-[150px]">{title}</span>
                 </>
               )}
               <button
@@ -509,8 +516,8 @@ export function DocViewerModal({
                     updateDoc(currentDoc.id, { starred: !currentDoc.starred })
                   }
                 }}
-                className={`p-0.5 rounded hover:bg-white/10 transition-colors ${
-                  currentDoc?.starred ? 'text-amber-400' : 'text-zinc-500 hover:text-amber-400'
+                className={`p-0.5 rounded hover:bg-muted transition-colors shrink-0 ${
+                  currentDoc?.starred ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'
                 }`}
                 title="Star doc"
               >
@@ -522,7 +529,7 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={handleCreateSubpage}
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 text-xs font-medium transition-colors cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add page</span>
@@ -530,14 +537,14 @@ export function DocViewerModal({
         </div>
 
         {/* Center: Search & Imagine */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden lg:flex items-center gap-2 shrink-0">
           <div
             onClick={() => setShowSlashMenu(true)}
-            className="flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-400 hover:border-white/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1 rounded-xl bg-muted/60 border border-border text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer"
           >
-            <Search className="w-3.5 h-3.5 text-zinc-500" />
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
             <span>Search</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono text-zinc-400">Ctrl K</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-muted-foreground">Ctrl K</kbd>
           </div>
           <button
             type="button"
@@ -546,22 +553,22 @@ export function DocViewerModal({
               setContent((prev) => (prev ? prev + aiSnippet : aiSnippet.trimStart()))
               showToast('Generated AI insights')
             }}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 text-xs font-medium transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/20 text-xs font-medium transition-all cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+            <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-pulse" />
             <span>Imagine</span>
           </button>
         </div>
 
         {/* Right: Actions, Settings drawer toggle, Close */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {autoSaveStatus === 'saving' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-medium animate-pulse">
+            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-medium animate-pulse">
               <Loader2 className="w-2.5 h-2.5 animate-spin" /> Saving...
             </span>
           )}
           {autoSaveStatus === 'saved' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-medium">
               <Check className="w-2.5 h-2.5" /> Saved
             </span>
           )}
@@ -571,7 +578,7 @@ export function DocViewerModal({
             type="button"
             disabled={isSavingDoc}
             onClick={() => handleSaveToDocs()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap shrink-0"
             title="Save changes to TaskFlow Docs"
           >
             {isSavingDoc ? (
@@ -579,14 +586,15 @@ export function DocViewerModal({
             ) : (
               <Check className="w-3.5 h-3.5" />
             )}
-            <span>{isSavingDoc ? 'Saving...' : 'Save to Docs'}</span>
+            <span>Save</span>
+            <span className="hidden sm:inline">to Docs</span>
           </button>
 
           {/* Share Button */}
           <button
             type="button"
             onClick={handleShareDoc}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer shrink-0"
             title="Save changes and share document"
           >
             <Share2 className="w-3.5 h-3.5" />
@@ -597,7 +605,7 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={() => handleDownloadDoc('md')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-medium transition-colors cursor-pointer shrink-0"
             title="Download document (.md)"
           >
             <Download className="w-3.5 h-3.5" />
@@ -608,8 +616,8 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-              isSettingsOpen ? 'bg-primary/20 text-primary' : 'text-zinc-400 hover:text-white hover:bg-white/10'
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
+              isSettingsOpen ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             }`}
             title="Doc settings"
           >
@@ -620,7 +628,7 @@ export function DocViewerModal({
           <button
             type="button"
             onClick={handleAttemptClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1 cursor-pointer"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0 ml-0.5"
             title="Close document"
           >
             <X className="w-4 h-4" />
@@ -630,17 +638,33 @@ export function DocViewerModal({
 
       {/* BODY AREA (With Left Subpage Sidebar & Right Settings Drawer) */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* SUBPAGE LEFT SIDEBAR (Screenshot 5 Bottom-Left) */}
+        {/* Mobile Backdrop for Subpage Sidebar */}
         {isSidebarOpen && (
-          <aside className="w-56 border-r border-white/10 bg-[#0f1016] flex flex-col shrink-0 select-none animate-slide-right">
-            <div className="p-3 border-b border-white/5 flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-300 truncate max-w-[140px]">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden animate-fade-in"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+
+        {/* SUBPAGE LEFT SIDEBAR */}
+        {isSidebarOpen && (
+          <aside className="fixed md:static inset-y-0 left-0 z-50 md:z-auto w-64 md:w-60 border-r border-border bg-card flex flex-col shrink-0 select-none shadow-2xl md:shadow-none animate-slide-right">
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground truncate max-w-[150px]">
                 {currentDoc?.title || 'demo'}
               </span>
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(false)}
+                className="md:hidden p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                title="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              <div className="px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pages</div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pages</div>
 
               {/* Main doc root item */}
               <button
@@ -651,14 +675,17 @@ export function DocViewerModal({
                     setTitle(currentDoc.title)
                     setContent(currentDoc.content)
                   }
+                  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                    setIsSidebarOpen(false)
+                  }
                 }}
                 className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all text-left ${
                   activeSubpageId === null
-                    ? 'bg-primary/15 text-white font-semibold border border-primary/20'
-                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-primary/15 text-primary font-bold border border-primary/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <FileText className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                 <span className="truncate">{currentDoc?.title || 'demo'}</span>
               </button>
 
@@ -671,14 +698,17 @@ export function DocViewerModal({
                       setActiveSubpageId(sub.id)
                       setTitle(sub.title)
                       setContent(sub.content)
+                      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                        setIsSidebarOpen(false)
+                      }
                     }}
                     className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all text-left ${
                       activeSubpageId === sub.id
-                        ? 'bg-purple-500/20 text-purple-200 font-semibold border border-purple-500/30'
-                        : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        ? 'bg-purple-500/15 text-purple-600 dark:text-purple-300 font-bold border border-purple-500/30'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     }`}
                   >
-                    <FilePlus className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <FilePlus className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                     <span className="truncate">{sub.title}</span>
                   </button>
                   <button
@@ -687,7 +717,7 @@ export function DocViewerModal({
                       e.stopPropagation()
                       if (currentDoc) deleteSubpage(currentDoc.id, sub.id)
                     }}
-                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:text-rose-400 text-zinc-500 transition-opacity"
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:text-rose-500 text-muted-foreground transition-opacity"
                     title="Delete subpage"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -698,7 +728,7 @@ export function DocViewerModal({
               <button
                 type="button"
                 onClick={handleCreateSubpage}
-                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors mt-2"
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-2"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add page</span>
@@ -708,8 +738,8 @@ export function DocViewerModal({
         )}
 
         {/* MAIN CANVAS */}
-        <div className="flex-1 overflow-y-auto px-6 sm:px-16 md:px-24 py-8 custom-scrollbar max-w-4xl mx-auto w-full space-y-6">
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors w-fit">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-10 md:px-16 lg:px-24 py-6 max-w-4xl mx-auto w-full space-y-6 bg-background text-foreground custom-scrollbar">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors w-fit">
             <LinkIcon className="w-3.5 h-3.5" />
             <span>Link task or Doc</span>
           </div>
@@ -725,48 +755,48 @@ export function DocViewerModal({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') setIsEditingTitle(false)
                 }}
-                className="text-3xl sm:text-4xl font-extrabold text-white bg-transparent border-b border-primary focus:outline-none w-full pb-1"
+                className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-foreground bg-transparent border-b border-primary focus:outline-none w-full pb-1"
                 autoFocus
               />
             ) : (
               <h1
                 onClick={() => setIsEditingTitle(true)}
-                className="text-3xl sm:text-4xl font-extrabold text-white hover:opacity-90 cursor-text transition-opacity flex items-center gap-2"
+                className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-foreground hover:opacity-90 cursor-text transition-opacity flex items-center gap-2"
                 title="Click to edit title"
               >
                 <span>{title || 'Untitled'}</span>
-                <Edit3 className="w-4 h-4 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Edit3 className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </h1>
             )}
           </div>
 
           {/* Subtitle / Author Info */}
-          <div className="flex items-center gap-2 text-xs text-zinc-400 pb-3 border-b border-white/5">
-            <div className="w-5 h-5 rounded-full bg-emerald-600/30 text-emerald-400 flex items-center justify-center font-bold text-[10px] border border-emerald-500/30">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pb-3 border-b border-border">
+            <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">
               {(currentDoc?.authorName || user?.firstName || 'A').charAt(0).toUpperCase()}
             </div>
-            <span className="font-semibold text-zinc-300">
+            <span className="font-semibold text-foreground">
               {currentDoc?.authorName || user?.displayName || user?.firstName || 'anandu'}
             </span>
-            <span className="text-zinc-600">•</span>
+            <span>•</span>
             <span suppressHydrationWarning>
               Last updated Today at{' '}
               {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
-            <span className="text-zinc-600">•</span>
-            <span className="text-[11px] text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Auto-saved to Cloud
+            <span>•</span>
+            <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Auto-saved to Cloud
             </span>
           </div>
 
           {/* Quick Action Pills (Start writing | Blank wiki | Write with AI) */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleStartWriting}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-200 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-semibold text-foreground border border-border transition-all cursor-pointer shadow-2xs"
             >
-              <FileText className="w-3.5 h-3.5 text-sky-400" />
+              <FileText className="w-3.5 h-3.5 text-sky-500" />
               <span>Start writing</span>
             </button>
 
@@ -777,9 +807,9 @@ export function DocViewerModal({
                 setContent((prev) => (prev ? prev + wikiSnippet : wikiSnippet.trimStart()))
                 showToast('Inserted Wiki template')
               }}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-200 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-semibold text-foreground border border-border transition-all cursor-pointer shadow-2xs"
             >
-              <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+              <BookOpen className="w-3.5 h-3.5 text-emerald-500" />
               <span>Blank wiki</span>
             </button>
 
@@ -790,46 +820,46 @@ export function DocViewerModal({
                 setContent((prev) => (prev ? prev + aiSnippet : aiSnippet.trimStart()))
                 showToast('Inserted AI template')
               }}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-xs font-semibold text-purple-300 border border-purple-500/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-xs font-semibold text-purple-600 dark:text-purple-300 border border-purple-500/20 transition-all cursor-pointer shadow-2xs"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <Sparkles className="w-3.5 h-3.5 text-purple-500" />
               <span>Write with AI</span>
             </button>
           </div>
 
-          {/* ADD NEW SECTION (Table | Column | ClickUp List | Subpage) (Screenshot 3 & 5) */}
+          {/* ADD NEW SECTION (Table | Column | ClickUp List | Subpage) */}
           <div className="space-y-2 pt-1 relative">
-            <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Add new</p>
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Add new</p>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleInsertTable}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-300 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-medium text-foreground border border-border transition-all cursor-pointer shadow-2xs"
               >
-                <TableIcon className="w-3.5 h-3.5 text-zinc-400" />
+                <TableIcon className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>Table</span>
               </button>
 
-              {/* Column button triggers Popover (Screenshot 5 Top-Center) */}
+              {/* Column button triggers Popover */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowColumnsPopover(!showColumnsPopover)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-300 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-medium text-foreground border border-border transition-all cursor-pointer shadow-2xs"
                 >
-                  <Columns3 className="w-3.5 h-3.5 text-zinc-400" />
+                  <Columns3 className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Column</span>
                 </button>
 
                 {showColumnsPopover && (
-                  <div className="absolute left-0 top-full mt-2 w-48 rounded-2xl bg-[#181920] border border-white/15 p-2 shadow-2xl z-50 animate-scale-in text-xs space-y-1">
-                    <p className="px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase">/Columns</p>
+                  <div className="absolute left-0 top-full mt-2 w-48 rounded-2xl bg-card border border-border p-2 shadow-2xl z-50 animate-scale-in text-xs space-y-1">
+                    <p className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">/Columns</p>
                     {[2, 3, 4, 5].map((cols) => (
                       <button
                         key={cols}
                         type="button"
                         onClick={() => handleInsertColumns(cols)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-left transition-colors font-medium"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-foreground hover:bg-muted text-left transition-colors font-medium cursor-pointer"
                       >
                         <span className="font-mono text-primary font-bold">[{'|'.repeat(cols)}]</span>
                         <span>{cols} Columns</span>
@@ -839,32 +869,32 @@ export function DocViewerModal({
                 )}
               </div>
 
-              {/* ClickUp List triggers Modal (Screenshot 5 Top-Left) */}
+              {/* ClickUp List triggers Modal */}
               <button
                 type="button"
                 onClick={() => setShowClickUpListModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-300 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-medium text-foreground border border-border transition-all cursor-pointer shadow-2xs"
               >
-                <CheckSquare className="w-3.5 h-3.5 text-zinc-400" />
+                <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>ClickUp List</span>
               </button>
 
-              {/* Subpage button creates nested subpage */}
+              {/* Subpage button */}
               <button
                 type="button"
                 onClick={handleCreateSubpage}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-300 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card hover:bg-muted text-xs font-medium text-foreground border border-border transition-all cursor-pointer shadow-2xs"
               >
-                <FilePlus className="w-3.5 h-3.5 text-zinc-400" />
+                <FilePlus className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>Subpage</span>
               </button>
             </div>
           </div>
 
-          {/* Subpages List on Document Canvas (Screenshot 5 Bottom-Right) */}
+          {/* Subpages List on Document Canvas */}
           {!activeSubpageId && activeSubpages.length > 0 && (
             <div className="pt-2 pb-2">
-              <p className="text-xs font-bold text-zinc-400 mb-2">Subpages ({activeSubpages.length})</p>
+              <p className="text-xs font-bold text-muted-foreground mb-2">Subpages ({activeSubpages.length})</p>
               <div className="space-y-1.5">
                 {activeSubpages.map((sub) => (
                   <div
@@ -874,19 +904,19 @@ export function DocViewerModal({
                       setTitle(sub.title)
                       setContent(sub.content)
                     }}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/[0.08] border border-white/5 hover:border-white/15 transition-all cursor-pointer group"
+                    className="flex items-center justify-between p-3 rounded-2xl bg-card hover:bg-muted/50 border border-border transition-all cursor-pointer group shadow-2xs"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <FilePlus className="w-4 h-4 text-purple-400" />
-                      <span className="text-xs font-semibold text-zinc-200 group-hover:text-primary transition-colors">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FilePlus className="w-4 h-4 text-purple-500 shrink-0" />
+                      <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                         {sub.title}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 flex items-center justify-center text-[10px] font-bold">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 flex items-center justify-center text-[10px] font-bold">
                         A
                       </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                   </div>
                 ))}
@@ -906,29 +936,37 @@ export function DocViewerModal({
           </div>
         </div>
 
-        {/* SETTINGS RIGHT DRAWER (Screenshot 5 Bottom-Right) */}
+        {/* Mobile Backdrop for Settings Drawer */}
         {isSettingsOpen && (
-          <aside className="w-72 border-l border-white/10 bg-[#12131a] flex flex-col shrink-0 select-none animate-slide-left z-40">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden animate-fade-in"
+            onClick={() => setIsSettingsOpen(false)}
+          />
+        )}
+
+        {/* SETTINGS RIGHT DRAWER */}
+        {isSettingsOpen && (
+          <aside className="fixed md:static inset-y-0 right-0 z-50 md:z-auto w-72 border-l border-border bg-card flex flex-col shrink-0 select-none shadow-2xl md:shadow-none animate-slide-left">
             {/* Header */}
-            <div className="p-3 border-b border-white/10 flex items-center justify-between">
-              <span className="text-xs font-bold text-white">Settings</span>
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Settings</span>
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10"
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Tabs: Entire Doc | This page */}
-            <div className="p-2 border-b border-white/5">
-              <div className="flex items-center p-0.5 rounded-xl bg-white/5">
+            <div className="p-2 border-b border-border">
+              <div className="flex items-center p-0.5 rounded-xl bg-muted">
                 <button
                   type="button"
                   onClick={() => setSettingsTab('entire')}
                   className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    settingsTab === 'entire' ? 'bg-primary text-white shadow-xs' : 'text-zinc-400 hover:text-white'
+                    settingsTab === 'entire' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Entire Doc
@@ -937,7 +975,7 @@ export function DocViewerModal({
                   type="button"
                   onClick={() => setSettingsTab('page')}
                   className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    settingsTab === 'page' ? 'bg-primary text-white shadow-xs' : 'text-zinc-400 hover:text-white'
+                    settingsTab === 'page' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   This page
@@ -946,14 +984,14 @@ export function DocViewerModal({
             </div>
 
             {/* Settings Options List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 text-xs text-zinc-300">
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 text-xs text-foreground">
               <button
                 type="button"
                 onClick={() => setIsEditingTitle(true)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 text-left transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-muted text-left transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
-                  <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
+                  <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Rename</span>
                 </div>
               </button>
@@ -966,10 +1004,10 @@ export function DocViewerModal({
                     showToast('Link copied to clipboard')
                   }
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 text-left transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-muted text-left transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
-                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Copy link</span>
                 </div>
               </button>
@@ -979,19 +1017,19 @@ export function DocViewerModal({
                 onClick={() => {
                   if (currentDoc) updateDoc(currentDoc.id, { starred: !currentDoc.starred })
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 text-left transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-muted text-left transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
-                  <Star className={`w-3.5 h-3.5 ${currentDoc?.starred ? 'text-amber-400 fill-current' : 'text-zinc-400'}`} />
+                  <Star className={`w-3.5 h-3.5 ${currentDoc?.starred ? 'text-amber-500 fill-current' : 'text-muted-foreground'}`} />
                   <span>Favorite</span>
                 </div>
               </button>
 
-              <div className="my-1.5 border-t border-white/5" />
+              <div className="my-1.5 border-t border-border" />
 
               {/* Toggles */}
               <div className="px-3 py-2 rounded-xl flex items-center justify-between">
-                <span className="text-zinc-300">Protect Doc</span>
+                <span className="text-foreground">Protect Doc</span>
                 <input
                   type="checkbox"
                   checked={isProtected}
@@ -1001,7 +1039,7 @@ export function DocViewerModal({
               </div>
 
               <div className="px-3 py-2 rounded-xl flex items-center justify-between">
-                <span className="text-zinc-300">Public sharing</span>
+                <span className="text-foreground">Public sharing</span>
                 <input
                   type="checkbox"
                   checked={isPublic}
@@ -1011,7 +1049,7 @@ export function DocViewerModal({
               </div>
 
               <div className="px-3 py-2 rounded-xl flex items-center justify-between">
-                <span className="text-zinc-300">Mark Doc as wiki</span>
+                <span className="text-foreground">Mark Doc as wiki</span>
                 <input
                   type="checkbox"
                   checked={isWiki}
@@ -1020,13 +1058,13 @@ export function DocViewerModal({
                 />
               </div>
 
-              <div className="my-1.5 border-t border-white/5" />
+              <div className="my-1.5 border-t border-border" />
 
               {/* Danger Actions */}
               <button
                 type="button"
                 onClick={() => setIsConfirmingDelete(true)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-left transition-colors font-semibold"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 text-left transition-colors font-semibold cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete {activeSubpageId ? 'Page' : 'Document'}</span>
@@ -1036,31 +1074,31 @@ export function DocViewerModal({
         )}
       </div>
 
-      {/* CLICKUP LIST MODAL (Screenshot 5 Top-Left) */}
+      {/* CLICKUP LIST MODAL */}
       {showClickUpListModal && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-[#181920] border border-white/15 rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in" onClick={() => setShowClickUpListModal(false)}>
+          <div className="bg-card border border-border rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-foreground" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-2 border-b border-border">
               <div>
-                <p className="text-[10px] font-bold text-zinc-500 uppercase">/ClickUp List (List)</p>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">ADD LIST OF TASKS</h3>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">/ClickUp List (List)</p>
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">ADD LIST OF TASKS</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowClickUpListModal(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10"
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Tabs: Search | Browse or New List */}
-            <div className="flex items-center p-0.5 rounded-xl bg-white/5">
+            <div className="flex items-center p-0.5 rounded-xl bg-muted">
               <button
                 type="button"
                 onClick={() => setClickUpTab('search')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  clickUpTab === 'search' ? 'bg-primary text-white' : 'text-zinc-400 hover:text-white'
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  clickUpTab === 'search' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Search
@@ -1068,8 +1106,8 @@ export function DocViewerModal({
               <button
                 type="button"
                 onClick={() => setClickUpTab('browse')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  clickUpTab === 'browse' ? 'bg-primary text-white' : 'text-zinc-400 hover:text-white'
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  clickUpTab === 'browse' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Browse or New List
@@ -1078,32 +1116,32 @@ export function DocViewerModal({
 
             {/* Filter Input */}
             <div className="relative">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={clickUpSearchQuery}
                 onChange={(e) => setClickUpSearchQuery(e.target.value)}
                 placeholder="Filter by name..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-primary"
+                className="w-full bg-muted/50 border border-border rounded-xl pl-9 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
               />
             </div>
-            <p className="text-[10px] text-zinc-500 italic">Paste URL or search List name</p>
+            <p className="text-[10px] text-muted-foreground italic">Paste URL or search List name</p>
 
             {/* List candidates */}
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
               {['ChatApp Sprint Tasks', 'Frontend Layer Specs', 'Payment API Requirements', 'Backend Services'].map(
                 (name) => (
                   <button
                     key={name}
                     type="button"
                     onClick={() => handleInsertClickUpList(name)}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-left text-xs font-medium text-zinc-200 transition-colors"
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-muted/40 hover:bg-muted text-left text-xs font-medium text-foreground transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-2">
-                      <ListTodo className="w-3.5 h-3.5 text-purple-400" />
+                      <ListTodo className="w-3.5 h-3.5 text-primary" />
                       <span>{name}</span>
                     </div>
-                    <span className="text-[10px] text-zinc-500">Insert List</span>
+                    <span className="text-[10px] text-muted-foreground">Insert List</span>
                   </button>
                 )
               )}
@@ -1112,14 +1150,14 @@ export function DocViewerModal({
         </div>
       )}
 
-      {/* SLASH COMMAND PALETTE (Screenshot 5 Top-Right) */}
+      {/* SLASH COMMAND PALETTE */}
       {showSlashMenu && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" onClick={() => setShowSlashMenu(false)}>
           <div
-            className="bg-[#181920] border border-white/15 rounded-2xl p-2 w-full max-w-sm shadow-2xl space-y-1 animate-scale-in text-xs max-h-96 overflow-y-auto"
+            className="bg-card border border-border rounded-2xl p-2 w-full max-w-sm shadow-2xl space-y-1 animate-scale-in text-xs max-h-96 overflow-y-auto custom-scrollbar text-foreground"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="px-3 py-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">/search suggestions</p>
+            <p className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">/search suggestions</p>
             {[
               { label: 'Write with AI', icon: Sparkles, action: () => setContent((c) => c + '\n\n### 🤖 AI Summary\n') },
               { label: 'Template', icon: BookOpen, action: () => setContent((c) => c + '\n\n## Overview\n') },
@@ -1135,9 +1173,9 @@ export function DocViewerModal({
                   setShowSlashMenu(false)
                   cmd.action()
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-zinc-300 hover:text-white hover:bg-white/10 text-left transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-foreground hover:bg-muted text-left transition-colors cursor-pointer"
               >
-                <cmd.icon className="w-4 h-4 text-purple-400" />
+                <cmd.icon className="w-4 h-4 text-primary" />
                 <span>{cmd.label}</span>
               </button>
             ))}
@@ -1145,36 +1183,36 @@ export function DocViewerModal({
         </div>
       )}
 
-      {/* Delete Confirmation Modal (Guaranteed Deletion) */}
+      {/* Delete Confirmation Modal */}
       {isConfirmingDelete && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in" onClick={() => setIsConfirmingDelete(false)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-foreground" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/30">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Delete {activeSubpageId ? 'Subpage' : 'Document'}</h3>
-                <p className="text-xs text-zinc-400">Permanent deletion confirmation</p>
+                <h3 className="text-base font-bold text-foreground">Delete {activeSubpageId ? 'Subpage' : 'Document'}</h3>
+                <p className="text-xs text-muted-foreground">Permanent deletion confirmation</p>
               </div>
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to delete <strong className="text-white">&quot;{title}&quot;</strong>? This will remove it from your workspace. This action cannot be undone.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete <strong className="text-foreground">&quot;{title}&quot;</strong>? This will remove it from your workspace. This action cannot be undone.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => setIsConfirmingDelete(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleDelete}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/25 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 Delete {activeSubpageId ? 'Page' : 'Doc'}
               </button>
@@ -1185,27 +1223,27 @@ export function DocViewerModal({
 
       {/* Unsaved Changes Close Confirmation Modal */}
       {showClosePrompt && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowClosePrompt(false)}>
-          <div className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in" onClick={() => setShowClosePrompt(false)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-foreground" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/30">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Save Changes?</h3>
-                <p className="text-xs text-zinc-400">Unsaved document modifications</p>
+                <h3 className="text-base font-bold text-foreground">Save Changes?</h3>
+                <p className="text-xs text-muted-foreground">Unsaved document modifications</p>
               </div>
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              You have unsaved changes in <strong className="text-white">&quot;{title || 'Untitled Doc'}&quot;</strong>. Do you want to save them before closing?
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              You have unsaved changes in <strong className="text-foreground">&quot;{title || 'Untitled Doc'}&quot;</strong>. Do you want to save them before closing?
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
               <button
                 type="button"
                 onClick={() => setShowClosePrompt(false)}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1215,7 +1253,7 @@ export function DocViewerModal({
                   setShowClosePrompt(false)
                   onClose()
                 }}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
               >
                 Discard & Close
               </button>
@@ -1228,7 +1266,7 @@ export function DocViewerModal({
                     onClose()
                   }
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Save & Close</span>
@@ -1240,20 +1278,20 @@ export function DocViewerModal({
 
       {/* Duplicate Document Name Warning Modal */}
       {duplicateWarning && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in" onClick={() => setDuplicateWarning(null)}>
-          <div className="bg-[#181920] border border-amber-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in" onClick={() => setDuplicateWarning(null)}>
+          <div className="bg-card border border-amber-500/40 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-foreground" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/30">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Document Name Already Exists</h3>
-                <p className="text-xs text-amber-400/90 font-medium">Please enter a unique name</p>
+                <h3 className="text-base font-bold text-foreground">Document Name Already Exists</h3>
+                <p className="text-xs text-amber-500 font-medium">Please enter a unique name</p>
               </div>
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              A document with the name <strong className="text-white">&quot;{title}&quot;</strong> already exists in this workspace. Please enter a different name for your document to save:
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              A document with the name <strong className="text-foreground">&quot;{title}&quot;</strong> already exists in this workspace. Please enter a different name for your document to save:
             </p>
 
             <div className="space-y-1.5">
@@ -1262,16 +1300,16 @@ export function DocViewerModal({
                 value={renameInput}
                 onChange={(e) => setRenameInput(e.target.value)}
                 placeholder="Enter new document name..."
-                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-xs text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
                 autoFocus
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => setDuplicateWarning(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1286,7 +1324,7 @@ export function DocViewerModal({
                     handleSaveToDocs(newT)
                   }, 50)
                 }}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 Rename & Save
               </button>
@@ -1297,34 +1335,34 @@ export function DocViewerModal({
 
       {/* Share Document Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 z-[190] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowShareModal(false)}>
-          <div className="bg-[#181920] border border-white/15 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[190] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in" onClick={() => setShowShareModal(false)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-foreground" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+                <div className="w-10 h-10 rounded-2xl bg-sky-500/15 text-sky-500 flex items-center justify-center shrink-0 border border-sky-500/30">
                   <Share2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Share Document</h3>
-                  <p className="text-xs text-zinc-400">&quot;{title || 'Untitled Doc'}&quot;</p>
+                  <h3 className="text-base font-bold text-foreground">Share Document</h3>
+                  <p className="text-xs text-muted-foreground">&quot;{title || 'Untitled Doc'}&quot;</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowShareModal(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10"
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-zinc-300">
+            <p className="text-xs text-muted-foreground">
               Your document has been saved with the latest changes. Share the link or download a copy below.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
-                <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
+              <label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5 text-sky-500" />
                 <span>Document Share Link</span>
               </label>
               <div className="flex items-center gap-2">
@@ -1332,7 +1370,7 @@ export function DocViewerModal({
                   type="text"
                   readOnly
                   value={typeof window !== 'undefined' ? `${window.location.origin}/app/docs/${encodeURIComponent(currentDoc?.id || docId)}` : ''}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-200 select-all focus:outline-none font-mono"
+                  className="w-full px-3 py-2 rounded-xl bg-muted/50 border border-border text-xs text-foreground select-all focus:outline-none font-mono"
                 />
                 <button
                   type="button"
@@ -1341,7 +1379,7 @@ export function DocViewerModal({
                     navigator.clipboard?.writeText(url)
                     showToast('Link copied to clipboard!')
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>Copy</span>
@@ -1350,47 +1388,47 @@ export function DocViewerModal({
             </div>
 
             {/* Download Document options */}
-            <div className="space-y-2 pt-2 border-t border-white/10">
-              <label className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="space-y-2 pt-2 border-t border-border">
+              <label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Download Document</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => handleDownloadDoc('md')}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-muted/40 hover:bg-muted border border-border text-foreground transition-all text-center group cursor-pointer"
                   title="Download as Markdown"
                 >
-                  <span className="text-xs font-bold text-sky-400 group-hover:scale-105 transition-transform">Markdown</span>
-                  <span className="text-[10px] text-zinc-400">.md</span>
+                  <span className="text-xs font-bold text-sky-500 group-hover:scale-105 transition-transform">Markdown</span>
+                  <span className="text-[10px] text-muted-foreground">.md</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDownloadDoc('txt')}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-muted/40 hover:bg-muted border border-border text-foreground transition-all text-center group cursor-pointer"
                   title="Download as Plain Text"
                 >
-                  <span className="text-xs font-bold text-amber-400 group-hover:scale-105 transition-transform">Plain Text</span>
-                  <span className="text-[10px] text-zinc-400">.txt</span>
+                  <span className="text-xs font-bold text-amber-500 group-hover:scale-105 transition-transform">Plain Text</span>
+                  <span className="text-[10px] text-muted-foreground">.txt</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDownloadDoc('html')}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all text-center group cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-muted/40 hover:bg-muted border border-border text-foreground transition-all text-center group cursor-pointer"
                   title="Download as Web HTML"
                 >
-                  <span className="text-xs font-bold text-emerald-400 group-hover:scale-105 transition-transform">HTML Doc</span>
-                  <span className="text-[10px] text-zinc-400">.html</span>
+                  <span className="text-xs font-bold text-emerald-500 group-hover:scale-105 transition-transform">HTML Doc</span>
+                  <span className="text-[10px] text-muted-foreground">.html</span>
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-end pt-2 border-t border-white/10">
+            <div className="flex items-center justify-end pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => setShowShareModal(false)}
-                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold cursor-pointer"
               >
                 Done
               </button>

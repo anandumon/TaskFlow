@@ -303,14 +303,14 @@ export function TaskSubtasksCard({
   }
 
   return (
-    <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-sm space-y-5">
+    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-sm space-y-5 max-w-full w-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-primary" /> Subtasks & Action Items ({completedCount}/{subtasks.length})
+            <CheckSquare className="w-4 h-4 text-primary shrink-0" /> Subtasks & Action Items ({completedCount}/{subtasks.length})
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             Granular engineering items in a dedicated card grid with multi-service branches, files, and discussion.
           </p>
         </div>
@@ -318,7 +318,7 @@ export function TaskSubtasksCard({
         <button
           type="button"
           onClick={() => setIsAddingSubtask(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 cursor-pointer self-start sm:self-auto shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Subtask</span>

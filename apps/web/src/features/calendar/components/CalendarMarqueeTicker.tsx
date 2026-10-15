@@ -44,10 +44,11 @@ export function CalendarMarqueeTicker({ tasks, projects, onSelectTaskDate }: Cal
 
   return (
     <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-card/60 dark:bg-black/30 border border-white/10 dark:border-white/[0.08] p-2.5 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-primary to-purple-600 text-white text-[10px] font-extrabold uppercase tracking-wider shrink-0 shadow-md shadow-primary/20 z-10">
-          <Zap className="w-3.5 h-3.5 animate-pulse text-amber-300" />
-          <span>Upcoming Due Dates ({uniqueUpcomingTasks.length})</span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-primary to-purple-600 text-white text-[10px] font-extrabold uppercase tracking-wider shrink-0 shadow-md shadow-primary/20 z-10">
+          <Zap className="w-3.5 h-3.5 animate-pulse text-amber-300 shrink-0" />
+          <span className="hidden sm:inline">Upcoming Due Dates ({uniqueUpcomingTasks.length})</span>
+          <span className="sm:hidden">{uniqueUpcomingTasks.length} Due</span>
         </div>
 
         {/* Liquid Glass Container - Animated Right-to-Left Slider when > 2 tasks, static when <= 2 */}

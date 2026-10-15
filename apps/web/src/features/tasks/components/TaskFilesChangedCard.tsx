@@ -81,10 +81,10 @@ export function TaskFilesChangedCard({
   }
 
   return (
-    <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-sm space-y-4">
+    <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-sm space-y-4 max-w-full w-full overflow-hidden">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-          <FileCode className="w-4 h-4 text-primary" /> Files Changed ({filesChanged.length})
+          <FileCode className="w-4 h-4 text-primary shrink-0" /> Files Changed ({filesChanged.length})
         </h3>
       </div>
 

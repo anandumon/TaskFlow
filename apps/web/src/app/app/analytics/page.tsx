@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
                       <div key={env} className="space-y-1.5">
                         <div className="flex justify-between text-xs font-semibold">
                           <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg.color.replace('bg-', '') }} />
+                            <span className={`w-2 h-2 rounded-full ${cfg.color}`} />
                             <span className="text-foreground">{env}</span>
                             <span className="text-[10px] text-muted-foreground font-normal">({cfg.desc})</span>
                           </span>

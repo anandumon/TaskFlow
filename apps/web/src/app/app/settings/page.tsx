@@ -771,7 +771,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="shrink-0 flex border-b border-border/80 gap-6 overflow-x-auto mb-4">
+      <div className="shrink-0 flex border-b border-border/80 gap-2 sm:gap-6 overflow-x-auto no-scrollbar scrollbar-none mb-4 pb-0.5">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -779,12 +779,13 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${isActive
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-1 pb-3 text-xs font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+                isActive
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
+              }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span>{tab.label}</span>
             </button>
           )
@@ -856,7 +857,7 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     First Name
@@ -1632,7 +1633,7 @@ export default function SettingsPage() {
       {/* Modal: Delete Workspace Confirmation */}
       {mounted && isDeleteWsModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in max-h-[min(90dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -1674,7 +1675,7 @@ export default function SettingsPage() {
       {/* Modal: Delete Organization Confirmation */}
       {mounted && isDeleteOrgModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in">
+          <div className="bg-card border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in max-h-[min(90dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -1736,7 +1737,7 @@ export default function SettingsPage() {
       {/* Modal: New Organization Modal */}
       {mounted && isCreateOrgModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in max-h-[min(90dvh,calc(100dvh-2rem))] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-primary" /> Create New Organization

@@ -227,14 +227,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (pathname?.startsWith('/app/whiteboard')) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-[#0d0e12]">
+      <div className="h-screen h-[100dvh] w-full overflow-hidden bg-[#0d0e12]">
         {children}
       </div>
     )
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background relative">
+    <div className="flex h-screen h-[100dvh] w-full max-w-full overflow-hidden bg-background relative select-none">
       {isNavigating && (
         <div className="fixed top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary via-indigo-400 to-sky-400 z-[9999] animate-pulse shadow-md shadow-primary/30" />
       )}
@@ -242,12 +242,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         mobileOpen={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
       />
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden max-w-full w-full">
         <Header
           onOpenCommand={() => setCommandOpen(true)}
           onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
         />
-        <main className={`flex-1 min-w-0 min-h-0 ${isChatRoute ? 'overflow-hidden p-0 flex flex-col h-full' : isSettingsRoute ? 'overflow-hidden p-3 sm:p-5 flex flex-col h-full' : 'overflow-y-auto p-4 sm:p-6'} bg-background/50`}>
+        <main
+          className={`flex-1 min-w-0 min-h-0 max-w-full w-full overflow-x-hidden ${
+            isChatRoute
+              ? 'overflow-hidden p-0 flex flex-col h-full'
+              : isSettingsRoute
+              ? 'overflow-hidden p-3 sm:p-5 lg:p-6 flex flex-col h-full'
+              : 'overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] touch-scroll'
+          } bg-background/50`}
+        >
           {children}
         </main>
       </div>

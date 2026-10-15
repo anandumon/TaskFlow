@@ -337,7 +337,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-7.5rem)] flex flex-col min-h-0 max-w-7xl mx-auto gap-2.5 animate-fade-in overflow-hidden">
+    <div className="flex flex-col min-h-0 lg:h-[calc(100vh-7.5rem)] max-w-7xl mx-auto gap-2.5 animate-fade-in overflow-y-auto lg:overflow-hidden custom-scrollbar">
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl animate-fade-in text-xs font-semibold">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -458,7 +458,7 @@ export default function CalendarPage() {
           <div className={`grid grid-cols-7 gap-1 flex-1 min-h-0 pt-1 ${gridRowsClass}`}>
             {/* Blank padding days for start of month */}
             {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-              <div key={`blank-${i}`} className="h-full min-h-0 rounded-xl bg-muted/10 border border-border/20 opacity-30" />
+              <div key={`blank-${i}`} className="h-full min-h-[48px] sm:min-h-[60px] lg:min-h-0 rounded-xl bg-muted/10 border border-border/20 opacity-30" />
             ))}
 
             {/* Days in Month */}
@@ -487,7 +487,7 @@ export default function CalendarPage() {
                   onDragOver={(e) => handleCalDayDragOver(e, day)}
                   onDragLeave={() => setDragOverCalDay(null)}
                   onDrop={(e) => handleCalDayDrop(e, day)}
-                  className={`h-full min-h-0 p-1.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between overflow-hidden group ${
+                  className={`h-full min-h-[48px] sm:min-h-[60px] lg:min-h-0 p-1.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between overflow-hidden group ${
                     dragOverCalDay === day
                       ? 'border-primary ring-2 ring-primary scale-[1.03] bg-primary/20 shadow-md z-10'
                       : isSelected
@@ -519,7 +519,23 @@ export default function CalendarPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-0.5 mt-0.5">
+                  {/* Mobile-only compact indicators */}
+                  <div className="flex sm:hidden items-center justify-center gap-1 mt-auto pb-0.5">
+                    {dayTasks.length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
+                    {dayExtEvents.length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    )}
+                    {totalEventsCount > 2 && (
+                      <span className="text-[8px] font-bold text-muted-foreground leading-none">
+                        +{totalEventsCount}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tablet/Desktop Event Pills */}
+                  <div className="space-y-0.5 mt-0.5 hidden sm:block">
                     {/* External Google Calendar Event Pill */}
                     {dayExtEvents.slice(0, 1).map((ev) => (
                       <div

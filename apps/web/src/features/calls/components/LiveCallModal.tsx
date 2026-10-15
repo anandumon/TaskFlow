@@ -357,7 +357,7 @@ export function LiveCallModal() {
       className={
         isMinimized
           ? 'fixed bottom-0 right-0 w-1 h-1 opacity-0 pointer-events-none overflow-hidden select-none z-[99990]'
-          : 'fixed inset-0 top-0 left-0 w-screen h-screen z-[99990] bg-[#090a10] text-[#e1e4ea] flex flex-col select-none animate-fade-in overflow-hidden cursor-default'
+          : 'fixed inset-0 top-0 left-0 w-full max-w-full h-[100dvh] z-[99990] bg-[#090a10] text-[#e1e4ea] flex flex-col select-none animate-fade-in overflow-hidden cursor-default'
       }
     >
       {/* Unmuted Dedicated Remote Audio Player - positioned at viewport bottom so browser never throttles voice */}
@@ -388,14 +388,14 @@ export function LiveCallModal() {
       )}
 
       {/* ── TOP HEADER BAR ── */}
-      <header className="h-16 px-6 bg-[#0f1018]/90 backdrop-blur-md border-b border-white/10 flex items-center justify-between shrink-0 z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+      <header className="h-16 px-3 sm:px-6 bg-[#0f1018]/90 backdrop-blur-md border-b border-white/10 flex items-center justify-between shrink-0 z-20 gap-2">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-white tracking-tight">
+              <h1 className="text-sm font-bold text-white tracking-tight truncate max-w-[130px] sm:max-w-xs">
                 {remoteParticipant?.name || activeCall.createdByName || 'Live Call'}
               </h1>
               {activeCall.status === 'RINGING' ? (
@@ -703,40 +703,41 @@ export function LiveCallModal() {
       </div>
 
       {/* ── BOTTOM CONTROL TOOLBAR ── */}
-      <footer className="h-20 bg-[#0c0d14]/95 backdrop-blur-xl border-t border-white/10 px-6 flex items-center justify-between shrink-0 z-20">
+      <footer className="h-20 bg-[#0c0d14]/95 backdrop-blur-xl border-t border-white/10 px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 pb-safe gap-2">
         {/* Left: Connection & Encryption Status Indicator */}
-        <div className="flex items-center gap-2 min-w-[140px] sm:min-w-[200px]">
+        <div className="flex items-center gap-1.5 shrink-0">
           {connectionState === 'connected' ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>E2EE &bull; {connectionQuality}</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0 hidden sm:inline" />
+              <span className="hidden xs:inline">E2EE &bull; </span>
+              <span className="truncate max-w-[70px] xs:max-w-none">{connectionQuality}</span>
             </div>
           ) : connectionState === 'connecting' ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>Connecting...</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+              <span className="hidden xs:inline">Connecting...</span>
             </div>
           ) : connectionState === 'failed' ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-rose-400" />
-              <span>Reconnecting...</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
+              <span className="hidden xs:inline">Reconnecting...</span>
             </div>
           ) : (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium">
-              <span className="w-2 h-2 rounded-full bg-zinc-400" />
-              <span className="capitalize">{connectionState}</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium">
+              <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+              <span className="capitalize hidden xs:inline">{connectionState}</span>
             </div>
           )}
         </div>
 
         {/* Center: Main Call Action Controls */}
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center justify-center gap-2 sm:gap-4 shrink-0 mx-auto">
           {/* Mute Microphone Button */}
           <button
             type="button"
             onClick={toggleAudio}
-            className={`p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer ${
+            className={`p-3 sm:p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer shrink-0 ${
               localAudioMuted
                 ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
                 : 'bg-white/10 hover:bg-white/20 text-white'
@@ -751,7 +752,7 @@ export function LiveCallModal() {
             <button
               type="button"
               onClick={toggleVideo}
-              className={`p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer ${
+              className={`p-3 sm:p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer shrink-0 ${
                 localVideoOff
                   ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
                   : 'bg-white/10 hover:bg-white/20 text-white'
@@ -767,7 +768,7 @@ export function LiveCallModal() {
             <button
               type="button"
               onClick={toggleScreenShare}
-              className={`p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer ${
+              className={`p-3 sm:p-3.5 rounded-2xl transition-all shadow-lg cursor-pointer shrink-0 ${
                 isScreenSharing
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
                   : 'bg-white/10 hover:bg-white/20 text-white'
@@ -782,18 +783,18 @@ export function LiveCallModal() {
           <button
             type="button"
             onClick={() => endActiveCall()}
-            className="p-3.5 px-5 sm:px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-xl shadow-rose-600/40 flex items-center gap-2 cursor-pointer active:scale-95"
+            className="p-3 sm:p-3.5 sm:px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-xl shadow-rose-600/40 flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
             title={isGroupCall && !isHost ? 'Leave group call' : 'End call for everyone'}
           >
-            <PhoneOff className="w-5 h-5" />
-            <span className="text-xs tracking-wide">
+            <PhoneOff className="w-5 h-5 shrink-0" />
+            <span className="text-xs tracking-wide hidden sm:inline">
               {isGroupCall && !isHost ? 'Leave Call' : 'End Call'}
             </span>
           </button>
         </div>
 
         {/* Right: Duration Pill */}
-        <div className="hidden sm:flex items-center justify-end min-w-[140px] sm:min-w-[200px]">
+        <div className="hidden sm:flex items-center justify-end shrink-0">
           <span className="text-xs font-mono text-zinc-400 px-3 py-1 rounded-xl bg-white/5 border border-white/5">
             {formatDuration(callDuration)}
           </span>

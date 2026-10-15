@@ -43,6 +43,7 @@ import {
   ArrowUpRight,
   Search,
   X,
+  Menu,
   ExternalLink,
 } from 'lucide-react'
 
@@ -365,6 +366,7 @@ export default function LandingPage() {
   const router = useRouter()
   const { user, isAuthenticated, loadUser } = useAuthStore()
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'kanban' | 'grid' | 'calendar' | 'vault' | 'teams'>('kanban')
 
   // Document Vault Display State
@@ -505,21 +507,21 @@ export default function LandingPage() {
   }, [loadUser])
 
   return (
-    <div className="min-h-screen bg-[#000000] text-slate-100 flex flex-col selection:bg-[#00638E]/40 selection:text-[#BFD8E3] overflow-x-hidden font-sans pt-16">
+    <div className="min-h-screen max-w-full w-full bg-[#000000] text-slate-100 flex flex-col selection:bg-[#00638E]/40 selection:text-[#BFD8E3] overflow-x-hidden font-sans pt-16">
       {/* Ambient background glow meshes */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[850px] h-[520px] bg-gradient-to-tr from-[#004A6B]/30 via-[#00638E]/25 to-[#8CB9CC]/15 rounded-full blur-[140px] opacity-70" />
-        <div className="absolute top-[600px] -left-60 w-[600px] h-[600px] bg-[#00638E]/12 rounded-full blur-[150px] opacity-50" />
-        <div className="absolute top-[1200px] -right-60 w-[600px] h-[600px] bg-[#004A6B]/15 rounded-full blur-[150px] opacity-50" />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden max-w-full w-full">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[min(850px,100vw)] h-[520px] bg-gradient-to-tr from-[#004A6B]/30 via-[#00638E]/25 to-[#8CB9CC]/15 rounded-full blur-[140px] opacity-70" />
+        <div className="absolute top-[600px] -left-60 w-[min(600px,100vw)] h-[600px] bg-[#00638E]/12 rounded-full blur-[150px] opacity-50" />
+        <div className="absolute top-[1200px] -right-60 w-[min(600px,100vw)] h-[600px] bg-[#004A6B]/15 rounded-full blur-[150px] opacity-50" />
       </div>
 
       {/* Top Navbar: Fixed Header that stays while content scrolls */}
-      <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-[#2B2B2B]/70 bg-[#000000]/90 backdrop-blur-xl transition-all shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="fixed top-0 left-0 right-0 z-50 w-full max-w-full border-b border-[#2B2B2B]/70 bg-[#000000]/90 backdrop-blur-xl transition-all shadow-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group cursor-pointer">
-            <TaskFlowLogo variant="full" size="md" colorScheme="dark" textClassName="text-white text-xl" animated={true} />
-            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40 ml-1">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 group cursor-pointer shrink-0">
+            <TaskFlowLogo variant="full" size="md" colorScheme="dark" textClassName="text-white text-lg sm:text-xl" animated={true} />
+            <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-[#00638E]/20 text-[#BFD8E3] border border-[#00638E]/40 ml-0.5">
               v2.0
             </span>
           </Link>
@@ -541,11 +543,11 @@ export default function LandingPage() {
           </nav>
 
           {/* Auth Actions: Always ask Sign In & Sign Up */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <Link
               href="/login"
               prefetch={true}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-[#141414] hover:bg-[#2B2B2B] border border-[#2B2B2B] transition-all cursor-pointer shadow-sm"
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-[#141414] hover:bg-[#2B2B2B] border border-[#2B2B2B] transition-all cursor-pointer shadow-sm"
             >
               Sign In
             </Link>
@@ -553,31 +555,75 @@ export default function LandingPage() {
             <Link
               href="/register"
               prefetch={true}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white shadow-lg shadow-[#00638E]/30 hover:shadow-[#00638E]/50 transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#00638E] hover:brightness-110 text-white shadow-lg shadow-[#00638E]/30 hover:shadow-[#00638E]/50 transition-all active:scale-95 cursor-pointer"
             >
               <span>Sign Up</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
+
+            {/* Mobile Hamburger Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl border border-[#2B2B2B] bg-[#141414] text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Dropdown Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-[#2B2B2B] bg-[#000000]/95 backdrop-blur-2xl px-4 py-3 space-y-2 animate-fade-in">
+            <a
+              href="#features"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-[#141414] transition-colors"
+            >
+              Features
+            </a>
+            <a
+              href="#views"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-[#141414] transition-colors"
+            >
+              Workspace Views
+            </a>
+            <a
+              href="#documents"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-[#141414] transition-colors"
+            >
+              Document Vault
+            </a>
+            <a
+              href="#collaboration"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-[#141414] transition-colors"
+            >
+              Team & Invites
+            </a>
+          </div>
+        )}
       </header>
 
       {/* Hero Section (Dedicated First Screen) */}
-      <section className="relative z-10 min-h-[calc(100vh-4rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col justify-between items-center py-10 sm:py-16 select-none">
+      <section className="relative z-10 min-h-[calc(100vh-4rem)] max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col justify-between items-center py-6 sm:py-16 select-none overflow-x-hidden">
         <div /> {/* Top spacer for balanced vertical centering */}
 
-        <div className="flex flex-col items-center max-w-5xl">
+        <div className="flex flex-col items-center max-w-5xl w-full">
           {/* Announcement Pill */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-medium mb-8 hover:bg-[#00638E]/25 transition-all cursor-pointer shadow-sm">
-            <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-ping" />
-            <span className="font-semibold text-[#BFD8E3]">TaskFlow 2.0 Enterprise Release</span>
-            <span className="text-[#BFD8E3]/60">•</span>
-            <span>Next-gen agile execution & pipeline tracking</span>
-            <ChevronRight className="w-3.5 h-3.5 text-[#BFD8E3]" />
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-[11px] sm:text-xs font-medium mb-6 sm:mb-8 hover:bg-[#00638E]/25 transition-all cursor-pointer shadow-sm max-w-full">
+            <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-ping shrink-0" />
+            <span className="font-semibold text-[#BFD8E3] truncate max-w-[200px] xs:max-w-none">TaskFlow 2.0 Enterprise Release</span>
+            <span className="text-[#BFD8E3]/60 hidden sm:inline">•</span>
+            <span className="hidden sm:inline">Next-gen agile execution & pipeline tracking</span>
+            <ChevronRight className="w-3.5 h-3.5 text-[#BFD8E3] shrink-0" />
           </div>
 
           {/* Hero Title */}
-          <h1 className="max-w-4xl text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
+          <h1 className="max-w-4xl text-2xl xs:text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.15] sm:leading-[1.08] mb-4 sm:mb-6 break-words px-2 sm:px-0">
             High-Velocity Project Execution.{' '}
             <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
               Engineered for Modern Teams.
@@ -585,24 +631,24 @@ export default function LandingPage() {
           </h1>
 
           {/* Hero Subtitle */}
-          <p className="max-w-2xl text-base sm:text-lg text-slate-300 font-normal leading-relaxed mb-10">
+          <p className="max-w-2xl text-sm sm:text-base md:text-lg text-slate-300 font-normal leading-relaxed mb-8 sm:mb-10 px-2 sm:px-0">
             Streamline complex engineering workflows with zero friction. Plan multi-environment deliverables,
             track sprint progress with subtask precision, attach mission-critical assets, and coordinate in real time.
           </p>
 
           {/* Feature Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-slate-400 font-medium px-2">
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-[#BFD8E3]" />
-              No credit card required
+              <CheckCircle2 className="w-4 h-4 text-[#BFD8E3] shrink-0" />
+              <span>No credit card required</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-[#00638E]" />
-              Instant team onboarding
+              <CheckCircle2 className="w-4 h-4 text-[#00638E] shrink-0" />
+              <span>Instant team onboarding</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-[#8CB9CC]" />
-              Sub-millisecond reactivity
+              <CheckCircle2 className="w-4 h-4 text-[#8CB9CC] shrink-0" />
+              <span>Sub-millisecond reactivity</span>
             </span>
           </div>
         </div>
@@ -623,45 +669,45 @@ export default function LandingPage() {
       </section>
 
       {/* Interactive Product Showcase (Dedicated Separate Screen with Sticky Scrollable & Premium Animations) */}
-      <section id="views" className="relative z-10 min-h-screen max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 flex flex-col justify-center">
+      <section id="views" className="relative z-10 min-h-screen max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-12 sm:py-20 flex flex-col justify-center overflow-x-hidden">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-semibold">
-            <Layers className="w-3.5 h-3.5 text-[#00638E]" />
-            <span>Multi-Dimensional Workspace Engine</span>
+        <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-10 space-y-3 px-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00638E]/15 border border-[#00638E]/30 text-[#BFD8E3] text-xs font-semibold max-w-full">
+            <Layers className="w-3.5 h-3.5 text-[#00638E] shrink-0" />
+            <span className="truncate">Multi-Dimensional Workspace Engine</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-2xl xs:text-3xl sm:text-5xl font-extrabold text-white tracking-tight break-words">
             Fluid Agile Execution.{' '}
             <span className="bg-gradient-to-r from-white via-[#BFD8E3] to-[#8CB9CC] bg-clip-text text-transparent">
               Live In-Browser.
             </span>
           </h2>
-          <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
+          <p className="text-xs sm:text-sm md:text-base text-slate-400 leading-relaxed max-w-2xl mx-auto">
             Drag cards across swimlanes, reorder columns, inspect tree hierarchies, and monitor sprint schedules with
             zero reload delay.
           </p>
         </div>
 
         {/* Sticky Showcase Container with Glowing Gradient Border & Fun Micro-Animations */}
-        <div className="sticky top-20 z-20 group/showcase">
-          <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-[#00638E]/60 via-[#2B2B2B] to-[#004A6B]/30 shadow-[0_0_50px_-10px_rgba(0,99,142,0.35)] transition-all duration-500 hover:shadow-[0_0_70px_-10px_rgba(0,99,142,0.5)]">
-            <div className="rounded-[23px] bg-[#0c0d12]/95 backdrop-blur-2xl shadow-2xl p-4 sm:p-6 overflow-hidden">
+        <div className="relative sm:sticky sm:top-20 z-20 group/showcase w-full max-w-full">
+          <div className="relative rounded-2xl sm:rounded-3xl p-[1px] bg-gradient-to-b from-[#00638E]/60 via-[#2B2B2B] to-[#004A6B]/30 shadow-[0_0_50px_-10px_rgba(0,99,142,0.35)] transition-all duration-500 hover:shadow-[0_0_70px_-10px_rgba(0,99,142,0.5)] max-w-full">
+            <div className="rounded-[15px] sm:rounded-[23px] bg-[#0c0d12]/95 backdrop-blur-2xl shadow-2xl p-3.5 sm:p-6 overflow-hidden max-w-full">
           {/* Top Bar with View Switchers */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#2B2B2B]/60">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 border-b border-[#2B2B2B]/60 max-w-full">
+            <div className="flex items-center gap-2 shrink-0">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-rose-500/80" />
                 <span className="w-3 h-3 rounded-full bg-amber-500/80" />
                 <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
               </div>
-              <span className="ml-3 text-xs font-semibold text-slate-400">TaskFlow Workspace</span>
+              <span className="ml-2 text-xs font-semibold text-slate-400">TaskFlow Workspace</span>
             </div>
 
             {/* Interactive Tab Switcher */}
-            <div className="flex items-center p-1 rounded-xl bg-[#000000]/80 border border-[#2B2B2B] text-xs font-semibold">
+            <div className="flex items-center p-1 rounded-xl bg-[#000000]/80 border border-[#2B2B2B] text-xs font-semibold overflow-x-auto max-w-full w-full sm:w-auto no-scrollbar scrollbar-none min-w-0">
               <button
                 onClick={() => setActiveTab('kanban')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
                   activeTab === 'kanban'
                     ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
@@ -672,7 +718,7 @@ export default function LandingPage() {
               </button>
               <button
                 onClick={() => setActiveTab('grid')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
                   activeTab === 'grid'
                     ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
@@ -683,7 +729,7 @@ export default function LandingPage() {
               </button>
               <button
                 onClick={() => setActiveTab('calendar')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
                   activeTab === 'calendar'
                     ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
@@ -694,7 +740,7 @@ export default function LandingPage() {
               </button>
               <button
                 onClick={() => setActiveTab('vault')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
                   activeTab === 'vault'
                     ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
@@ -705,7 +751,7 @@ export default function LandingPage() {
               </button>
               <button
                 onClick={() => setActiveTab('teams')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer shrink-0 ${
                   activeTab === 'teams'
                     ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                     : 'text-slate-400 hover:text-white'
@@ -718,15 +764,15 @@ export default function LandingPage() {
           </div>
 
           {/* Interactive Tab Content */}
-          <div className="pt-6 min-h-[380px]">
+          <div className="pt-4 sm:pt-6 min-h-[360px] max-w-full">
             {activeTab === 'kanban' && (
-              <div className="space-y-3">
+              <div className="space-y-3 max-w-full">
                 {/* Drag-and-drop status & reset bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-1 text-xs text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-pulse" />
-                    <span className="text-[11px] font-medium text-slate-300">
-                      Drag task cards to any position or column • Drag column cards to reorder
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 pb-1 text-xs text-slate-400 max-w-full">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-2 w-2 rounded-full bg-[#00638E] animate-pulse shrink-0" />
+                    <span className="text-[11px] font-medium text-slate-300 leading-tight">
+                      Drag cards across columns • Drag columns to reorder
                     </span>
                   </div>
                   <button
@@ -738,7 +784,7 @@ export default function LandingPage() {
                       setDraggedColumnId(null)
                       setDragOverColumnId(null)
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#141414] hover:bg-[#202020] border border-[#2B2B2B] text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#141414] hover:bg-[#202020] border border-[#2B2B2B] text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 shrink-0 self-start xs:self-auto"
                     title="Reset to default arrangement"
                   >
                     <RotateCcw className="w-3 h-3 text-[#BFD8E3]" />
@@ -746,7 +792,7 @@ export default function LandingPage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full max-w-full">
                   {columns.map((col, colIdx) => {
                     const isColumnBeingDragged = draggedColumnId === col.id
                     const isColumnDropTarget = dragOverColumnId === col.id
@@ -759,7 +805,7 @@ export default function LandingPage() {
                         onDragOver={(e) => handleColumnContainerDragOver(e, col.id)}
                         onDrop={(e) => handleDrop(e, col.id)}
                         onDragEnd={handleDragEnd}
-                        className={`rounded-2xl border transition-all flex flex-col gap-2.5 p-3 min-h-[340px] select-none ${
+                        className={`rounded-2xl border transition-all flex flex-col gap-2.5 p-3 min-h-[300px] select-none w-full max-w-full min-w-0 ${
                           isColumnBeingDragged
                             ? 'opacity-35 scale-[0.98] border-[#00638E] ring-2 ring-[#00638E]/50'
                             : isColumnDropTarget
@@ -1024,43 +1070,45 @@ export default function LandingPage() {
             )}
 
             {activeTab === 'calendar' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400">
+              <div className="space-y-3 max-w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-400">
                   <span className="font-bold text-white">Sprint 24 • September 2026</span>
-                  <span>Drag tasks to change schedule</span>
+                  <span className="text-[11px]">Drag tasks to change schedule</span>
                 </div>
-                <div className="grid grid-cols-5 gap-2 text-center text-xs">
-                  {['Mon 14', 'Tue 15', 'Wed 16', 'Thu 17', 'Fri 18'].map((day, i) => (
-                    <div
-                      key={day}
-                      className="rounded-xl border border-[#2B2B2B] bg-[#000000]/50 p-3 flex flex-col gap-2 min-h-[160px]"
-                    >
-                      <span className="font-bold text-slate-400 text-[11px]">{day}</span>
-                      {i === 1 && (
-                        <div className="p-2 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-left text-[11px] font-semibold text-[#BFD8E3]">
-                          Sprint Planning
-                        </div>
-                      )}
-                      {i === 2 && (
-                        <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-left text-[11px] font-semibold text-amber-200">
-                          UI Review & Feedback
-                        </div>
-                      )}
-                      {i === 4 && (
-                        <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-left text-[11px] font-semibold text-emerald-200">
-                          Release v2.0
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto max-w-full pb-2 no-scrollbar">
+                  <div className="grid grid-cols-5 gap-2 text-center text-xs min-w-[480px]">
+                    {['Mon 14', 'Tue 15', 'Wed 16', 'Thu 17', 'Fri 18'].map((day, i) => (
+                      <div
+                        key={day}
+                        className="rounded-xl border border-[#2B2B2B] bg-[#000000]/50 p-2.5 sm:p-3 flex flex-col gap-2 min-h-[140px] sm:min-h-[160px]"
+                      >
+                        <span className="font-bold text-slate-400 text-[11px]">{day}</span>
+                        {i === 1 && (
+                          <div className="p-2 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-left text-[11px] font-semibold text-[#BFD8E3]">
+                            Sprint Planning
+                          </div>
+                        )}
+                        {i === 2 && (
+                          <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-left text-[11px] font-semibold text-amber-200">
+                            UI Review & Feedback
+                          </div>
+                        )}
+                        {i === 4 && (
+                          <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-left text-[11px] font-semibold text-emerald-200">
+                            Release v2.0
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
             {activeTab === 'vault' && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-[#000000]/60 border border-[#2B2B2B]">
-                  <div className="flex items-center gap-3">
+              <div className="space-y-4 max-w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#000000]/60 border border-[#2B2B2B]">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="text-xs font-bold text-white">Task-Linked Asset Vault</span>
                     <span className="px-2.5 py-1 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-[#BFD8E3] text-xs font-bold flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5" /> AES-256 Encrypted
@@ -1077,7 +1125,7 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs w-full max-w-full">
                   {SHOWCASE_DOCS.slice(0, 3).map((doc) => (
                     <div
                       key={doc.id}
@@ -1108,9 +1156,9 @@ export default function LandingPage() {
             )}
 
             {activeTab === 'teams' && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-[#000000]/60 border border-[#2B2B2B]">
-                  <div className="flex items-center gap-3">
+              <div className="space-y-4 max-w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#000000]/60 border border-[#2B2B2B]">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className="text-xs font-bold text-white">Teams & Projects Overview</span>
                     <span className="px-2.5 py-1 rounded-lg bg-[#00638E]/20 border border-[#00638E]/40 text-[#BFD8E3] text-xs font-bold flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5" /> {teamInvites.length} Pending Invitations
@@ -1215,11 +1263,11 @@ export default function LandingPage() {
         </div>
 
         {/* Vault Explorer Card */}
-        <div className="rounded-3xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-2xl shadow-2xl p-6 sm:p-8 space-y-6">
+        <div className="rounded-2xl sm:rounded-3xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-2xl shadow-2xl p-4 sm:p-7 space-y-6 max-w-full overflow-hidden">
           {/* Top Filter and Search Bar */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 pb-4 border-b border-[#2B2B2B]/60">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 pb-4 border-b border-[#2B2B2B]/60 max-w-full">
             {/* Category Pills */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 max-w-full">
               {[
                 { id: 'all', label: 'All Files', count: SHOWCASE_DOCS.length },
                 { id: 'architecture', label: 'Architecture & Code', count: 2 },
@@ -1232,7 +1280,7 @@ export default function LandingPage() {
                   key={cat.id}
                   type="button"
                   onClick={() => setDocCategory(cat.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                     docCategory === cat.id
                       ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                       : 'bg-[#1c1c1c] text-slate-400 hover:text-white hover:bg-[#252525] border border-[#2B2B2B]'
@@ -1249,7 +1297,7 @@ export default function LandingPage() {
             </div>
 
             {/* Search Input */}
-            <div className="relative min-w-[240px]">
+            <div className="relative w-full lg:w-72 max-w-full">
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -1474,14 +1522,14 @@ export default function LandingPage() {
           </div>
 
           {/* Right Column: Member Roster & RBAC Matrix Tabs */}
-          <div className="lg:col-span-2 rounded-3xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-2xl shadow-2xl p-6 sm:p-7 space-y-6">
+          <div className="lg:col-span-2 rounded-2xl sm:rounded-3xl border border-[#2B2B2B] bg-[#141414]/90 backdrop-blur-2xl shadow-2xl p-4 sm:p-7 space-y-6 max-w-full overflow-hidden">
             {/* Tab Navigation */}
-            <div className="flex items-center justify-between pb-4 border-b border-[#2B2B2B]/60">
-              <div className="flex items-center p-1 rounded-xl bg-[#000000]/80 border border-[#2B2B2B] text-xs font-semibold">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#2B2B2B]/60 max-w-full">
+              <div className="flex items-center p-1 rounded-xl bg-[#000000]/80 border border-[#2B2B2B] text-xs font-semibold overflow-x-auto max-w-full w-full sm:w-auto no-scrollbar scrollbar-none min-w-0">
                 <button
                   type="button"
                   onClick={() => setTeamTab('roster')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     teamTab === 'roster'
                       ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                       : 'text-slate-400 hover:text-white'
@@ -1493,7 +1541,7 @@ export default function LandingPage() {
                 <button
                   type="button"
                   onClick={() => setTeamTab('invites')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     teamTab === 'invites'
                       ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                       : 'text-slate-400 hover:text-white'
@@ -1505,7 +1553,7 @@ export default function LandingPage() {
                 <button
                   type="button"
                   onClick={() => setTeamTab('rbac')}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     teamTab === 'rbac'
                       ? 'bg-[#00638E] text-white shadow-sm shadow-[#00638E]/40'
                       : 'text-slate-400 hover:text-white'
@@ -1614,8 +1662,8 @@ export default function LandingPage() {
 
             {/* Tab 3: RBAC Matrix */}
             {teamTab === 'rbac' && (
-              <div className="overflow-x-auto rounded-xl border border-[#2B2B2B] bg-[#0c0d12]">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto max-w-full rounded-xl border border-[#2B2B2B] bg-[#0c0d12] custom-scrollbar">
+                <table className="w-full text-left text-xs min-w-[480px]">
                   <thead className="border-b border-[#2B2B2B] text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-[#141414]">
                     <tr>
                       <th className="p-3">Capability / Permission</th>
