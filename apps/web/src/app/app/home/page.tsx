@@ -10,6 +10,13 @@ import { useProjectStore } from '@/stores/project-store'
 import { DashboardSkeleton } from '@/components/loading'
 import { usePermissions } from '@/hooks/usePermissions'
 import {
+  calculateWeightedProgress,
+  isCompletedTask,
+  isInReviewTask,
+  isInProgressTask,
+  isTodoTask,
+} from '@/lib/progress'
+import {
   CheckCircle2,
   CheckSquare,
   Clock,
@@ -65,16 +72,10 @@ export default function DashboardPage() {
   }
 
   const totalTasks = tasks.length
-  const todoTasks = tasks.filter(t => t.status === 'todo').length
-  const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length
-  const inReviewTasks = tasks.filter(t => t.status === 'in_review').length
-  const completedTasks = tasks.filter(t => t.status === 'done').length
-
-  const weightedProgress = totalTasks > 0
-    ? Math.round(
-      (completedTasks * 100 + inReviewTasks * 75 + inProgressTasks * 35 + todoTasks * 0) / totalTasks
-    )
-    : 0
+  const completedTasks = tasks.filter((t) => isCompletedTask(t)).length
+  const inReviewTasks = tasks.filter((t) => isInReviewTask(t)).length
+  const inProgressTasks = tasks.filter((t) => isInProgressTask(t)).length
+  const weightedProgress = calculateWeightedProgress(tasks)
 
   const handleToggleTask = async (task: Task) => {
     const nextStatus = task.status === 'done' ? 'todo' : 'done'
@@ -105,7 +106,7 @@ export default function DashboardPage() {
     {
       label: 'Sprint Progress',
       value: `${weightedProgress}%`,
-      change: 'Weighted across all 4 stages',
+      change: 'Weighted across all stages',
       trend: 'up',
       icon: TrendingUp,
       color: 'text-primary bg-primary/10',
@@ -222,52 +223,79 @@ export default function DashboardPage() {
                 No active projects. Click &quot;New Project&quot; to create one.
               </div>
             ) : (
-              projects.slice(0, 3).map((project) => (
-                <div
-                  key={project.id}
-                  onClick={() => router.push('/app/projects')}
-                  className="p-5 rounded-2xl bg-card border border-border/80 shadow-sm hover:border-primary/40 transition-all group cursor-pointer"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: project.color || '#6366F1' }}
-                        />
-                        <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                          {project.name}
-                        </h3>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
-                          {project.status}
-                        </span>
+              projects.slice(0, 3).map((project) => {
+                const projectTasks = tasks.filter((t) => t.projectId === project.id)
+                const projTotal = projectTasks.length > 0 ? projectTasks.length : (project.totalTasks || 0)
+                const projCompleted = projectTasks.length > 0 ? projectTasks.filter(isCompletedTask).length : (project.completedTasks || 0)
+                const projProgress = projectTasks.length > 0 ? calculateWeightedProgress(projectTasks) : (project.progress || 0)
+
+                let envList: string[] = ['DEV', 'SIT', 'UAT', 'RELEASE', 'MAIN']
+                try {
+                  if (project.environments) {
+                    const parsed = JSON.parse(project.environments)
+                    if (Array.isArray(parsed) && parsed.length > 0) envList = parsed
+                  }
+                } catch {
+                  if (typeof project.environments === 'string' && project.environments.trim()) {
+                    envList = project.environments.split(',').map((e) => e.trim())
+                  }
+                }
+
+                return (
+                  <div
+                    key={project.id}
+                    onClick={() => router.push(`/app/projects/${project.id}`)}
+                    className="p-5 rounded-2xl bg-card border border-border/80 shadow-sm hover:border-primary/40 transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-3 h-3 rounded-full shrink-0 shadow-xs"
+                            style={{ backgroundColor: project.color || '#6366F1' }}
+                          />
+                          <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                            {project.name}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary uppercase">
+                            {project.status || 'ACTIVE'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{project.description}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{project.description}</p>
+                      <span className="text-xs font-bold text-foreground">{projProgress}%</span>
                     </div>
-                    <span className="text-xs font-bold text-foreground">{project.progress || 0}%</span>
-                  </div>
 
-                  {/* Progress bar */}
-                  <div className="mt-4 space-y-1.5">
-                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all"
-                        style={{ width: `${project.progress || 0}%` }}
-                      />
+                    {/* Progress bar */}
+                    <div className="mt-4 space-y-1.5">
+                      <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+                          style={{ width: `${projProgress}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <Users2 className="w-3.5 h-3.5" />
-                      <span>{project.completedTasks || 0}/{project.totalTasks || 0} tasks completed</span>
+                    <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50 flex-wrap gap-2">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <Users2 className="w-3.5 h-3.5" />
+                        <span>{projCompleted}/{projTotal} tasks completed</span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[10px] font-semibold text-muted-foreground mr-1">Pipeline:</span>
+                        {envList.map((env) => (
+                          <span
+                            key={env}
+                            className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border ${getEnvBadgeStyle(env)}`}
+                          >
+                            {env}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <span className="text-[10px] font-bold text-primary">
-                      Pipeline: {project.environments || 'DEV,UAT,MAIN'}
-                    </span>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

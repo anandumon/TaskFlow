@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
 import { query, queryOne } from '@/server/db/postgres'
+import { sortStatusesByStructure } from '@/lib/status-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,11 @@ export async function GET(
     )
 
     if (ws?.settings?.statuses && Array.isArray(ws.settings.statuses) && ws.settings.statuses.length > 0) {
-      return apiSuccess(ws.settings.statuses)
+      const sorted = sortStatusesByStructure(ws.settings.statuses).map((s: any, idx: number) => ({
+        ...s,
+        order: idx,
+      }))
+      return apiSuccess(sorted)
     }
 
     // 2. If not stored in settings, detect from existing tasks in workspace
@@ -35,7 +40,8 @@ export async function GET(
 
     const existingStatusIds = taskRows.map((r: any) => r.status).filter(Boolean)
 
-    // Build intelligent workspace statuses matching production
+    // Build intelligent workspace statuses matching canonical production lifecycle:
+    // TO DO -> ON HOLD -> IN PROGRESS -> IN DEV -> IN REVIEW -> IN SIT -> IN UAT -> RELEASE -> COMPLETED
     const defaultList: any[] = [
       { id: 'todo', name: 'TO DO', color: '#87909e', category: 'NOT_STARTED', order: 0, isDefault: true },
     ]
@@ -43,25 +49,26 @@ export async function GET(
     // Check known custom status patterns
     if (existingStatusIds.some((s: string) => s.includes('on_hold') || s === 'on_hold_9074')) {
       const matchId = existingStatusIds.find((s: string) => s.includes('on_hold')) || 'on_hold_9074'
-      defaultList.push({ id: matchId, name: 'ON HOLD', color: '#87909e', category: 'ACTIVE', order: defaultList.length })
+      defaultList.push({ id: matchId, name: 'ON HOLD', color: '#87909e', category: 'NOT_STARTED', order: defaultList.length })
     }
 
     defaultList.push({ id: 'in_progress', name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: defaultList.length })
-    defaultList.push({ id: 'in_review', name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: defaultList.length })
 
-    if (existingStatusIds.some((s: string) => s === 'in_dev_7722' || s === 'in_dev')) {
+    if (existingStatusIds.some((s: string) => s === 'in_dev_7722' || s === 'in_dev' || s.includes('dev'))) {
       const matchId = existingStatusIds.find((s: string) => s === 'in_dev_7722') || 'in_dev_7722'
       defaultList.push({ id: matchId, name: 'IN DEV', color: '#0ea5e9', category: 'ACTIVE', order: defaultList.length })
+    }
+
+    defaultList.push({ id: 'in_review', name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: defaultList.length })
+
+    if (existingStatusIds.some((s: string) => s === 'in_sit_2471' || s.includes('sit'))) {
+      const matchId = existingStatusIds.find((s: string) => s.includes('sit')) || 'in_sit_2471'
+      defaultList.push({ id: matchId, name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: defaultList.length })
     }
 
     if (existingStatusIds.some((s: string) => s === 'in_uat_3343' || s.includes('uat'))) {
       const matchId = existingStatusIds.find((s: string) => s.includes('uat')) || 'in_uat_3343'
       defaultList.push({ id: matchId, name: 'IN UAT', color: '#06b6d4', category: 'ACTIVE', order: defaultList.length })
-    }
-
-    if (existingStatusIds.some((s: string) => s === 'in_sit_2471' || s.includes('sit'))) {
-      const matchId = existingStatusIds.find((s: string) => s.includes('sit')) || 'in_sit_2471'
-      defaultList.push({ id: matchId, name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: defaultList.length })
     }
 
     if (existingStatusIds.some((s: string) => s === 'release_5155' || s.includes('release'))) {
@@ -71,15 +78,20 @@ export async function GET(
 
     defaultList.push({ id: 'done', name: 'COMPLETED', color: '#10b981', category: 'CLOSED', order: defaultList.length })
 
+    const normalizedList = sortStatusesByStructure(defaultList).map((s: any, idx: number) => ({
+      ...s,
+      order: idx,
+    }))
+
     // Auto-persist into workspace settings for persistent consistency
     await query(
       `UPDATE workspaces 
        SET settings = jsonb_set(COALESCE(settings, '{}'::jsonb), '{statuses}', $1::jsonb) 
        WHERE id = $2`,
-      [JSON.stringify(defaultList), workspaceId]
+      [JSON.stringify(normalizedList), workspaceId]
     )
 
-    return apiSuccess(defaultList)
+    return apiSuccess(normalizedList)
   } catch (err: any) {
     console.error('[workspace statuses API] Error:', err)
     return apiError(err.message || 'Failed to fetch statuses', 500)

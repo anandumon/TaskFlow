@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Hash,
@@ -46,7 +47,9 @@ import {
   Edit3,
   Check,
   AlertCircle,
+  ArrowRight,
 } from 'lucide-react'
+import { calculateWeightedProgress, matchTaskStatus, isCompletedTask } from '@/lib/progress'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -1209,6 +1212,89 @@ export default function MessagesPage() {
                 <Video className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Subheader Status & Deliverables Bar for Active Channels */}
+        {activeChannel && (
+          <div className="min-h-10 border-b border-border/70 px-4 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2.5 bg-card/30 backdrop-blur-md shrink-0 text-xs animate-fade-in">
+            {(() => {
+              const channelProject = projects.find(
+                (p) =>
+                  (activeChannel.projectName && p.name.toLowerCase() === activeChannel.projectName.toLowerCase()) ||
+                  (activeChannel.name && p.name.toLowerCase() === activeChannel.name.toLowerCase()) ||
+                  (activeChannel.name && activeChannel.name.toLowerCase().includes(p.name.toLowerCase()))
+              )
+              const channelTasks = channelProject
+                ? tasks.filter((t) => t.projectId === channelProject.id)
+                : tasks
+
+              const devCount = channelTasks.filter((t) => matchTaskStatus(t.status, 'in_dev')).length
+              const sitCount = channelTasks.filter((t) => matchTaskStatus(t.status, 'in_sit')).length
+              const uatCount = channelTasks.filter((t) => matchTaskStatus(t.status, 'in_uat')).length
+              const doneCount = channelTasks.filter((t) => isCompletedTask(t)).length
+              const weightedProg = calculateWeightedProgress(channelTasks)
+
+              return (
+                <>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-bold text-foreground flex items-center gap-1 mr-1">
+                      <FolderKanban className="w-3.5 h-3.5 text-primary" />
+                      <span>{channelProject ? channelProject.name : 'Deliverables'}:</span>
+                    </span>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-muted text-muted-foreground border border-border">
+                      {channelTasks.length} Total
+                    </span>
+
+                    {devCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">
+                        {devCount} IN DEV
+                      </span>
+                    )}
+
+                    {sitCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                        {sitCount} IN SIT
+                      </span>
+                    )}
+
+                    {uatCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                        {uatCount} IN UAT
+                      </span>
+                    )}
+
+                    {doneCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        {doneCount} DONE
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 ml-auto">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground">Progress:</span>
+                      <div className="w-20 sm:w-28 h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+                          style={{ width: `${weightedProg}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-black text-primary">{weightedProg}%</span>
+                    </div>
+
+                    <Link
+                      href={channelProject ? `/app/projects/${channelProject.id}` : '/app/tasks'}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline transition-colors"
+                    >
+                      <span>View Tasks</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         )}
 

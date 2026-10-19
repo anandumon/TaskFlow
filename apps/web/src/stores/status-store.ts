@@ -2,24 +2,17 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import {
+  StatusCategory,
+  CustomStatus,
+  StatusTemplate,
+  CATEGORY_RANK,
+  getStatusCanonicalRank,
+  sortStatusesByStructure,
+} from '@/lib/status-utils'
 
-export type StatusCategory = 'NOT_STARTED' | 'ACTIVE' | 'DONE' | 'CLOSED'
-
-export interface CustomStatus {
-  id: string
-  name: string
-  color: string
-  category: StatusCategory
-  order: number
-  isDefault?: boolean
-}
-
-export interface StatusTemplate {
-  id: string
-  name: string
-  description: string
-  statuses: Omit<CustomStatus, 'id'>[]
-}
+export type { StatusCategory, CustomStatus, StatusTemplate }
+export { CATEGORY_RANK, getStatusCanonicalRank, sortStatusesByStructure }
 
 export const BUILT_IN_TEMPLATES: Record<string, StatusTemplate> = {
   default: {
@@ -30,6 +23,22 @@ export const BUILT_IN_TEMPLATES: Record<string, StatusTemplate> = {
       { name: 'TO DO', color: '#87909e', category: 'NOT_STARTED', order: 0, isDefault: true },
       { name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 1 },
       { name: 'COMPLETE', color: '#10b981', category: 'CLOSED', order: 2 },
+    ],
+  },
+  taskflow: {
+    id: 'taskflow',
+    name: 'TaskFlow Multi-Stage (DEV → SIT → UAT → RELEASE)',
+    description: 'Full multi-environment delivery pipeline with Git promotion',
+    statuses: [
+      { name: 'TO DO', color: '#87909e', category: 'NOT_STARTED', order: 0, isDefault: true },
+      { name: 'ON HOLD', color: '#87909e', category: 'NOT_STARTED', order: 1 },
+      { name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 2 },
+      { name: 'IN DEV', color: '#0ea5e9', category: 'ACTIVE', order: 3 },
+      { name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: 4 },
+      { name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: 5 },
+      { name: 'IN UAT', color: '#06b6d4', category: 'ACTIVE', order: 6 },
+      { name: 'RELEASE', color: '#6366f1', category: 'ACTIVE', order: 7 },
+      { name: 'COMPLETED', color: '#10b981', category: 'CLOSED', order: 8 },
     ],
   },
   kanban: {
@@ -70,24 +79,6 @@ export const BUILT_IN_TEMPLATES: Record<string, StatusTemplate> = {
   },
 }
 
-export const CATEGORY_RANK: Record<StatusCategory, number> = {
-  NOT_STARTED: 0,
-  ACTIVE: 1,
-  DONE: 2,
-  CLOSED: 3,
-}
-
-export function sortStatusesByStructure(statuses: CustomStatus[]): CustomStatus[] {
-  return [...statuses].sort((a, b) => {
-    const rankA = CATEGORY_RANK[a.category] ?? 1
-    const rankB = CATEGORY_RANK[b.category] ?? 1
-    if (rankA !== rankB) {
-      return rankA - rankB
-    }
-    return (a.order ?? 0) - (b.order ?? 0)
-  })
-}
-
 interface StatusStore {
   workspaceStatuses: Record<string, CustomStatus[]>
   selectedTemplate: Record<string, string>
@@ -105,9 +96,14 @@ interface StatusStore {
 
 const DEFAULT_STATUSES: CustomStatus[] = [
   { id: 'todo', name: 'TO DO', color: '#87909e', category: 'NOT_STARTED', order: 0, isDefault: true },
-  { id: 'in_progress', name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 1 },
-  { id: 'in_review', name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: 2 },
-  { id: 'done', name: 'COMPLETE', color: '#10b981', category: 'CLOSED', order: 3 },
+  { id: 'on_hold_9074', name: 'ON HOLD', color: '#87909e', category: 'NOT_STARTED', order: 1 },
+  { id: 'in_progress', name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 2 },
+  { id: 'in_dev_7722', name: 'IN DEV', color: '#0ea5e9', category: 'ACTIVE', order: 3 },
+  { id: 'in_review', name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: 4 },
+  { id: 'in_sit_2471', name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: 5 },
+  { id: 'in_uat_3343', name: 'IN UAT', color: '#06b6d4', category: 'ACTIVE', order: 6 },
+  { id: 'release_5155', name: 'RELEASE', color: '#6366f1', category: 'ACTIVE', order: 7 },
+  { id: 'done', name: 'COMPLETED', color: '#10b981', category: 'CLOSED', order: 8 },
 ]
 
 export const useStatusStore = create<StatusStore>()(

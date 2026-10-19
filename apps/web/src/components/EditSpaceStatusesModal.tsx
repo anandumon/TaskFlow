@@ -24,6 +24,8 @@ import {
   BUILT_IN_TEMPLATES,
   sortStatusesByStructure,
 } from '@/stores/status-store'
+import { useTaskStore } from '@/stores/task-store'
+import { getTaskCountForStatus, matchTaskStatus } from '@/lib/progress'
 import { Portal } from '@/components/ui/portal'
 
 interface EditSpaceStatusesModalProps {
@@ -67,6 +69,7 @@ export function EditSpaceStatusesModal({
     progressIconsEnabled,
     toggleProgressIcons,
   } = useStatusStore()
+  const { tasks } = useTaskStore()
 
   const [localStatuses, setLocalStatuses] = useState<CustomStatus[]>([])
   const [templateKey, setTemplateKey] = useState('custom')
@@ -273,6 +276,9 @@ export function EditSpaceStatusesModal({
                   <option value="custom" className="bg-[#161028] text-white">
                     Custom
                   </option>
+                  <option value="taskflow" className="bg-[#161028] text-white">
+                    TaskFlow Pipeline (DEV → SIT → UAT → RELEASE)
+                  </option>
                   <option value="default" className="bg-[#161028] text-white">
                     Normal (To Do, In Progress, Complete)
                   </option>
@@ -326,15 +332,19 @@ export function EditSpaceStatusesModal({
           <div className="flex-1 p-6 overflow-y-auto space-y-6">
             {categories.map((cat) => {
               const catStatuses = localStatuses.filter((s) => s.category === cat.key)
+              const catTaskCount = catStatuses.reduce(
+                (sum, st) => sum + getTaskCountForStatus(tasks, st.id),
+                0
+              )
 
               return (
                 <div key={cat.key} className="space-y-2.5">
                   {/* Category Header */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-white/80">
+                    <div className="flex items-center gap-2 text-xs font-bold text-white/80">
                       <span>{cat.label}</span>
-                      <span className="text-white/30 text-[11px] font-normal" title={cat.desc}>
-                        ({catStatuses.length})
+                      <span className="text-white/40 text-[11px] font-medium" title={cat.desc}>
+                        ({catStatuses.length} {catStatuses.length === 1 ? 'status' : 'statuses'} • {catTaskCount} {catTaskCount === 1 ? 'task' : 'tasks'})
                       </span>
                     </div>
 
@@ -434,7 +444,6 @@ export function EditSpaceStatusesModal({
                             )}
                           </div>
 
-                          {/* Editable Name */}
                           {editingNameStatusId === st.id ? (
                             <input
                               type="text"
@@ -466,15 +475,32 @@ export function EditSpaceStatusesModal({
                               className="bg-white/10 px-2 py-0.5 rounded text-xs font-bold text-white uppercase focus:outline-none focus:ring-1 focus:ring-primary w-48"
                             />
                           ) : (
-                            <span
-                              onClick={() => {
-                                setEditingNameStatusId(st.id)
-                                setTempEditName(st.name)
-                              }}
-                              className="text-xs font-bold text-white tracking-wide truncate cursor-pointer hover:underline"
-                            >
-                              {st.name}
-                            </span>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                onClick={() => {
+                                  setEditingNameStatusId(st.id)
+                                  setTempEditName(st.name)
+                                }}
+                                className="text-xs font-bold text-white tracking-wide truncate cursor-pointer hover:underline"
+                              >
+                                {st.name}
+                              </span>
+                              {(() => {
+                                const count = getTaskCountForStatus(tasks, st.id)
+                                return (
+                                  <span
+                                    className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 transition-colors ${
+                                      count > 0
+                                        ? 'bg-[#00638E]/25 text-[#BFD8E3] border-[#00638E]/50 shadow-xs'
+                                        : 'bg-white/[0.04] text-white/30 border-white/[0.06]'
+                                    }`}
+                                    title={`${count} deliverable${count === 1 ? '' : 's'} with status ${st.name}`}
+                                  >
+                                    {count} {count === 1 ? 'task' : 'tasks'}
+                                  </span>
+                                )
+                              })()}
+                            </div>
                           )}
                         </div>
 

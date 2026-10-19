@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db/postgres'
 import crypto from 'crypto'
+import { calculateWeightedProgress, isCompletedTask } from '../../lib/progress'
 
 export interface ProjectDto {
   id: string
@@ -18,7 +19,7 @@ export interface ProjectDto {
   updatedAt: string
 }
 
-function mapProject(row: any, counts?: { total: number; completed: number }): ProjectDto {
+function mapProject(row: any, counts?: { total: number; completed: number; progress?: number }): ProjectDto {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id || row.workspaceId),
@@ -26,7 +27,7 @@ function mapProject(row: any, counts?: { total: number; completed: number }): Pr
     slug: row.slug || row.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     description: row.description || '',
     status: row.status || 'ACTIVE',
-    progress: Number(row.progress || 0),
+    progress: typeof counts?.progress === 'number' ? counts.progress : Number(row.progress || 0),
     color: row.color || '#3b82f6',
     icon: row.icon || 'Folder',
     environments: row.environments || 'DEV,SIT,UAT,RELEASE,MAIN',
@@ -145,21 +146,29 @@ export async function getProjectsByWorkspace(workspaceId: string, userId?: strin
     const projects = await query(projectsSql, params)
 
     const tasks = await query(
-      `SELECT id, project_id, status FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`,
+      `SELECT id, project_id, status, environment, progress, subtasks FROM tasks WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`,
       [workspaceId]
     )
 
-    const taskStats = new Map<string, { total: number; completed: number }>()
+    const projectTasksMap = new Map<string, any[]>()
     for (const t of tasks) {
       if (!t.project_id) continue
       const pid = String(t.project_id)
-      const curr = taskStats.get(pid) || { total: 0, completed: 0 }
-      curr.total += 1
-      if (t.status === 'done' || t.status === 'COMPLETED') {
-        curr.completed += 1
-      }
-      taskStats.set(pid, curr)
+      const list = projectTasksMap.get(pid) || []
+      list.push(t)
+      projectTasksMap.set(pid, list)
     }
+
+    const taskStats = new Map<string, { total: number; completed: number; progress: number }>()
+    projectTasksMap.forEach((pTasks: any[], pid: string) => {
+      const completed = pTasks.filter((t: any) => isCompletedTask(t)).length
+      const progress = calculateWeightedProgress(pTasks)
+      taskStats.set(pid, {
+        total: pTasks.length,
+        completed,
+        progress,
+      })
+    })
 
     return projects.map((p) => mapProject(p, taskStats.get(String(p.id))))
   } catch (err) {

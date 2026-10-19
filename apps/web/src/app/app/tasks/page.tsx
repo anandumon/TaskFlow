@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   CheckSquare,
@@ -23,8 +23,8 @@ import {
   Folder,
   FolderOpen,
   FileText,
-  FileCode,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   ChevronUp,
   Bell,
@@ -61,7 +61,7 @@ import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-s
 import { TaskAttachment, TaskComment } from '@/types'
 import { FileViewerModal, FileToView } from '@/components/file-viewer-modal'
 import { useProjectStore } from '@/stores/project-store'
-import { useStatusStore, CustomStatus } from '@/stores/status-store'
+import { useStatusStore, CustomStatus, sortStatusesByStructure } from '@/stores/status-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { usePermissions } from '@/hooks/usePermissions'
 import { Portal } from '@/components/ui/portal'
@@ -71,6 +71,12 @@ import { EditSpaceStatusesModal } from '@/components/EditSpaceStatusesModal'
 import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
 import { getFirstName } from '@/lib/utils'
 import { isBugTask, isFeatureTask, getEnvForStatus } from '@/lib/task-category'
+import {
+  calculateWeightedProgress,
+  getTaskProgress,
+  matchTaskStatus,
+  isCompletedTask,
+} from '@/lib/progress'
 
 interface AssignableUser {
   id: string
@@ -388,16 +394,8 @@ export default function TasksPage() {
   const totalDeliverablesCount = tasks.length
   const bugTasksCount = tasks.filter(isBugTask).length
   const featureTasksCount = tasks.filter(isFeatureTask).length
-  const completedTasksCount = tasks.filter(
-    (t) =>
-      t.status === 'done' ||
-      t.status === 'completed' ||
-      t.status === 'closed' ||
-      t.status?.toLowerCase() === 'complete'
-  ).length
-  const weightedProgress = totalDeliverablesCount > 0
-    ? Math.round((completedTasksCount / totalDeliverablesCount) * 100)
-    : 0
+  const completedTasksCount = tasks.filter((t) => isCompletedTask(t)).length
+  const weightedProgress = calculateWeightedProgress(tasks)
 
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({})
   const [expandedTreeStatuses, setExpandedTreeStatuses] = useState<Record<string, boolean>>({
@@ -558,19 +556,7 @@ export default function TasksPage() {
   }
 
   const calculateTaskProgress = (task: Task): number => {
-    let subtaskList: any[] = []
-    try {
-      if (task.subtasks) subtaskList = JSON.parse(task.subtasks)
-    } catch {}
-    if (Array.isArray(subtaskList) && subtaskList.length > 0) {
-      const done = subtaskList.filter((s) => s.completed).length
-      return Math.round((done / subtaskList.length) * 100)
-    }
-    if (task.progress != null && task.progress > 0) return task.progress
-    if (task.status === 'done') return 100
-    if (task.status === 'in_review') return 75
-    if (task.status === 'in_progress') return 50
-    return 0
+    return getTaskProgress(task)
   }
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -586,33 +572,73 @@ export default function TasksPage() {
     const seen = new Set(list.map((s) => s.id))
 
     const getStatusMeta = (id: string) => {
-      if (id === 'on_hold_9074' || id.includes('on_hold')) return { name: 'ON HOLD', color: '#87909e', order: 1 }
-      if (id === 'in_dev_7722' || id === 'in_dev') return { name: 'IN DEV', color: '#0ea5e9', order: 4 }
-      if (id === 'in_uat_3343' || id.includes('uat')) return { name: 'IN UAT', color: '#06b6d4', order: 5 }
-      if (id === 'in_sit_2471' || id.includes('sit')) return { name: 'IN SIT', color: '#3b82f6', order: 6 }
-      if (id === 'release_5155' || id.includes('release')) return { name: 'RELEASE', color: '#6366f1', order: 7 }
+      if (id === 'on_hold_9074' || id.includes('on_hold')) return { name: 'ON HOLD', color: '#87909e', category: 'NOT_STARTED', order: 1 }
+      if (id === 'in_progress' || id === 'progress') return { name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 2 }
+      if (id === 'in_dev_7722' || id === 'in_dev' || id.includes('dev')) return { name: 'IN DEV', color: '#0ea5e9', category: 'ACTIVE', order: 3 }
+      if (id === 'in_review' || id.includes('review')) return { name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: 4 }
+      if (id === 'in_sit_2471' || id.includes('sit')) return { name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: 5 }
+      if (id === 'in_uat_3343' || id.includes('uat')) return { name: 'IN UAT', color: '#06b6d4', category: 'ACTIVE', order: 6 }
+      if (id === 'release_5155' || id.includes('release')) return { name: 'RELEASE', color: '#6366f1', category: 'ACTIVE', order: 7 }
+      if (id === 'done' || id === 'completed' || id === 'complete') return { name: 'COMPLETED', color: '#10b981', category: 'CLOSED', order: 8 }
       const clean = id.replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase()
-      return { name: clean, color: '#0284c7', order: 99 }
+      return { name: clean, color: '#0284c7', category: 'ACTIVE', order: 99 }
     }
 
     // Inject any status present on workspace tasks
     tasks.forEach((t) => {
       if (t.status && !seen.has(t.status)) {
         if (t.status === 'in_dev' && (seen.has('in_dev_7722') || list.some((s) => s.id === 'in_dev_7722'))) return
+        if (t.status === 'in_sit' && (seen.has('in_sit_2471') || list.some((s) => s.id === 'in_sit_2471'))) return
+        if (t.status === 'in_uat' && (seen.has('in_uat_3343') || list.some((s) => s.id === 'in_uat_3343'))) return
+        if (t.status === 'release' && (seen.has('release_5155') || list.some((s) => s.id === 'release_5155'))) return
         seen.add(t.status)
         const meta = getStatusMeta(t.status)
         list.push({
           id: t.status,
           name: meta.name,
           color: meta.color,
-          category: 'ACTIVE',
+          category: (meta.category as any) || 'ACTIVE',
           order: meta.order,
         })
       }
     })
 
-    return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    return sortStatusesByStructure(list).map((s, idx) => ({ ...s, order: idx }))
   }, [rawWorkspaceStatuses, tasks])
+
+  // Status Slider Track scrolling state and handlers
+  const statusTrackRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkStatusScroll = useCallback(() => {
+    if (!statusTrackRef.current) return
+    const { scrollLeft, scrollWidth, clientWidth } = statusTrackRef.current
+    setCanScrollLeft(scrollLeft > 6)
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 6)
+  }, [])
+
+  const slideStatusTrack = (direction: 'left' | 'right') => {
+    if (!statusTrackRef.current) return
+    const scrollAmount = 260
+    statusTrackRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    })
+  }
+
+  useEffect(() => {
+    const el = statusTrackRef.current
+    if (!el) return
+    const timer = setTimeout(checkStatusScroll, 100)
+    el.addEventListener('scroll', checkStatusScroll, { passive: true })
+    window.addEventListener('resize', checkStatusScroll)
+    return () => {
+      clearTimeout(timer)
+      el.removeEventListener('scroll', checkStatusScroll)
+      window.removeEventListener('resize', checkStatusScroll)
+    }
+  }, [checkStatusScroll, workspaceStatuses, tasks])
 
   // Toast notification helper
   const showToast = (msg: string) => {
@@ -1416,9 +1442,8 @@ export default function TasksPage() {
     const matchesProj = filterProject === 'all' || t.projectId === filterProject
     const matchesStatusTab =
       selectedStatusTab === 'all' ||
-      t.status === selectedStatusTab ||
-      (selectedStatusTab === 'in_dev_7722' && t.status === 'in_dev') ||
-      (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
+      matchTaskStatus(t.status, selectedStatusTab) ||
+      (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => matchTaskStatus(t.status, ws.id)))
     const isBug = isBugTask(t)
     const matchesCategory =
       activeCategoryTab === 'all'
@@ -1573,119 +1598,135 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Controls Bar: Category Filter, Project Filter, Tag Filter & View Switcher */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-card/80 border border-border/80 p-3.5 rounded-2xl shadow-xs">
-          {/* Category Tabs (All Tasks, Bugs & Fixes, Features) matching Screenshot 2 */}
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
-            <button
-              onClick={() => setActiveCategoryTab('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeCategoryTab === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-muted/70 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              All Tasks ({tasks.length})
-            </button>
-            <button
-              onClick={() => setActiveCategoryTab('bugs')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 ${
-                activeCategoryTab === 'bugs'
-                  ? 'bg-rose-500 text-white shadow-xs'
-                  : 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/20'
-              }`}
-            >
-              <Bug className="w-3.5 h-3.5" /> Bugs &amp; Fixes ({bugTasksCount})
-            </button>
-            <button
-              onClick={() => setActiveCategoryTab('features')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 ${
-                activeCategoryTab === 'features'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" /> Features ({featureTasksCount})
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Project Filter */}
-            {projects.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-background/80 px-3 py-1.5 rounded-xl border border-border text-xs">
-                <FolderKanban className="w-3.5 h-3.5 text-primary" />
-                <select
-                  value={filterProject}
-                  onChange={(e) => setFilterProject(e.target.value)}
-                  className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
-                >
-                  <option value="all">All Projects ({projects.length})</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Tag Filter */}
-            <div className="flex items-center gap-1.5 bg-background/80 px-3 py-1.5 rounded-xl border border-border text-xs">
-              <Filter className="w-3.5 h-3.5 text-primary" />
-              <select
-                value={filterTag}
-                onChange={(e) => setFilterTag(e.target.value)}
-                className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium"
+        {/* Controls Bar: Category Filter, Project Filter, Tag Filter, View Switcher & Dispatch Alerts */}
+        <div className="bg-card/80 border border-border/80 p-3 sm:p-3.5 rounded-2xl shadow-xs space-y-3">
+          {/* Row 1: Category Tabs & View Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            {/* Category Tabs (All Tasks, Bugs & Fixes, Features) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0 max-w-full">
+              <button
+                type="button"
+                onClick={() => setActiveCategoryTab('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  activeCategoryTab === 'all'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'bg-muted/70 text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <option value="all">All Tags ({tasks.length})</option>
-                <option value="Frontend">Frontend</option>
-                <option value="Backend">Backend</option>
-                <option value="Design">Design</option>
-                <option value="DevOps">DevOps</option>
-                <option value="Architecture">Architecture</option>
-                <option value="Bug Fix">Bug Fix</option>
-              </select>
+                All Tasks ({tasks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategoryTab('bugs')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                  activeCategoryTab === 'bugs'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'bg-rose-500/10 text-rose-600 hover:bg-rose-500/20'
+                }`}
+              >
+                <Bug className="w-3.5 h-3.5" /> Bugs &amp; Fixes ({bugTasksCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategoryTab('features')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                  activeCategoryTab === 'features'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Features ({featureTasksCount})
+              </button>
             </div>
-          </div>
 
             {/* View Switcher: Minimal Grid, List, and Tree / Graph */}
-            <div className="flex items-center p-1 bg-[#000000]/80 backdrop-blur-md rounded-xl border border-[#2B2B2B] shadow-xs">
+            <div className="grid grid-cols-3 sm:flex items-center p-1 bg-[#000000]/80 backdrop-blur-md rounded-xl border border-[#2B2B2B] shadow-xs self-stretch sm:self-auto">
               <button
+                type="button"
                 onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'grid'
                     ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="Minimal Liquid Glass Grid View"
               >
-                <LayoutGrid className="w-3.5 h-3.5 text-[#BFD8E3]" /> Grid
+                <LayoutGrid className="w-3.5 h-3.5 text-[#BFD8E3]" />
+                <span>Grid</span>
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'list'
                     ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="Compact List View"
               >
-                <List className="w-3.5 h-3.5 text-[#BFD8E3]" /> List
+                <List className="w-3.5 h-3.5 text-[#BFD8E3]" />
+                <span>List</span>
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('tree')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === 'tree'
                     ? 'bg-[#141414] text-white border border-[#2B2B2B] shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
                 title="Interactive Status & Project Hierarchy Graph"
               >
-                <GitBranch className="w-3.5 h-3.5 text-[#BFD8E3]" /> Tree / Graph
+                <GitBranch className="w-3.5 h-3.5 text-[#BFD8E3]" />
+                <span className="truncate">Tree / Graph</span>
               </button>
+            </div>
+          </div>
+
+          {/* Row 2: Project & Tag Filters + Dispatch Alerts */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-border/50">
+            {/* Project & Tag Selects */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+              {/* Project Filter */}
+              {projects.length > 0 && (
+                <div className="flex items-center gap-1.5 bg-background/80 px-2.5 py-1.5 rounded-xl border border-border text-xs min-w-0">
+                  <FolderKanban className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <select
+                    value={filterProject}
+                    onChange={(e) => setFilterProject(e.target.value)}
+                    className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium w-full truncate"
+                  >
+                    <option value="all">All Projects ({projects.length})</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Tag Filter */}
+              <div className="flex items-center gap-1.5 bg-background/80 px-2.5 py-1.5 rounded-xl border border-border text-xs min-w-0">
+                <Filter className="w-3.5 h-3.5 text-primary shrink-0" />
+                <select
+                  value={filterTag}
+                  onChange={(e) => setFilterTag(e.target.value)}
+                  className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer font-medium w-full truncate"
+                >
+                  <option value="all">All Tags ({tasks.length})</option>
+                  <option value="Frontend">Frontend</option>
+                  <option value="Backend">Backend</option>
+                  <option value="Design">Design</option>
+                  <option value="DevOps">DevOps</option>
+                  <option value="Architecture">Architecture</option>
+                  <option value="Bug Fix">Bug Fix</option>
+                </select>
+              </div>
             </div>
 
             {/* Dispatch Due Alerts: Date Selector + Dispatch Action */}
-            <div className="flex items-center gap-1.5 bg-[#141414] border border-[#2B2B2B] px-2 py-1 rounded-xl shadow-xs">
+            <div className="flex items-center gap-1.5 bg-[#141414] border border-[#2B2B2B] px-2.5 py-1.5 rounded-xl shadow-xs w-full sm:w-auto justify-between sm:justify-start">
               <div className="flex items-center gap-1 text-xs text-slate-400">
                 <Calendar className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                 <input
@@ -1700,7 +1741,7 @@ export default function TasksPage() {
                 type="button"
                 onClick={() => handleDispatchDateDueAlerts(selectedAlertDate)}
                 disabled={isDispatchingDateAlert}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
                 title={`Send email alert for all tasks due on ${selectedAlertDate}`}
               >
                 {isDispatchingDateAlert ? (
@@ -1717,6 +1758,7 @@ export default function TasksPage() {
               </button>
             </div>
           </div>
+        </div>
 
         {/* Mandatory Project Banner if no projects in workspace */}
         {projects.length === 0 && (
@@ -1739,74 +1781,120 @@ export default function TasksPage() {
           </div>
         )}
 
+        {/* Status Slider Track with Slide Arrow Buttons (Replaces +3 More) */}
+        <div className="relative flex items-center gap-1.5 w-full pb-1 z-20">
+          {/* Left Arrow Button */}
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => slideStatusTrack('left')}
+              className="shrink-0 p-2 rounded-xl bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B] shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer z-30 flex items-center justify-center"
+              title="Slide left to see previous statuses"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Swipeable & Smooth Scroll Track with ALL Statuses */}
+          <div
+            ref={statusTrackRef}
+            className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth snap-x py-1 px-0.5 flex-1"
+          >
+            {/* All Tasks Tab */}
+            <button
+              onClick={() => setSelectedStatusTab('all')}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOverStatusId('all')
+              }}
+              onDragLeave={() => setDragOverStatusId(null)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 snap-start ${
+                dragOverStatusId === 'all' ? 'ring-2 ring-[#00638E] scale-105' : ''
+              } ${
+                selectedStatusTab === 'all'
+                  ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
+                  : 'bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B]'
+              }`}
+            >
+              <span>All Tasks</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedStatusTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-[#000000] text-slate-700 dark:text-[#BFD8E3] border border-slate-200 dark:border-[#2B2B2B]'}`}>
+                {tasks.filter((t) => {
+                  const matchesTag = filterTag === 'all' || t.tag?.toLowerCase() === filterTag.toLowerCase()
+                  const matchesEnv = filterEnv === 'all' || t.environment?.toUpperCase() === filterEnv.toUpperCase()
+                  const matchesProj = filterProject === 'all' || t.projectId === filterProject
+                  const isBug = isBugTask(t)
+                  const matchesCategory =
+                    activeCategoryTab === 'all' ? true : activeCategoryTab === 'bugs' ? isBug : !isBug
+                  return matchesTag && matchesEnv && matchesProj && matchesCategory
+                }).length}
+              </span>
+            </button>
+
+            {/* All Workspace Statuses in Order */}
+            {workspaceStatuses.map((st) => {
+              const count = tasks.filter((t) => {
+                const matchesTag = filterTag === 'all' || t.tag?.toLowerCase() === filterTag.toLowerCase()
+                const matchesEnv = filterEnv === 'all' || t.environment?.toUpperCase() === filterEnv.toUpperCase()
+                const matchesProj = filterProject === 'all' || t.projectId === filterProject
+                const isBug = isBugTask(t)
+                const matchesCategory =
+                  activeCategoryTab === 'all' ? true : activeCategoryTab === 'bugs' ? isBug : !isBug
+                const matchesStatus = matchTaskStatus(t.status, st.id) || (st.id === 'todo' && !workspaceStatuses.some((ws) => matchTaskStatus(t.status, ws.id)))
+                return matchesTag && matchesEnv && matchesProj && matchesCategory && matchesStatus
+              }).length
+
+              const isActive = selectedStatusTab === st.id
+              const isDragOver = dragOverStatusId === st.id
+              return (
+                <button
+                  key={st.id}
+                  onClick={() => setSelectedStatusTab(st.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setDragOverStatusId(st.id)
+                  }}
+                  onDragLeave={() => setDragOverStatusId(null)}
+                  onDrop={(e) => handleDropOnStatusTab(e, st.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 snap-start ${
+                    isDragOver ? 'ring-2 ring-[#00638E] scale-105 bg-[#00638E]/20 shadow-md' : ''
+                  } ${
+                    isActive
+                      ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
+                      : 'bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B]'
+                  }`}
+                  title={`Filter tasks by ${st.name} (or drop task here to update status)`}
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: st.color }}
+                  />
+                  <span>{st.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-[#000000] text-slate-700 dark:text-[#BFD8E3] border border-slate-200 dark:border-[#2B2B2B]'}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Right Arrow Button */}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => slideStatusTrack('right')}
+              className="shrink-0 p-2 rounded-xl bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B] shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer z-30 flex items-center justify-center"
+              title="Slide right to see more statuses"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         {/* ========================================================================= */}
         {/* VIEW MODE 1: MINIMAL SPACIOUS LIQUID GLASS GRID VIEW                     */}
         {/* ========================================================================= */}
         {viewMode === 'grid' && (
           <div className="space-y-6">
-            {/* Status Filter Tabs for Minimal Congestion-Free Navigation & Status Drop Targets */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-              <button
-                onClick={() => setSelectedStatusTab('all')}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOverStatusId('all')
-                }}
-                onDragLeave={() => setDragOverStatusId(null)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                  dragOverStatusId === 'all' ? 'ring-2 ring-[#00638E] scale-105' : ''
-                } ${
-                  selectedStatusTab === 'all'
-                    ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
-                    : 'bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B]'
-                }`}
-              >
-                <span>All Tasks</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedStatusTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-[#000000] text-slate-700 dark:text-[#BFD8E3] border border-slate-200 dark:border-[#2B2B2B]'}`}>
-                  {tasks.length}
-                </span>
-              </button>
-
-              {workspaceStatuses.map((st) => {
-                const count = tasks.filter(
-                  (t) =>
-                    t.status === st.id ||
-                    (st.id === 'in_dev_7722' && t.status === 'in_dev') ||
-                    (st.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
-                ).length
-                const isActive = selectedStatusTab === st.id
-                const isDragOver = dragOverStatusId === st.id
-                return (
-                  <button
-                    key={st.id}
-                    onClick={() => setSelectedStatusTab(st.id)}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      setDragOverStatusId(st.id)
-                    }}
-                    onDragLeave={() => setDragOverStatusId(null)}
-                    onDrop={(e) => handleDropOnStatusTab(e, st.id)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-                      isDragOver ? 'ring-2 ring-[#00638E] scale-105 bg-[#00638E]/20 shadow-md' : ''
-                    } ${
-                      isActive
-                        ? 'bg-[#00638E] text-white shadow-md shadow-[#00638E]/30 border border-[#00638E]'
-                        : 'bg-white dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2B2B2B]'
-                    }`}
-                    title={`Drop task card here to set status to ${st.name}`}
-                  >
-                    <div
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: st.color }}
-                    />
-                    <span>{st.name}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-[#000000] text-slate-700 dark:text-[#BFD8E3] border border-slate-200 dark:border-[#2B2B2B]'}`}>
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
 
             {/* Empty State */}
             {orderedFilteredTasks.length === 0 ? (
@@ -2174,22 +2262,45 @@ export default function TasksPage() {
           <div className="space-y-6">
             <div className="p-5 rounded-3xl bg-white dark:bg-[#141414] backdrop-blur-xl border border-slate-200 dark:border-[#2B2B2B] shadow-lg dark:shadow-2xl space-y-6">
               {/* Root Workspace Node */}
-              <div className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-gradient-to-r dark:from-[#004A6B]/20 dark:via-[#00638E]/10 dark:to-transparent border border-slate-200 dark:border-[#00638E]/30 shadow-xs">
-                <div className="p-2.5 rounded-xl bg-[#00638E] text-white shadow-md shadow-[#00638E]/30">
-                  <Workflow className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
-                      Workspace: {currentWorkspace?.name || 'Main Workspace'}
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00638E]/10 dark:bg-[#00638E]/20 text-[#00638E] dark:text-[#BFD8E3] border border-[#00638E]/25 dark:border-[#00638E]/40">
-                      Root Graph
-                    </span>
+              <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-gradient-to-r dark:from-[#004A6B]/20 dark:via-[#00638E]/10 dark:to-transparent border border-slate-200 dark:border-[#00638E]/30 shadow-xs flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-[#00638E] text-white shadow-md shadow-[#00638E]/30">
+                    <Workflow className="w-5 h-5" />
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Hierarchical task tree connecting statuses, projects, deliverables, and subtasks.
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
+                        Workspace: {currentWorkspace?.name || 'Main Workspace'}
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00638E]/10 dark:bg-[#00638E]/20 text-[#00638E] dark:text-[#BFD8E3] border border-[#00638E]/25 dark:border-[#00638E]/40">
+                        Root Graph
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Hierarchical task tree connecting statuses, projects, deliverables, and subtasks.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allOpen: Record<string, boolean> = {}
+                      workspaceStatuses.forEach((ws) => (allOpen[ws.id] = true))
+                      setExpandedTreeStatuses(allOpen)
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-[#1f1f1f] hover:bg-slate-200 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#2B2B2B] transition-colors cursor-pointer"
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTreeStatuses({})}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-[#1f1f1f] hover:bg-slate-200 dark:hover:bg-[#2B2B2B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#2B2B2B] transition-colors cursor-pointer"
+                  >
+                    Collapse All
+                  </button>
                 </div>
               </div>
 
@@ -2198,8 +2309,8 @@ export default function TasksPage() {
                 {workspaceStatuses.map((status) => {
                   const statusTasks = filteredTasks.filter(
                     (t) =>
-                      t.status === status.id ||
-                      (status.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
+                      matchTaskStatus(t.status, status.id) ||
+                      (status.id === 'todo' && !workspaceStatuses.some((ws) => matchTaskStatus(t.status, ws.id)))
                   )
                   const isExpanded = expandedTreeStatuses[status.id] ?? true
 
@@ -2489,27 +2600,270 @@ export default function TasksPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* VIEW MODE 3: COMPACT LIQUID GLASS LIST VIEW                               */}
+        {/* VIEW MODE 3: COMPACT LIQUID GLASS LIST VIEW (RESPONSIVE)                 */}
         {/* ========================================================================= */}
         {viewMode === 'list' && (
           <div className="rounded-3xl border border-slate-200 dark:border-[#2B2B2B] bg-white dark:bg-[#141414] backdrop-blur-xl overflow-hidden shadow-lg dark:shadow-2xl">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-[#000000] border-b border-slate-200 dark:border-[#2B2B2B] text-slate-600 dark:text-slate-300 font-semibold">
-                <tr>
-                  <th className="p-3.5 pl-6">Task Title</th>
-                  <th className="p-3.5">Project</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Progress</th>
-                  <th className="p-3.5">Tag</th>
-                  <th className="p-3.5">Assigned To</th>
-                  <th className="p-3.5">Assigned By</th>
-                  <th className="p-3.5">Due Date</th>
-                  <th className="p-3.5 pr-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#2B2B2B]">
-                {orderedFilteredTasks.map((t) => {
-                  const proj = projects.find((p) => p.id === t.projectId)
+            {orderedFilteredTasks.length === 0 ? (
+              <div className="text-center py-16 p-6 space-y-2">
+                <CheckSquare className="w-8 h-8 mx-auto text-muted-foreground" />
+                <h4 className="text-xs font-bold text-foreground">No tasks found</h4>
+                <p className="text-[11px] text-muted-foreground">No tasks match the selected category or status.</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile Responsive List View (< md): High-density, aligned cards */}
+                <div className="md:hidden divide-y divide-slate-100 dark:divide-[#2B2B2B]">
+                  {orderedFilteredTasks.map((t) => {
+                    const proj = projects.find((p) => p.id === t.projectId)
+                    const dueStatus = getDueStatus(t.dueDate)
+                    const isDispatchingThis = dispatchingAlertId === t.id
+                    const isExpanded = expandedTasks[t.id]
+
+                    let subtaskList: any[] = []
+                    try {
+                      if (t.subtasks) {
+                        const parsed = JSON.parse(t.subtasks)
+                        subtaskList = Array.isArray(parsed) ? parsed : [parsed]
+                      }
+                    } catch {}
+                    if (!Array.isArray(subtaskList)) subtaskList = []
+                    const doneCount = subtaskList.filter((s: any) => s.completed).length
+
+                    let attachmentsList: any[] = []
+                    try {
+                      if (t.filesChanged && t.filesChanged.startsWith('[')) attachmentsList = JSON.parse(t.filesChanged)
+                    } catch {}
+
+                    let commentsList: any[] = []
+                    try {
+                      if (t.historyLogs && t.historyLogs.startsWith('[')) {
+                        commentsList = JSON.parse(t.historyLogs).filter((i: any) => i.content || i.comment || i.type === 'comment')
+                      }
+                    } catch {}
+
+                    const taskProgress = calculateTaskProgress(t)
+                    const currStatus = workspaceStatuses.find((s) => matchTaskStatus(t.status, s.id)) || {
+                      id: t.status,
+                      name: (t.status || 'TODO').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase(),
+                      color: '#06b6d4',
+                    }
+
+                    return (
+                      <div key={t.id} className="p-3.5 space-y-2.5">
+                        {/* Row 1: Drag handle + Title + Priority */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <div className="text-slate-400 dark:text-slate-500 shrink-0 pt-0.5" title="Task position">
+                              <GripVertical className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <Link
+                                href={`/app/tasks/${t.id}`}
+                                className="font-bold text-xs text-slate-900 dark:text-white hover:text-[#00638E] dark:hover:text-[#BFD8E3] transition-colors line-clamp-2 leading-snug"
+                              >
+                                {t.title}
+                              </Link>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {!canEditTask(t) && (
+                              <span title="View Only" className="text-amber-500">
+                                <Lock className="w-3 h-3" />
+                              </span>
+                            )}
+                            <span
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                t.priority === 'high' || t.priority === 'urgent'
+                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                  : t.priority === 'medium'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              }`}
+                            >
+                              {t.priority || 'medium'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Row 2: Badges (Project, Status, Tag) */}
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          {proj && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-[#00638E]/25 dark:border-[#00638E]/35 bg-[#00638E]/10 dark:bg-[#00638E]/15 text-[#00638E] dark:text-[#BFD8E3] truncate max-w-[130px]">
+                              <FolderKanban className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">{proj.name}</span>
+                            </span>
+                          )}
+
+                          {/* Interactive Status Dropdown Pill */}
+                          <div className="relative inline-flex items-center">
+                            <div
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all pointer-events-none"
+                              style={{
+                                backgroundColor: `${currStatus.color}15`,
+                                borderColor: `${currStatus.color}40`,
+                                color: currStatus.color,
+                              }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: currStatus.color }} />
+                              <span>{currStatus.name}</span>
+                              <ChevronDown className="w-2.5 h-2.5 opacity-60 ml-0.5" />
+                            </div>
+                            <select
+                              value={t.status}
+                              disabled={!canEditTask(t)}
+                              onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                              title="Click to update status"
+                            >
+                              {workspaceStatuses.map((st) => (
+                                <option key={st.id} value={st.id} className="bg-[#141414] text-white">
+                                  {st.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${getTagColor(t.tag)}`}>
+                            {t.tag}
+                          </span>
+                        </div>
+
+                        {/* Row 3: Progress Bar & Due Date */}
+                        <div className="flex items-center justify-between gap-3 text-[11px]">
+                          <div className="flex items-center gap-2 flex-1 max-w-[160px]">
+                            <div className="h-1.5 flex-1 bg-slate-100 dark:bg-[#2B2B2B] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC] rounded-full transition-all duration-300"
+                                style={{ width: `${taskProgress}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-[#00638E] dark:text-[#BFD8E3] shrink-0">{taskProgress}%</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 text-slate-500 dark:text-slate-400">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                                dueStatus.isToday
+                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                  : dueStatus.isOverdue
+                                  ? 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30'
+                                  : 'bg-slate-100 dark:bg-[#000000]/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#2B2B2B]'
+                              }`}
+                            >
+                              <Calendar className="w-2.5 h-2.5 text-[#00638E]" />
+                              <span>{t.dueDate || todayStr}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Row 4: Assignee + Attachments / Subtasks + Actions */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-[#2B2B2B]/60 text-xs text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="flex items-center gap-1 text-[10px] truncate">
+                              <User className="w-3 h-3 text-[#00638E] shrink-0" />
+                              <span className="font-medium text-slate-900 dark:text-white truncate">
+                                {getFirstName(t.assigneeName || 'You')}
+                              </span>
+                            </span>
+
+                            {attachmentsList.length > 0 && (
+                              <span
+                                onClick={() => openEditModal(t)}
+                                className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#000000]/60 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer border border-slate-200 dark:border-[#2B2B2B]"
+                              >
+                                <Paperclip className="w-2.5 h-2.5 text-[#00638E] dark:text-[#BFD8E3]" />
+                                <span>{attachmentsList.length}</span>
+                              </span>
+                            )}
+
+                            {subtaskList.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleTaskTree(t.id)}
+                                className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#000000]/60 text-slate-700 dark:text-slate-300 cursor-pointer border border-slate-200 dark:border-[#2B2B2B]"
+                              >
+                                <CheckSquare className="w-2.5 h-2.5 text-[#00638E]" />
+                                <span>{doneCount}/{subtaskList.length}</span>
+                                {isExpanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleSendDueAlert(t)}
+                              disabled={isDispatchingThis}
+                              title="Send due date alert email"
+                              className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-[#2B2B2B] transition-colors cursor-pointer"
+                            >
+                              {isDispatchingThis ? <Loader2 className="w-3 h-3 animate-spin text-[#00638E]" /> : <Bell className="w-3 h-3" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(t)}
+                              title={canEditTask(t) ? "Edit Task" : "View Task Details"}
+                              className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-[#00638E] dark:hover:text-[#BFD8E3] rounded-lg hover:bg-slate-100 dark:hover:bg-[#2B2B2B] transition-colors cursor-pointer"
+                            >
+                              {canEditTask(t) ? <Edit2 className="w-3 h-3" /> : <Eye className="w-3 h-3 text-[#00638E]" />}
+                            </button>
+                            {canDeleteTask && (
+                              <button
+                                type="button"
+                                disabled={deletingTaskId === t.id}
+                                onClick={() => handleDelete(t.id)}
+                                title="Delete Task"
+                                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {deletingTaskId === t.id ? <Loader2 className="w-3 h-3 animate-spin text-rose-500" /> : <Trash2 className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Subtasks expand checklist */}
+                        {subtaskList.length > 0 && isExpanded && (
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#0c0c0c] border border-slate-200 dark:border-[#2B2B2B] space-y-1.5 text-xs animate-fade-in">
+                            {subtaskList.map((st: any) => (
+                              <label key={st.id} className="flex items-center gap-2 cursor-pointer text-[11px]">
+                                <input
+                                  type="checkbox"
+                                  checked={st.completed}
+                                  onChange={() => toggleSubtask(t.id, st.id)}
+                                  className="w-3 h-3 rounded accent-[#00638E] cursor-pointer"
+                                />
+                                <span className={st.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200 font-medium'}>
+                                  {st.title}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Desktop Data Table (>= md) */}
+                <div className="hidden md:block overflow-x-auto scrollbar-thin">
+                  <table className="w-full min-w-[900px] text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-[#000000] border-b border-slate-200 dark:border-[#2B2B2B] text-slate-600 dark:text-slate-300 font-semibold">
+                      <tr>
+                        <th className="p-3.5 pl-6">Task Title</th>
+                        <th className="p-3.5">Project</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5">Progress</th>
+                        <th className="p-3.5">Tag</th>
+                        <th className="p-3.5">Assigned To</th>
+                        <th className="p-3.5">Assigned By</th>
+                        <th className="p-3.5">Due Date</th>
+                        <th className="p-3.5 pr-6 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-[#2B2B2B]">
+                      {orderedFilteredTasks.map((t) => {
+                        const proj = projects.find((p) => p.id === t.projectId)
                   const projColor = getProjectColor(proj, t.projectId)
                   const dueStatus = getDueStatus(t.dueDate)
                   const isExpanded = expandedTasks[t.id]
@@ -2618,18 +2972,45 @@ export default function TasksPage() {
                           )}
                         </td>
                         <td className="p-3.5">
-                          <select
-                            value={t.status}
-                            disabled={!canEditTask(t)}
-                            onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
-                            className="text-[10px] font-semibold px-2 py-1 rounded-full bg-white dark:bg-[#000000] text-slate-900 dark:text-[#BFD8E3] border border-slate-200 dark:border-[#2B2B2B] cursor-pointer focus:outline-none focus:border-[#00638E] disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {workspaceStatuses.map((st) => (
-                              <option key={st.id} value={st.id}>
-                                {st.name}
-                              </option>
-                            ))}
-                          </select>
+                          {(() => {
+                            const currStatus = workspaceStatuses.find((s) => matchTaskStatus(t.status, s.id)) || {
+                              id: t.status,
+                              name: (t.status || 'TODO').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase(),
+                              color: '#06b6d4',
+                            }
+                            return (
+                              <div className="relative inline-flex items-center">
+                                <div
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all pointer-events-none"
+                                  style={{
+                                    backgroundColor: `${currStatus.color}15`,
+                                    borderColor: `${currStatus.color}40`,
+                                    color: currStatus.color,
+                                  }}
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full shrink-0 shadow-xs"
+                                    style={{ backgroundColor: currStatus.color }}
+                                  />
+                                  <span>{currStatus.name}</span>
+                                  <ChevronDown className="w-2.5 h-2.5 opacity-60 ml-0.5" />
+                                </div>
+                                <select
+                                  value={t.status}
+                                  disabled={!canEditTask(t)}
+                                  onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                                  title="Click to update status"
+                                >
+                                  {workspaceStatuses.map((st) => (
+                                    <option key={st.id} value={st.id} className="bg-[#141414] text-white">
+                                      {st.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="p-3.5 min-w-[120px]">
                           <div className="space-y-1">
@@ -2745,7 +3126,10 @@ export default function TasksPage() {
               </tbody>
             </table>
           </div>
-        )}
+        </>
+      )}
+    </div>
+  )}
 
         {/* ========================================================================= */}
         {/* INTERACTIVE MODAL: ADD TASK (3-STEP WIZARD)                              */}

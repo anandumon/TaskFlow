@@ -31,6 +31,8 @@ import { Portal } from '@/components/ui/portal'
 import { useOrgStore } from '@/stores/org-store'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useProjectStore, Project } from '@/stores/project-store'
+import { useTaskStore } from '@/stores/task-store'
+import { calculateWeightedProgress } from '@/lib/progress'
 import { ProjectCard } from '@/features/projects/components/ProjectCard'
 import { ProjectSkeleton } from '@/components/loading'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -40,6 +42,7 @@ export default function ProjectsPage() {
   const { currentOrg } = useOrgStore()
   const { currentWorkspace, workspaces, setCurrentWorkspace, fetchWorkspaces } = useWorkspaceStore()
   const { projects, loadProjects, createProject, updateProject, deleteProject, isLoading } = useProjectStore()
+  const { tasks, loadTasks } = useTaskStore()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
@@ -124,7 +127,10 @@ export default function ProjectsPage() {
       setProjectsDataLoaded(false)
     }
 
-    loadProjects(currentWorkspace.id).finally(() => {
+    Promise.all([
+      loadProjects(currentWorkspace.id),
+      loadTasks(currentWorkspace.id).catch(() => []),
+    ]).finally(() => {
       if (active) {
         lastProjectsWsRef.current = currentWorkspace.id
         setProjectsDataLoaded(true)
@@ -134,7 +140,7 @@ export default function ProjectsPage() {
     return () => {
       active = false
     }
-  }, [currentWorkspace?.id, loadProjects])
+  }, [currentWorkspace?.id, loadProjects, loadTasks])
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
@@ -433,6 +439,9 @@ export default function ProjectsPage() {
                   if (p.environments) envList = JSON.parse(p.environments)
                 } catch {}
 
+                const projTasks = tasks.filter((t) => t.projectId === p.id)
+                const effectiveProgress = projTasks.length > 0 ? calculateWeightedProgress(projTasks) : (p.progress || 0)
+
                 const isImageLogo =
                   p.icon &&
                   (p.icon.startsWith('data:image') ||
@@ -504,14 +513,14 @@ export default function ProjectsPage() {
                         <div className="flex items-center justify-between text-[11px] font-semibold">
                           <span className="text-slate-500 dark:text-slate-400">Progress</span>
                           <span className="font-bold text-[#00638E] dark:text-[#BFD8E3]">
-                            {p.progress || 0}%
+                            {effectiveProgress}%
                           </span>
                         </div>
                         <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-[#2B2B2B] overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC]"
                             style={{
-                              width: `${p.progress || 0}%`,
+                              width: `${effectiveProgress}%`,
                             }}
                           />
                         </div>

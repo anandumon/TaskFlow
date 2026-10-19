@@ -3,6 +3,8 @@ import { FolderKanban, Trash2, Layers, ArrowRight, GripVertical, Pencil } from '
 import { Project } from '@/types'
 import { ALL_ENVIRONMENTS } from '@/constants'
 import { usePermissions } from '@/hooks/usePermissions'
+import { useTaskStore } from '@/stores/task-store'
+import { calculateWeightedProgress } from '@/lib/progress'
 
 interface ProjectCardProps {
   project: Project
@@ -28,6 +30,10 @@ export function ProjectCard({
   isDragging,
 }: ProjectCardProps) {
   const { canDeleteProject } = usePermissions()
+  const { tasks } = useTaskStore()
+  const projectTasks = tasks.filter((t) => t.projectId === project.id)
+  const effectiveProgress = projectTasks.length > 0 ? calculateWeightedProgress(projectTasks) : (project.progress || 0)
+
   let projectEnvs: string[] = [...ALL_ENVIRONMENTS]
   try {
     if (project.environments) {
@@ -170,14 +176,14 @@ export function ProjectCard({
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-slate-500 dark:text-slate-400">Weighted Delivery Progress</span>
             <span className="font-extrabold text-[#00638E] dark:text-[#BFD8E3]">
-              {project.progress || 0}%
+              {effectiveProgress}%
             </span>
           </div>
           <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-[#2B2B2B] overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-[#004A6B] via-[#00638E] to-[#8CB9CC]"
               style={{
-                width: `${project.progress || 0}%`,
+                width: `${effectiveProgress}%`,
               }}
             />
           </div>

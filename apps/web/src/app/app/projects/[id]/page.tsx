@@ -33,6 +33,7 @@ import {
   ArrowUp,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   UserCheck,
   GripVertical,
@@ -54,7 +55,7 @@ import { apiClient } from '@/lib/api-client'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTaskStore, Task, TaskStatus, TaskEnvironment } from '@/stores/task-store'
 import { useProjectStore } from '@/stores/project-store'
-import { useStatusStore } from '@/stores/status-store'
+import { useStatusStore, sortStatusesByStructure } from '@/stores/status-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrgStore } from '@/stores/org-store'
 import { Portal } from '@/components/ui/portal'
@@ -77,6 +78,13 @@ import {
   DELIVERABLE_CATEGORIES,
   getEnvForStatus,
 } from '@/lib/task-category'
+import {
+  calculateWeightedProgress,
+  matchTaskStatus,
+  isCompletedTask,
+  getTaskProgress,
+  getTaskCountForStatus,
+} from '@/lib/progress'
 
 const getCategoryDropdownValue = (tag?: string) => {
   if (!tag || !tag.trim()) return 'Feature'
@@ -253,20 +261,7 @@ export default function ProjectDetailsPage() {
   }
 
   const calculateTaskProgress = (t: Task) => {
-    if (t.progress !== undefined && t.progress !== null) return t.progress
-    if (t.status === 'done' || t.status === 'complete' || t.status === 'closed' || t.status === 'release') return 100
-    try {
-      if (t.subtasks) {
-        const parsed = JSON.parse(t.subtasks)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const completed = parsed.filter((s: any) => s.completed).length
-          return Math.round((completed / parsed.length) * 100)
-        }
-      }
-    } catch {}
-    if (t.status === 'in_progress' || t.status === 'in_dev') return 50
-    if (t.status === 'in_review' || t.status === 'in_uat' || t.status === 'in_sit') return 75
-    return 0
+    return getTaskProgress(t)
   }
 
   const [projectDetailsLoaded, setProjectDetailsLoaded] = useState(false)
@@ -438,15 +433,13 @@ export default function ProjectDetailsPage() {
 
   // Weighted progress calculation for this project
   const completedTasksCount = useMemo(() => {
-    return projectTasks.filter(
-      (t) => t.status === 'done' || t.status === 'complete' || t.status === 'release' || t.status === 'closed'
-    ).length
+    return projectTasks.filter(isCompletedTask).length
   }, [projectTasks])
 
   const weightedProgress = useMemo(() => {
     if (projectTasks.length === 0) return project?.progress || 0
-    return Math.round((completedTasksCount / projectTasks.length) * 100)
-  }, [projectTasks, completedTasksCount, project?.progress])
+    return calculateWeightedProgress(projectTasks)
+  }, [projectTasks, project?.progress])
 
   // Collect all registered users/assignees added to this project
   const availableUsers: AssignableUser[] = useMemo(() => {
@@ -514,32 +507,72 @@ export default function ProjectDetailsPage() {
     const seen = new Set(list.map((s) => s.id))
 
     const getStatusMeta = (id: string) => {
-      if (id === 'on_hold_9074' || id.includes('on_hold')) return { name: 'ON HOLD', color: '#87909e', order: 1 }
-      if (id === 'in_dev_7722' || id === 'in_dev') return { name: 'IN DEV', color: '#0ea5e9', order: 4 }
-      if (id === 'in_uat_3343' || id.includes('uat')) return { name: 'IN UAT', color: '#06b6d4', order: 5 }
-      if (id === 'in_sit_2471' || id.includes('sit')) return { name: 'IN SIT', color: '#3b82f6', order: 6 }
-      if (id === 'release_5155' || id.includes('release')) return { name: 'RELEASE', color: '#6366f1', order: 7 }
+      if (id === 'on_hold_9074' || id.includes('on_hold')) return { name: 'ON HOLD', color: '#87909e', category: 'NOT_STARTED', order: 1 }
+      if (id === 'in_progress' || id === 'progress') return { name: 'IN PROGRESS', color: '#0284c7', category: 'ACTIVE', order: 2 }
+      if (id === 'in_dev_7722' || id === 'in_dev' || id.includes('dev')) return { name: 'IN DEV', color: '#0ea5e9', category: 'ACTIVE', order: 3 }
+      if (id === 'in_review' || id.includes('review')) return { name: 'IN REVIEW', color: '#a855f7', category: 'ACTIVE', order: 4 }
+      if (id === 'in_sit_2471' || id.includes('sit')) return { name: 'IN SIT', color: '#3b82f6', category: 'ACTIVE', order: 5 }
+      if (id === 'in_uat_3343' || id.includes('uat')) return { name: 'IN UAT', color: '#06b6d4', category: 'ACTIVE', order: 6 }
+      if (id === 'release_5155' || id.includes('release')) return { name: 'RELEASE', color: '#6366f1', category: 'ACTIVE', order: 7 }
+      if (id === 'done' || id === 'completed' || id === 'complete') return { name: 'COMPLETED', color: '#10b981', category: 'CLOSED', order: 8 }
       const clean = id.replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase()
-      return { name: clean, color: '#0284c7', order: 99 }
+      return { name: clean, color: '#0284c7', category: 'ACTIVE', order: 99 }
     }
 
     projectTasks.forEach((t) => {
       if (t.status && !seen.has(t.status)) {
         if (t.status === 'in_dev' && (seen.has('in_dev_7722') || list.some((s) => s.id === 'in_dev_7722'))) return
+        if (t.status === 'in_sit' && (seen.has('in_sit_2471') || list.some((s) => s.id === 'in_sit_2471'))) return
+        if (t.status === 'in_uat' && (seen.has('in_uat_3343') || list.some((s) => s.id === 'in_uat_3343'))) return
+        if (t.status === 'release' && (seen.has('release_5155') || list.some((s) => s.id === 'release_5155'))) return
         seen.add(t.status)
         const meta = getStatusMeta(t.status)
         list.push({
           id: t.status,
           name: meta.name,
           color: meta.color,
-          category: 'ACTIVE',
+          category: (meta.category as any) || 'ACTIVE',
           order: meta.order,
         })
       }
     })
 
-    return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    return sortStatusesByStructure(list).map((s, idx) => ({ ...s, order: idx }))
   }, [getStatuses, currentWorkspace?.id, rawWorkspaceStatuses, projectTasks])
+
+  // Status Slider Track scrolling state and handlers
+  const statusTrackRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkStatusScroll = useCallback(() => {
+    if (!statusTrackRef.current) return
+    const { scrollLeft, scrollWidth, clientWidth } = statusTrackRef.current
+    setCanScrollLeft(scrollLeft > 6)
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 6)
+  }, [])
+
+  const slideStatusTrack = (direction: 'left' | 'right') => {
+    if (!statusTrackRef.current) return
+    const scrollAmount = 260
+    statusTrackRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    })
+  }
+
+  useEffect(() => {
+    const el = statusTrackRef.current
+    if (!el) return
+    const timer = setTimeout(checkStatusScroll, 100)
+    el.addEventListener('scroll', checkStatusScroll, { passive: true })
+    window.addEventListener('resize', checkStatusScroll)
+    return () => {
+      clearTimeout(timer)
+      el.removeEventListener('scroll', checkStatusScroll)
+      window.removeEventListener('resize', checkStatusScroll)
+    }
+  }, [checkStatusScroll, workspaceStatuses, projectTasks])
 
   const columns = useMemo(
     () =>
@@ -604,8 +637,8 @@ export default function ProjectDetailsPage() {
       // Status tab filter
       const matchesStatusTab =
         selectedStatusTab === 'all' ||
-        t.status === selectedStatusTab ||
-        (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
+        matchTaskStatus(t.status, selectedStatusTab) ||
+        (selectedStatusTab === 'todo' && !workspaceStatuses.some((ws) => matchTaskStatus(t.status, ws.id)))
 
       // Category tab filter (All, Bugs & Fixes, Features)
       const isBug = isBugTask(t)
@@ -1420,73 +1453,103 @@ export default function ProjectDetailsPage() {
         {/* STATUS HORIZONTAL TABS: Matching My Tasks & Board Structure (Screenshot 4) */}
         {/* ========================================================================= */}
         {viewMode !== 'files' && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setSelectedStatusTab('all')}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOverStatusId('all')
-              }}
-              onDragLeave={() => setDragOverStatusId(null)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                dragOverStatusId === 'all' ? 'ring-2 ring-primary scale-105' : ''
-              } ${
-                selectedStatusTab === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-md border border-primary'
-                  : 'bg-card hover:bg-accent text-foreground border border-border'
-              }`}
+          <div className="relative flex items-center gap-1.5 w-full pb-1 z-20">
+            {/* Left Arrow Button */}
+            {canScrollLeft && (
+              <button
+                type="button"
+                onClick={() => slideStatusTrack('left')}
+                className="shrink-0 p-2 rounded-xl bg-card hover:bg-accent text-foreground border border-border shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer z-30 flex items-center justify-center"
+                title="Slide left to see previous statuses"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Swipeable & Smooth Scroll Track with ALL Statuses */}
+            <div
+              ref={statusTrackRef}
+              className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth snap-x py-1 px-0.5 flex-1"
             >
-              <span>All Tasks</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              {/* All Tasks Tab */}
+              <button
+                type="button"
+                onClick={() => setSelectedStatusTab('all')}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOverStatusId('all')
+                }}
+                onDragLeave={() => setDragOverStatusId(null)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 snap-start ${
+                  dragOverStatusId === 'all' ? 'ring-2 ring-primary scale-105' : ''
+                } ${
                   selectedStatusTab === 'all'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-muted text-muted-foreground border border-border'
+                    ? 'bg-primary text-primary-foreground shadow-md border border-primary'
+                    : 'bg-card hover:bg-accent text-foreground border border-border'
                 }`}
               >
-                {projectTasks.length}
-              </span>
-            </button>
-
-            {workspaceStatuses.map((st) => {
-              const count = projectTasks.filter(
-                (t) => t.status === st.id || (st.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
-              ).length
-              const isActive = selectedStatusTab === st.id
-              const isDragOver = dragOverStatusId === st.id
-              return (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => setSelectedStatusTab(st.id)}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setDragOverStatusId(st.id)
-                  }}
-                  onDragLeave={() => setDragOverStatusId(null)}
-                  onDrop={(e) => handleDropOnStatusTab(e, st.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-                    isDragOver ? 'ring-2 ring-primary scale-105 bg-primary/20 shadow-md' : ''
-                  } ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground shadow-md border border-primary'
-                      : 'bg-card hover:bg-accent text-foreground border border-border'
+                <span>All Tasks</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    selectedStatusTab === 'all'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-muted text-muted-foreground border border-border'
                   }`}
-                  title={`Drop task card here to move deliverable to ${st.name}`}
                 >
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.color }} />
-                  <span>{st.name}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground border border-border'
+                  {projectTasks.length}
+                </span>
+              </button>
+
+              {/* All Workspace Statuses in Order */}
+              {workspaceStatuses.map((st) => {
+                const count = getTaskCountForStatus(projectTasks, st.id)
+                const isActive = selectedStatusTab === st.id
+                const isDragOver = dragOverStatusId === st.id
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setSelectedStatusTab(st.id)}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      setDragOverStatusId(st.id)
+                    }}
+                    onDragLeave={() => setDragOverStatusId(null)}
+                    onDrop={(e) => handleDropOnStatusTab(e, st.id)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 snap-start ${
+                      isDragOver ? 'ring-2 ring-primary scale-105 bg-primary/20 shadow-md' : ''
+                    } ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-md border border-primary'
+                        : 'bg-card hover:bg-accent text-foreground border border-border'
                     }`}
+                    title={`Filter tasks by ${st.name} (or drop deliverable here to update status)`}
                   >
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.color }} />
+                    <span>{st.name}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground border border-border'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Right Arrow Button */}
+            {canScrollRight && (
+              <button
+                type="button"
+                onClick={() => slideStatusTrack('right')}
+                className="shrink-0 p-2 rounded-xl bg-card hover:bg-accent text-foreground border border-border shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer z-30 flex items-center justify-center"
+                title="Slide right to see more statuses"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 
@@ -1854,99 +1917,129 @@ export default function ProjectDetailsPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* VIEW MODE 2: COMPACT LIST VIEW                                            */}
+        {/* VIEW MODE 2: COMPACT LIST VIEW (RESPONSIVE)                               */}
         {/* ========================================================================= */}
         {viewMode === 'list' && (
           <div className="rounded-3xl border border-border bg-card overflow-hidden shadow-sm">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/80 border-b border-border text-muted-foreground font-semibold">
-                <tr>
-                  <th className="p-3.5 pl-6">Deliverable Title</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Progress</th>
-                  <th className="p-3.5">Category / Tag</th>
-                  <th className="p-3.5">Assigned To</th>
-                  <th className="p-3.5">Assigned By</th>
-                  <th className="p-3.5">Due Date</th>
-                  <th className="p-3.5 pr-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {displayTasks.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
-                      No deliverables match the selected filters.
-                    </td>
-                  </tr>
-                ) : (
-                  displayTasks.map((t) => {
+            {displayTasks.length === 0 ? (
+              <div className="text-center py-12 p-6 space-y-2">
+                <CheckSquare className="w-8 h-8 mx-auto text-muted-foreground" />
+                <h4 className="text-xs font-bold text-foreground">No deliverables found</h4>
+                <p className="text-[11px] text-muted-foreground">No deliverables match the selected filters in this project.</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile Responsive List View (< md) */}
+                <div className="md:hidden divide-y divide-border/60">
+                  {displayTasks.map((t) => {
                     const dueStatus = getDueStatus(t.dueDate)
                     const isBug = isBugTask(t)
                     const taskProgress = calculateTaskProgress(t)
+                    const currStatus = workspaceStatuses.find((s) => matchTaskStatus(t.status, s.id)) || {
+                      id: t.status,
+                      name: (t.status || 'TODO').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase(),
+                      color: '#06b6d4',
+                    }
 
                     return (
-                      <tr key={t.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="p-3.5 pl-6 font-bold text-foreground">
-                          <Link href={`/app/tasks/${t.id}`} className="hover:text-primary transition-colors">
+                      <div key={t.id} className="p-3.5 space-y-2.5">
+                        {/* Row 1: Title + Priority */}
+                        <div className="flex items-start justify-between gap-2">
+                          <Link
+                            href={`/app/tasks/${t.id}`}
+                            className="font-bold text-xs text-foreground hover:text-primary transition-colors line-clamp-2 leading-snug flex-1"
+                          >
                             {t.title}
                           </Link>
-                        </td>
-                        <td className="p-3.5">
-                          <select
-                            value={getSelectValue(t.status)}
-                            onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
-                            className="bg-transparent text-foreground font-semibold cursor-pointer focus:outline-none border-b border-border pb-0.5"
+                          <span
+                            className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border shrink-0 ${
+                              t.priority === 'high' || t.priority === 'urgent'
+                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                : t.priority === 'medium'
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                            }`}
                           >
-                            {workspaceStatuses.map((st) => (
-                              <option key={st.id} value={st.id}>
-                                {st.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${taskProgress}%` }} />
+                            {t.priority || 'medium'}
+                          </span>
+                        </div>
+
+                        {/* Row 2: Status Pill + Tag */}
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <div className="relative inline-flex items-center">
+                            <div
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all pointer-events-none"
+                              style={{
+                                backgroundColor: `${currStatus.color}15`,
+                                borderColor: `${currStatus.color}40`,
+                                color: currStatus.color,
+                              }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: currStatus.color }} />
+                              <span>{currStatus.name}</span>
+                              <ChevronDown className="w-2.5 h-2.5 opacity-60 ml-0.5" />
                             </div>
-                            <span className="text-[10px] font-bold text-primary">{taskProgress}%</span>
+                            <select
+                              value={getSelectValue(t.status)}
+                              onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              title="Click to update status"
+                            >
+                              {workspaceStatuses.map((st) => (
+                                <option key={st.id} value={st.id} className="bg-card text-foreground">
+                                  {st.name}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                        </td>
-                        <td className="p-3.5">
+
                           {isBug ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 border border-rose-500/30">
                               <Bug className="w-2.5 h-2.5" /> Bug / Fix
                             </span>
                           ) : (
-                            <span
-                              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${getTagStyle(t.tag)}`}
-                            >
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${getTagStyle(t.tag)}`}>
                               {t.tag || 'Feature'}
                             </span>
                           )}
-                        </td>
-                        <td className="p-3.5 font-medium text-foreground">{getFirstName(t.assigneeName || 'You')}</td>
-                        <td className="p-3.5 text-muted-foreground">{getFirstName(t.reviewerName || 'You')}</td>
-                        <td className="p-3.5 text-muted-foreground">
+                        </div>
+
+                        {/* Row 3: Progress Bar & Due Date */}
+                        <div className="flex items-center justify-between gap-3 text-[11px]">
+                          <div className="flex items-center gap-2 flex-1 max-w-[160px]">
+                            <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${taskProgress}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-primary shrink-0">{taskProgress}%</span>
+                          </div>
+
                           <span
-                            className={
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${
                               dueStatus.isToday
-                                ? 'text-rose-600 font-bold'
+                                ? 'bg-rose-500/15 text-rose-600 border-rose-500/30'
                                 : dueStatus.isOverdue
-                                ? 'text-red-500 font-bold'
-                                : ''
-                            }
+                                ? 'bg-red-500/20 text-red-600 border-red-500/30'
+                                : 'bg-muted text-muted-foreground border-border'
+                            }`}
                           >
-                            {t.dueDate || 'Today'}
+                            <Calendar className="w-2.5 h-2.5 text-primary" />
+                            <span>{t.dueDate || 'Today'}</span>
                           </span>
-                        </td>
-                        <td className="p-3.5 pr-6 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        </div>
+
+                        {/* Row 4: Assignee + Actions */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50 text-xs text-muted-foreground">
+                          <span className="text-[10px] truncate">
+                            <span className="font-medium text-foreground">{getFirstName(t.assigneeName || 'You')}</span>
+                            <span className="text-muted-foreground ml-1">(By: {getFirstName(t.reviewerName || 'You')})</span>
+                          </span>
+
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               type="button"
                               onClick={() => handleSendDueAlert(t)}
                               disabled={dispatchingAlertId === t.id}
-                              className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-muted-foreground hover:text-amber-500 rounded-lg hover:bg-muted transition-colors cursor-pointer"
                               title="Send due date alert email"
                             >
                               <Bell className="w-3.5 h-3.5" />
@@ -1954,7 +2047,7 @@ export default function ProjectDetailsPage() {
                             <button
                               type="button"
                               onClick={() => openEditModal(t)}
-                              className="p-1 text-muted-foreground hover:text-primary rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-muted transition-colors cursor-pointer"
                               title="Edit deliverable"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1962,19 +2055,159 @@ export default function ProjectDetailsPage() {
                             <button
                               type="button"
                               onClick={() => handleDelete(t.id)}
-                              className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-muted transition-colors cursor-pointer"
                               title="Delete deliverable"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     )
-                  })
-                )}
-              </tbody>
-            </table>
+                  })}
+                </div>
+
+                {/* Desktop Data Table (>= md) */}
+                <div className="hidden md:block overflow-x-auto scrollbar-thin">
+                  <table className="w-full min-w-[850px] text-left text-xs">
+                    <thead className="bg-muted/80 border-b border-border text-muted-foreground font-semibold">
+                      <tr>
+                        <th className="p-3.5 pl-6">Deliverable Title</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5">Progress</th>
+                        <th className="p-3.5">Category / Tag</th>
+                        <th className="p-3.5">Assigned To</th>
+                        <th className="p-3.5">Assigned By</th>
+                        <th className="p-3.5">Due Date</th>
+                        <th className="p-3.5 pr-6 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {displayTasks.map((t) => {
+                        const dueStatus = getDueStatus(t.dueDate)
+                        const isBug = isBugTask(t)
+                        const taskProgress = calculateTaskProgress(t)
+
+                        return (
+                          <tr key={t.id} className="hover:bg-muted/50 transition-colors">
+                            <td className="p-3.5 pl-6 font-bold text-foreground">
+                              <Link href={`/app/tasks/${t.id}`} className="hover:text-primary transition-colors">
+                                {t.title}
+                              </Link>
+                            </td>
+                            <td className="p-3.5">
+                              {(() => {
+                                const currStatus = workspaceStatuses.find((s) => matchTaskStatus(t.status, s.id)) || {
+                                  id: t.status,
+                                  name: (t.status || 'TODO').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase(),
+                                  color: '#06b6d4',
+                                }
+                                return (
+                                  <div className="relative inline-flex items-center">
+                                    <div
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all pointer-events-none"
+                                      style={{
+                                        backgroundColor: `${currStatus.color}15`,
+                                        borderColor: `${currStatus.color}40`,
+                                        color: currStatus.color,
+                                      }}
+                                    >
+                                      <span
+                                        className="w-2 h-2 rounded-full shrink-0 shadow-xs"
+                                        style={{ backgroundColor: currStatus.color }}
+                                      />
+                                      <span>{currStatus.name}</span>
+                                      <ChevronDown className="w-2.5 h-2.5 opacity-60 ml-0.5" />
+                                    </div>
+                                    <select
+                                      value={getSelectValue(t.status)}
+                                      onChange={(e) => handleStatusChange(t.id, e.target.value as TaskStatus)}
+                                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                      title="Click to update status"
+                                    >
+                                      {workspaceStatuses.map((st) => (
+                                        <option key={st.id} value={st.id} className="bg-card text-foreground">
+                                          {st.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )
+                              })()}
+                            </td>
+                            <td className="p-3.5">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
+                                  <div className="h-full bg-primary rounded-full" style={{ width: `${taskProgress}%` }} />
+                                </div>
+                                <span className="text-[10px] font-bold text-primary">{taskProgress}%</span>
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              {isBug ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 border border-rose-500/30">
+                                  <Bug className="w-2.5 h-2.5" /> Bug / Fix
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${getTagStyle(t.tag)}`}
+                                >
+                                  {t.tag || 'Feature'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 font-medium text-foreground">{getFirstName(t.assigneeName || 'You')}</td>
+                            <td className="p-3.5 text-muted-foreground">{getFirstName(t.reviewerName || 'You')}</td>
+                            <td className="p-3.5 text-muted-foreground">
+                              <span
+                                className={
+                                  dueStatus.isToday
+                                    ? 'text-rose-600 font-bold'
+                                    : dueStatus.isOverdue
+                                    ? 'text-red-500 font-bold'
+                                    : ''
+                                }
+                              >
+                                {t.dueDate || 'Today'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 pr-6 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendDueAlert(t)}
+                                  disabled={dispatchingAlertId === t.id}
+                                  className="p-1 text-muted-foreground hover:text-amber-500 rounded transition-colors cursor-pointer"
+                                  title="Send due date alert email"
+                                >
+                                  <Bell className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(t)}
+                                  className="p-1 text-muted-foreground hover:text-primary rounded transition-colors cursor-pointer"
+                                  title="Edit deliverable"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(t.id)}
+                                  className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
+                                  title="Delete deliverable"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -2025,8 +2258,8 @@ export default function ProjectDetailsPage() {
                 {workspaceStatuses.map((status) => {
                   const statusTasks = filteredTasks.filter(
                     (t) =>
-                      t.status === status.id ||
-                      (status.id === 'todo' && !workspaceStatuses.some((ws) => ws.id === t.status))
+                      matchTaskStatus(t.status, status.id) ||
+                      (status.id === 'todo' && !workspaceStatuses.some((ws) => matchTaskStatus(t.status, ws.id)))
                   )
                   const isExpanded = expandedTreeStatuses[status.id] ?? true
 
