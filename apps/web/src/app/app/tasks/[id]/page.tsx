@@ -341,6 +341,15 @@ export default function TaskDetailsPage() {
     showToast('Note added to discussion!')
   }
 
+  const handleUpdateNotes = async (updatedNotes: string) => {
+    if (!canEdit) {
+      showToast('You can only edit tasks assigned to you.')
+      return
+    }
+    await updateTask(task.id, { notes: updatedNotes })
+    showToast('Task notes updated!')
+  }
+
   const handleStatusUpdate = async (newStatus: TaskStatus) => {
     if (!canEdit) {
       showToast('You can only edit tasks assigned to you.')
@@ -515,7 +524,11 @@ export default function TaskDetailsPage() {
           {/* 5th: Notes & Discussion */}
           <TaskDiscussionCard
             notes={task.notes}
+            taskTitle={task.title}
+            taskId={task.id}
             onAddNote={handleAddNote}
+            onUpdateNotes={handleUpdateNotes}
+            canEdit={canEdit}
           />
 
           {/* 6th: Subtasks (Creation form asks for Title, Description, Category, Assignee, Assigned By, Due Date) */}

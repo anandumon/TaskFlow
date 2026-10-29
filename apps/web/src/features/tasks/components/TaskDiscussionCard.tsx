@@ -1,53 +1,43 @@
 'use client'
 
-import { useState } from 'react'
 import { MessageSquare } from 'lucide-react'
+import { NotesManager } from './NotesManager'
 
 interface TaskDiscussionCardProps {
   notes?: string
+  taskTitle?: string
+  taskId?: string
   onAddNote: (noteText: string) => Promise<void>
+  onUpdateNotes?: (updatedNotes: string) => Promise<void>
+  canEdit?: boolean
 }
 
-export function TaskDiscussionCard({ notes, onAddNote }: TaskDiscussionCardProps) {
-  const [noteText, setNoteText] = useState('')
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const textToAdd = noteText.trim()
-    if (!textToAdd) return
-    setNoteText('')
-    try {
-      await onAddNote(textToAdd)
-    } catch (err) {
-      setNoteText(textToAdd)
-    }
-  }
-
+export function TaskDiscussionCard({
+  notes,
+  taskTitle = 'Task Notes',
+  taskId,
+  onAddNote,
+  onUpdateNotes,
+  canEdit = true,
+}: TaskDiscussionCardProps) {
   return (
     <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-card border border-border/80 shadow-sm space-y-4 max-w-full w-full overflow-hidden">
-      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-        <MessageSquare className="w-4 h-4 text-primary shrink-0" /> Notes & Team Discussion
-      </h3>
-
-      <div className="p-4 rounded-2xl bg-muted/40 border border-border/60 text-xs text-foreground whitespace-pre-wrap font-sans leading-relaxed min-h-[80px]">
-        {notes || 'No notes logged yet. Leave a note below!'}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary shrink-0" /> Notes & Team Discussion
+        </h3>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Add a team note or audit comment..."
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          className="flex-1 px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-        <button
-          type="submit"
-          className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all"
-        >
-          Post Note
-        </button>
-      </form>
+      <NotesManager
+        notes={notes}
+        contextTitle={taskTitle}
+        contextId={taskId}
+        contextType="Task"
+        onAddNote={onAddNote}
+        onUpdateNotes={onUpdateNotes}
+        canEdit={canEdit}
+        placeholder="Add a team note or audit comment..."
+      />
     </div>
   )
 }

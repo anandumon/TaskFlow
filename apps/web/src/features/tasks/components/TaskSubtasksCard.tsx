@@ -33,6 +33,7 @@ import { ServiceBranchEntry } from './TaskGitBranchCard'
 import { StylishDatePicker } from '@/components/ui/stylish-date-picker'
 import { AssignableUser } from '@/components/ui/user-select'
 import { getFirstName } from '@/lib/utils'
+import { NotesManager } from './NotesManager'
 
 export const SUBTASK_CATEGORIES = [
   'Feature',
@@ -276,21 +277,25 @@ export function TaskSubtasksCard({
     setNewFileName('')
   }
 
-  const handleAddNoteToSubtask = async () => {
-    if (!selectedSubtask || !newNoteInput.trim()) return
-
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const noteEntry = `[${timestamp} - You]: ${newNoteInput.trim()}`
-    const updatedNotes = inspectNotes ? `${inspectNotes}\n${noteEntry}` : noteEntry
-
+  const handleUpdateSubtaskNotes = async (updatedNotes: string) => {
+    if (!selectedSubtask) return
     setInspectNotes(updatedNotes)
-    setNewNoteInput('')
-
     const updates = { notes: updatedNotes }
     if (onUpdateSubtaskDetails) {
       await onUpdateSubtaskDetails(selectedSubtask.id, updates)
     }
     setSelectedSubtask((prev) => (prev ? { ...prev, ...updates } : null))
+  }
+
+  const handleAddNoteToSubtask = async (noteText: string) => {
+    if (!selectedSubtask || !noteText.trim()) return
+
+    const timestamp = new Date().toLocaleString()
+    const author = currentUserName ? currentUserName : 'You'
+    const noteEntry = `[${timestamp} - ${author}]: ${noteText.trim()}`
+    const updatedNotes = inspectNotes ? `${inspectNotes}\n\n${noteEntry}` : noteEntry
+
+    await handleUpdateSubtaskNotes(updatedNotes)
   }
 
   const handleConfirmDelete = async () => {
@@ -876,32 +881,17 @@ export function TaskSubtasksCard({
 
               {activeTab === 'notes' && (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Add Discussion Note</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Type engineering note or feedback..."
-                        value={newNoteInput}
-                        onChange={(e) => setNewNoteInput(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddNoteToSubtask}
-                        disabled={!newNoteInput.trim()}
-                        className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-50 shrink-0"
-                      >
-                        Post Note
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-muted/30 border border-border/80 space-y-2">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Subtask Notes Log</span>
-                    <pre className="text-xs text-foreground font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-                      {inspectNotes || 'No discussion notes logged yet.'}
-                    </pre>
+                  <div className="p-3 sm:p-4 rounded-2xl bg-card border border-border/80 shadow-xs">
+                    <NotesManager
+                      notes={inspectNotes}
+                      contextTitle={selectedSubtask.title}
+                      contextId={selectedSubtask.id}
+                      contextType="Subtask"
+                      onAddNote={handleAddNoteToSubtask}
+                      onUpdateNotes={handleUpdateSubtaskNotes}
+                      canEdit={true}
+                      placeholder="Add subtask engineering note, feedback, or update..."
+                    />
                   </div>
                 </div>
               )}

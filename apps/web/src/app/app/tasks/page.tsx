@@ -50,6 +50,7 @@ import {
   ImageIcon,
   FileSpreadsheet,
   File,
+  FileCode,
   Send,
   SlidersHorizontal,
   Image as LucideImage,
