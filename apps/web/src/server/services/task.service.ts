@@ -245,7 +245,8 @@ async function notifyAssigneeOnTaskCreation(
       if (w?.name) workspaceName = w.name
     }
 
-    const taskUrl = `${getAppBaseUrl()}/app/tasks`
+    const targetTaskId = task?.id || input?.id
+    const taskUrl = targetTaskId ? `${getAppBaseUrl()}/app/tasks/${targetTaskId}` : `${getAppBaseUrl()}/app/tasks`
 
     await sendTaskAssignedEmail(
       assigneeEmail,
@@ -524,8 +525,8 @@ export async function dispatchDueAlert(
     recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const taskUrl = `${appUrl}/app/tasks`
+  const { getAppBaseUrl } = await import('../utils/url')
+  const taskUrl = taskId ? `${getAppBaseUrl()}/app/tasks/${taskId}` : `${getAppBaseUrl()}/app/tasks`
 
   await sendTaskDueAlertEmail(
     recipientEmail,
@@ -605,8 +606,12 @@ export async function dispatchDateDueAlerts(
     recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const workspaceUrl = `${appUrl}/app/tasks`
+  const { getAppBaseUrl } = await import('../utils/url')
+  const base = getAppBaseUrl()
+  // If notification contains exactly 1 task, direct directly to that task screen; if more than 1 task, direct to the task board screen
+  const workspaceUrl = matchingTasks.length === 1 && matchingTasks[0]?.id
+    ? `${base}/app/tasks/${matchingTasks[0].id}`
+    : `${base}/app/tasks`
 
   if (matchingTasks.length === 0) {
     return {
@@ -704,8 +709,12 @@ export async function dispatchUpcomingDueAlerts(
     recipientEmail = process.env.MAIL_USERNAME || 'anandu2109@gmail.com'
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const workspaceUrl = `${appUrl}/app/tasks`
+  const { getAppBaseUrl } = await import('../utils/url')
+  const base = getAppBaseUrl()
+  // If notification contains exactly 1 task, direct directly to that task screen; if more than 1 task, direct to the task board screen
+  const workspaceUrl = tasks.length === 1 && tasks[0]?.id
+    ? `${base}/app/tasks/${tasks[0].id}`
+    : `${base}/app/tasks`
 
   let taskListHtml = ''
   let totalPendingSubtasks = 0

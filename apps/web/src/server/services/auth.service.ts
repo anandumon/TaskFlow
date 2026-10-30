@@ -364,8 +364,8 @@ export async function requestPasswordReset(email: string): Promise<{ token: stri
     expiresAt,
   })
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const resetUrl = `${appUrl}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`
+  const { getAppBaseUrl } = await import('../utils/url')
+  const resetUrl = `${getAppBaseUrl()}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`
 
   const { sendPasswordResetEmail } = await import('./email.service')
   await sendPasswordResetEmail(normalizedEmail, user?.first_name || 'there', resetUrl)

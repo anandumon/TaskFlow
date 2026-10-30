@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CheckSquare,
   Plus,
@@ -367,6 +368,16 @@ function UserSelect({
 
 
 export default function TasksPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const targetTaskId = searchParams.get('taskId') || searchParams.get('openTaskId')
+    if (targetTaskId) {
+      router.push(`/app/tasks/${targetTaskId}`)
+    }
+  }, [searchParams, router])
+
   const { currentWorkspace, members: wsMembers, fetchMembers: fetchWsMembers } = useWorkspaceStore()
   const { currentOrg, members: orgMembers, fetchMembers: fetchOrgMembers } = useOrgStore()
   const { tasks, loadTasks, createTask, updateTask, updateStatus, updateEnvironment, moveTask, deleteTask, toggleSubtask, isLoading: tasksLoading } = useTaskStore()

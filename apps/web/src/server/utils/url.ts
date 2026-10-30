@@ -1,10 +1,10 @@
 /**
  * Production-ready application base URL resolver.
  * Ensures external links (such as invitation and notification emails)
- * never fallback to localhost:3000 in deployed or production environments.
+ * always resolve to the valid live production domain (https://task-flow-seven-ochre.vercel.app).
  */
 export function getAppBaseUrl(): string {
-  // 1. Explicit environment variable configured by user or Vercel
+  // 1. Explicit production URL configured by user or Vercel (excluding localhost)
   if (process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes('localhost')) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
   }
@@ -24,11 +24,6 @@ export function getAppBaseUrl(): string {
     return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')
   }
 
-  // 5. If running in production or on cloud hosting, default to the live TaskFlow app domain
-  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
-    return 'https://task-flow-seven-ochre.vercel.app'
-  }
-
-  // 6. Local development fallback
-  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'http://localhost:3000'
+  // 5. Default to the live TaskFlow production URL for all notifications, invites, and emails
+  return 'https://task-flow-seven-ochre.vercel.app'
 }
