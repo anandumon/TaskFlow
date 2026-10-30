@@ -1,4 +1,4 @@
-import { query, queryOne } from '@/server/db/postgres'
+import { query, queryOne } from '../db/postgres'
 import crypto from 'crypto'
 
 export interface ChatChannelDto {
@@ -94,17 +94,227 @@ export async function ensureChatSchema() {
   }
 }
 
-export async function getWorkspaceChannels(workspaceId: string): Promise<ChatChannelDto[]> {
+/**
+ * Resolves user IDs who have access to a specific project within a workspace.
+ */
+export async function getMembersWithAccessToProject(workspaceId: string, projectId: string): Promise<string[]> {
+  try {
+    const memberSet = new Set<string>()
+
+    // 1. Workspace creator and organization owner
+    const ws = await queryOne(
+      `SELECT w.created_by, o.owner_id 
+       FROM workspaces w 
+       LEFT JOIN organizations o ON w.organization_id = o.id 
+       WHERE w.id = $1`,
+      [workspaceId]
+    )
+    if (ws?.created_by) memberSet.add(String(ws.created_by))
+    if (ws?.owner_id) memberSet.add(String(ws.owner_id))
+
+    // 2. Project creator
+    const prj = await queryOne(`SELECT created_by FROM projects WHERE id = $1`, [projectId])
+    if (prj?.created_by) memberSet.add(String(prj.created_by))
+
+    // 3. Project memberships
+    const pms = await query(
+      `SELECT user_id FROM project_memberships WHERE project_id = $1 AND (status = 'ACTIVE' OR status IS NULL)`,
+      [projectId]
+    )
+    pms.forEach((r: any) => {
+      if (r.user_id) memberSet.add(String(r.user_id))
+    })
+
+    // 4. Any users with accepted invitations for this project
+    const invs = await query(
+      `SELECT invited_user_id FROM invitations 
+       WHERE (project_id = $1 OR project_ids @> jsonb_build_array($1::text)) 
+       AND status = 'ACCEPTED' AND invited_user_id IS NOT NULL`,
+      [projectId]
+    )
+    invs.forEach((r: any) => {
+      if (r.invited_user_id) memberSet.add(String(r.invited_user_id))
+    })
+
+    // 5. If no specific restricted project memberships exist, all active workspace members have access
+    if (pms.length === 0) {
+      const wms = await query(
+        `SELECT user_id FROM workspace_members WHERE workspace_id = $1 AND (status = 'ACTIVE' OR status IS NULL)`,
+        [workspaceId]
+      )
+      wms.forEach((r: any) => {
+        if (r.user_id) memberSet.add(String(r.user_id))
+      })
+    }
+
+    return Array.from(memberSet)
+  } catch (err) {
+    console.warn('[chat.service] getMembersWithAccessToProject error:', err)
+    return []
+  }
+}
+
+/**
+ * Ensures a project has its own dedicated chat channel.
+ * Creates it if missing and adds all members who have access to the project.
+ */
+export async function ensureProjectChannel(
+  workspaceId: string,
+  projectId: string,
+  projectName: string,
+  description?: string,
+  creatorId?: string
+): Promise<ChatChannelDto> {
+  await ensureChatSchema()
+  const cleanName = projectName.replace(/^#+/, '').trim()
+
+  // Check if channel already exists for this project
+  const existing = await queryOne(
+    `SELECT * FROM chat_channels WHERE workspace_id = $1 AND project_id = $2 LIMIT 1`,
+    [workspaceId, projectId]
+  )
+
+  if (existing) {
+    // If channel exists, ensure member_ids includes members who have access
+    const membersWithAccess = await getMembersWithAccessToProject(workspaceId, projectId)
+    const existingMemberIds = Array.isArray(existing.member_ids) ? existing.member_ids : []
+    const merged = Array.from(new Set([...existingMemberIds, ...membersWithAccess]))
+    
+    if (merged.length > existingMemberIds.length) {
+      await query(
+        `UPDATE chat_channels SET member_ids = $1, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(merged), existing.id]
+      )
+    }
+
+    return {
+      id: String(existing.id),
+      workspaceId: String(existing.workspace_id),
+      projectId: existing.project_id ? String(existing.project_id) : undefined,
+      projectName: existing.project_name || projectName,
+      name: existing.name,
+      description: existing.description || '',
+      isPrivate: Boolean(existing.is_private),
+      memberIds: merged,
+      createdBy: existing.created_by ? String(existing.created_by) : undefined,
+      createdAt: existing.created_at ? new Date(existing.created_at).toISOString() : new Date().toISOString(),
+      updatedAt: existing.updated_at ? new Date(existing.updated_at).toISOString() : new Date().toISOString(),
+    }
+  }
+
+  // Create new channel for the project
+  const membersWithAccess = await getMembersWithAccessToProject(workspaceId, projectId)
+  if (creatorId && !membersWithAccess.includes(creatorId)) {
+    membersWithAccess.push(creatorId)
+  }
+
+  return await createChannel(workspaceId, {
+    name: cleanName,
+    description: description || `Dedicated channel for project #${cleanName}`,
+    projectId,
+    projectName,
+    isPrivate: false,
+    memberIds: membersWithAccess,
+    createdBy: creatorId,
+  })
+}
+
+/**
+ * Ensures all projects in a workspace have their own dedicated channel.
+ */
+export async function ensureAllProjectChannels(workspaceId: string): Promise<void> {
   await ensureChatSchema()
   try {
+    const projects = await query(
+      `SELECT id, name, description, created_by FROM projects WHERE workspace_id = $1 AND (deleted = false OR deleted IS NULL)`,
+      [workspaceId]
+    )
+
+    for (const p of projects) {
+      await ensureProjectChannel(workspaceId, String(p.id), p.name, p.description, p.created_by ? String(p.created_by) : undefined)
+    }
+  } catch (err) {
+    console.warn('[chat.service] ensureAllProjectChannels warning:', err)
+  }
+}
+
+/**
+ * Adds a user to a project channel and workspace general channel when invited / accepted.
+ */
+export async function addUserToProjectChannels(
+  workspaceId: string,
+  projectId: string,
+  userId: string
+): Promise<void> {
+  await ensureChatSchema()
+  try {
+    // 1. Add user to project channel
+    const projectChannel = await queryOne(
+      `SELECT id, member_ids, name FROM chat_channels WHERE workspace_id = $1 AND project_id = $2 LIMIT 1`,
+      [workspaceId, projectId]
+    )
+
+    if (projectChannel) {
+      const curMembers: string[] = Array.isArray(projectChannel.member_ids) ? projectChannel.member_ids : []
+      if (!curMembers.includes(userId)) {
+        curMembers.push(userId)
+        await query(
+          `UPDATE chat_channels SET member_ids = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(curMembers), projectChannel.id]
+        )
+
+        // Seed friendly welcome announcement in channel
+        const userRow = await queryOne(`SELECT first_name, last_name, display_name FROM users WHERE id = $1`, [userId])
+        const userName = userRow?.display_name || `${userRow?.first_name || ''} ${userRow?.last_name || ''}`.trim() || 'A new member'
+        const welcomeId = crypto.randomUUID()
+        await query(
+          `INSERT INTO chat_messages (id, workspace_id, channel_id, sender_id, sender_name, content, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [
+            welcomeId,
+            workspaceId,
+            projectChannel.id,
+            userId,
+            'TaskFlow Bot',
+            `👋 Welcome ${userName} to #${projectChannel.name}!`,
+          ]
+        )
+      }
+    }
+
+    // 2. Also ensure user is in general channel
+    const generalChannel = await queryOne(
+      `SELECT id, member_ids FROM chat_channels WHERE workspace_id = $1 AND project_id IS NULL ORDER BY created_at ASC LIMIT 1`,
+      [workspaceId]
+    )
+    if (generalChannel) {
+      const curGenMembers: string[] = Array.isArray(generalChannel.member_ids) ? generalChannel.member_ids : []
+      if (!curGenMembers.includes(userId)) {
+        curGenMembers.push(userId)
+        await query(
+          `UPDATE chat_channels SET member_ids = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(curGenMembers), generalChannel.id]
+        )
+      }
+    }
+  } catch (err) {
+    console.warn('[chat.service] addUserToProjectChannels warning:', err)
+  }
+}
+
+export async function getWorkspaceChannels(workspaceId: string, currentUserId?: string): Promise<ChatChannelDto[]> {
+  await ensureChatSchema()
+  try {
+    // 1. Ensure all projects in this workspace have dedicated channels
+    await ensureAllProjectChannels(workspaceId)
+
     const rows = await query(
       `SELECT * FROM chat_channels WHERE workspace_id = $1 ORDER BY created_at ASC`,
       [workspaceId]
     )
 
-    // If workspace has no channels yet, auto-create a default '# general' channel
+    // If workspace still has 0 channels, auto-create a default '# General' channel
     if (rows.length === 0) {
-      // Find workspace project name if any
       const prj = await queryOne(
         `SELECT id, name FROM projects WHERE workspace_id = $1 ORDER BY created_at ASC LIMIT 1`,
         [workspaceId]
@@ -120,7 +330,7 @@ export async function getWorkspaceChannels(workspaceId: string): Promise<ChatCha
       return [defaultChannel]
     }
 
-    return rows.map((r: any) => ({
+    let allChannels = rows.map((r: any) => ({
       id: String(r.id),
       workspaceId: String(r.workspace_id),
       projectId: r.project_id ? String(r.project_id) : undefined,
@@ -133,6 +343,29 @@ export async function getWorkspaceChannels(workspaceId: string): Promise<ChatCha
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
       updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
     }))
+
+    // 2. Filter channels by user access permissions if currentUserId is provided
+    if (currentUserId) {
+      try {
+        const { getAllowedProjectIdsForUser } = await import('./project.service')
+        const allowedProjectIds = await getAllowedProjectIdsForUser(workspaceId, currentUserId)
+
+        if (allowedProjectIds !== null) {
+          allChannels = allChannels.filter((c) => {
+            // General channel is visible to all workspace members
+            if (!c.projectId) return true
+            // Project channel is visible if user has access to that project or is in memberIds
+            if (allowedProjectIds.includes(c.projectId)) return true
+            if (c.memberIds.includes(currentUserId)) return true
+            return false
+          })
+        }
+      } catch (filterErr) {
+        console.warn('[chat.service] Project channel filtering fallback:', filterErr)
+      }
+    }
+
+    return allChannels
   } catch (err) {
     console.error('[chat.service] getWorkspaceChannels error:', err)
     return []

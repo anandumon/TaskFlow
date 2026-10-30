@@ -1341,10 +1341,10 @@ export function ChatInputBar({
                   isSubmitting ||
                   (!isRecordingAudio && !inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)
                 }
-                className="px-3 py-1.5 rounded-l-xl bg-white text-zinc-950 text-xs font-semibold hover:bg-zinc-100 transition-all disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center cursor-pointer active:scale-95"
+                className="px-3 py-1.5 rounded-l-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-white transition-all disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs"
                 title={isRecordingAudio ? 'Send voice note (Enter)' : 'Send message (Enter)'}
               >
-                <Send className="w-3.5 h-3.5 fill-zinc-950" />
+                <Send className="w-3.5 h-3.5 fill-current text-current" />
               </button>
               <button
                 type="button"
@@ -1360,10 +1360,10 @@ export function ChatInputBar({
                   isSubmitting ||
                   (!isRecordingAudio && !inputText.trim() && stagedAttachments.length === 0 && !isWhiteboardMode && !isDocMode)
                 }
-                className="px-1.5 py-1.5 rounded-r-xl bg-white hover:bg-zinc-100 text-zinc-800 border-l border-zinc-200/80 text-xs font-bold transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                className="px-1.5 py-1.5 rounded-r-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-950 border-l border-zinc-700 dark:border-zinc-300 text-xs font-bold transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                 title="Message sending options"
               >
-                <ChevronDown className="w-3 h-3 text-zinc-700" />
+                <ChevronDown className="w-3.5 h-3.5 text-current" />
               </button>
             </div>
           </div>

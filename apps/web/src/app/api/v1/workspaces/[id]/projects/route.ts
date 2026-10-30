@@ -30,7 +30,7 @@ export async function POST(
     }
 
     const body = await req.json()
-    const project = await createProject(params.id, body)
+    const project = await createProject(params.id, body, user.id)
     return apiSuccess(project, 201)
   } catch (err: any) {
     return apiError(err.message || 'Failed to create project', 500)

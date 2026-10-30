@@ -10,6 +10,8 @@ import {
 } from '@/server/services/chat.service'
 import { broadcastChatEvent } from '@/server/events/chat-events'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }

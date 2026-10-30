@@ -139,6 +139,131 @@ export async function getTaskById(id: string): Promise<TaskDto | null> {
   return mapTask(row)
 }
 
+/**
+ * Asynchronously sends an email to the assigned user when a new task is created and saved to the database.
+ * Executes in the background with zero latency / delay on the task creation API response.
+ */
+async function notifyAssigneeOnTaskCreation(
+  workspaceId: string,
+  task: any,
+  input: Partial<TaskDto>,
+  creatorId?: string
+): Promise<void> {
+  try {
+    const { sendTaskAssignedEmail } = await import('./email.service')
+    const { getAppBaseUrl } = await import('../utils/url')
+
+    let assigneeEmail: string | null = null
+    let assigneeName = input.assigneeName || task.assignee_name || 'there'
+
+    // 1. If explicit assigneeId, lookup user
+    if (input.assigneeId || task.assignee_id) {
+      const targetId = input.assigneeId || task.assignee_id
+      const u = await queryOne(
+        `SELECT id, email, first_name, last_name, display_name FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+        [targetId]
+      )
+      if (u?.email) {
+        assigneeEmail = u.email
+        assigneeName = u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || assigneeName
+      }
+    }
+
+    // 2. If no email yet, check if assigneeName has @ or matches a user
+    if (!assigneeEmail && (input.assigneeName || task.assignee_name)) {
+      const cleanName = (input.assigneeName || task.assignee_name || '').trim()
+      if (cleanName.includes('@')) {
+        assigneeEmail = cleanName.toLowerCase()
+      } else if (cleanName.toLowerCase() === 'you' && creatorId) {
+        const u = await queryOne(
+          `SELECT id, email, first_name, last_name, display_name FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+          [creatorId]
+        )
+        if (u?.email) {
+          assigneeEmail = u.email
+          assigneeName = u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || cleanName
+        }
+      } else {
+        const u = await queryOne(
+          `SELECT id, email, first_name, last_name, display_name FROM users 
+           WHERE (LOWER(email) = LOWER($1)
+              OR LOWER(display_name) = LOWER($1) 
+              OR LOWER(first_name) = LOWER($1) 
+              OR LOWER(username) = LOWER($1)
+              OR LOWER(first_name || ' ' || last_name) = LOWER($1))
+           AND (deleted = false OR deleted IS NULL) LIMIT 1`,
+          [cleanName]
+        )
+        if (u?.email) {
+          assigneeEmail = u.email
+          assigneeName = u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || cleanName
+        }
+      }
+    }
+
+    // 3. Fallback: if creator assigned to themselves
+    if (!assigneeEmail && creatorId) {
+      const u = await queryOne(
+        `SELECT id, email, first_name, last_name, display_name FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+        [creatorId]
+      )
+      if (u?.email) {
+        assigneeEmail = u.email
+      }
+    }
+
+    if (!assigneeEmail) {
+      return
+    }
+
+    // Resolve assigner name
+    let assignerName = input.reviewerName || task.reviewer_name || 'A team member'
+    if (assignerName.toLowerCase() === 'you' || !input.reviewerName) {
+      if (creatorId) {
+        const cu = await queryOne(
+          `SELECT first_name, last_name, display_name FROM users WHERE id = $1 OR auth_user_id = $1 LIMIT 1`,
+          [creatorId]
+        )
+        if (cu) {
+          assignerName = cu.display_name || `${cu.first_name || ''} ${cu.last_name || ''}`.trim() || 'Team Lead'
+        }
+      }
+    }
+
+    // Resolve Project Name
+    let projectName = 'Project'
+    const targetProjId = task.project_id || input.projectId
+    if (targetProjId) {
+      const p = await queryOne(`SELECT name FROM projects WHERE id = $1`, [targetProjId])
+      if (p?.name) projectName = p.name
+    }
+
+    // Resolve Workspace Name
+    let workspaceName = 'Workspace'
+    if (workspaceId) {
+      const w = await queryOne(`SELECT name FROM workspaces WHERE id = $1`, [workspaceId])
+      if (w?.name) workspaceName = w.name
+    }
+
+    const taskUrl = `${getAppBaseUrl()}/app/tasks`
+
+    await sendTaskAssignedEmail(
+      assigneeEmail,
+      assigneeName,
+      assignerName,
+      task.title || input.title || 'Untitled Task',
+      projectName,
+      workspaceName,
+      task.due_date || input.dueDate || 'Today',
+      task.priority || input.priority || 'Medium',
+      task.description || input.description || '',
+      taskUrl
+    )
+  } catch (err) {
+    console.warn('[task.service] notifyAssigneeOnTaskCreation error (non-fatal):', err)
+  }
+}
+
 export async function createTask(
   workspaceId: string,
   input: Partial<TaskDto>,
@@ -200,6 +325,11 @@ export async function createTask(
       now,
     ]
   )
+
+  // Trigger non-blocking asynchronous email notification with zero delay on the API response
+  notifyAssigneeOnTaskCreation(workspaceId, row, input, creatorId).catch((err) => {
+    console.warn('[task.service] Async task assignment email warning:', err)
+  })
 
   return mapTask(row)
 }

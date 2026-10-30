@@ -508,6 +508,20 @@ export async function acceptInvitation(
     }
   }
 
+  // 4. Automatically add user to the chat channels corresponding to each project
+  if (targetWsId && isUuid(targetUserId)) {
+    try {
+      const { addUserToProjectChannels } = await import('./chat.service')
+      for (const pid of targetProjectIds) {
+        if (pid) {
+          await addUserToProjectChannels(targetWsId, pid, targetUserId)
+        }
+      }
+    } catch (chatErr) {
+      console.warn('[invitation.service] addUserToProjectChannels warning:', chatErr)
+    }
+  }
+
   return mapInvitation({
     ...inv,
     organization_id: targetOrgId || inv.organization_id,

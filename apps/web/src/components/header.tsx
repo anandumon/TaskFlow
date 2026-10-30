@@ -501,7 +501,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                                 <div className="text-[10px] text-sky-500 font-semibold truncate">
                                   {notif.channelId ? `#${notif.channelName || 'channel'}` : 'Direct Message'}
                                 </div>
-                                <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                <p className="text-[11px] text-foreground/85 dark:text-slate-300 font-normal line-clamp-2 mt-0.5">
                                   {notif.content}
                                 </p>
                               </div>
@@ -618,7 +618,7 @@ export function Header({ onOpenCommand, onToggleMobileSidebar }: HeaderProps) {
                                 {alert.badgeText}
                               </span>
                             </div>
-                            <p className="text-[10px] text-muted-foreground leading-snug">
+                            <p className="text-[11px] text-foreground/80 dark:text-slate-300 font-medium leading-snug">
                               {alert.description}
                             </p>
                           </Link>

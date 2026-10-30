@@ -3,12 +3,15 @@ import { apiSuccess, apiError } from '@/server/utils/response'
 import { getAuthUser } from '@/server/utils/auth'
 import { getWorkspaceChannels, createChannel } from '@/server/services/chat.service'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const channels = await getWorkspaceChannels(params.id)
+    const authUser = await getAuthUser(req)
+    const channels = await getWorkspaceChannels(params.id, authUser?.id)
     return apiSuccess(channels)
   } catch (err: any) {
     return apiError(err.message || 'Failed to fetch channels', 500)

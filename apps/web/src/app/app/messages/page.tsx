@@ -1105,18 +1105,18 @@ export default function MessagesPage() {
                             setProfileInitialTab('activity')
                             setIsProfilePanelOpen(!isProfilePanelOpen)
                           }}
-                          className="text-muted-foreground hover:text-foreground p-0.5"
+                          className="text-foreground/70 hover:text-foreground p-1 rounded-lg hover:bg-accent/50 transition-colors"
                           title="Profile options"
                         >
-                          <MoreHorizontal className="w-3.5 h-3.5" />
+                          <MoreHorizontal className="w-4 h-4" strokeWidth={2} />
                         </button>
                         <button
                           type="button"
                           onClick={(e) => e.stopPropagation()}
-                          className="text-muted-foreground hover:text-amber-400 p-0.5"
+                          className="text-foreground/70 hover:text-amber-400 p-1 rounded-lg hover:bg-amber-400/10 transition-colors"
                           title="Favorite conversation"
                         >
-                          <Star className="w-3.5 h-3.5" />
+                          <Star className="w-4 h-4" strokeWidth={2} />
                         </button>
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
@@ -1149,14 +1149,14 @@ export default function MessagesPage() {
                   setProfileInitialTab('activity')
                   setIsProfilePanelOpen(!isProfilePanelOpen)
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   isProfilePanelOpen
                     ? 'bg-primary/10 text-primary border-primary/30'
-                    : 'bg-card border-border hover:bg-accent text-muted-foreground hover:text-foreground'
+                    : 'bg-card border-border hover:bg-accent text-foreground/80 hover:text-foreground'
                 }`}
                 title="View user profile"
               >
-                <User className="w-3.5 h-3.5" />
+                <User className="w-4 h-4" strokeWidth={2} />
                 <span className="hidden sm:inline">Profile</span>
               </button>
             )}
@@ -1187,7 +1187,7 @@ export default function MessagesPage() {
                 type="button"
                 className="px-2 py-2 font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5" strokeWidth={2.2} />
                 <span>View</span>
               </button>
             </div>
@@ -1197,19 +1197,19 @@ export default function MessagesPage() {
                 type="button"
                 onClick={handleStartVoiceCall}
                 disabled={isStartingCall}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-foreground/75 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                 title="Start Live Voice Call"
               >
-                <PhoneCall className="w-3.5 h-3.5" />
+                <PhoneCall className="w-4 h-4" strokeWidth={2} />
               </button>
               <button
                 type="button"
                 onClick={handleStartVideoCall}
                 disabled={isStartingCall}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/15 hover:text-emerald-400 text-muted-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-foreground/75 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                 title="Start Live Video Call"
               >
-                <Video className="w-3.5 h-3.5" />
+                <Video className="w-4 h-4" strokeWidth={2} />
               </button>
             </div>
           </div>
@@ -1233,7 +1233,6 @@ export default function MessagesPage() {
               const sitCount = channelTasks.filter((t) => matchTaskStatus(t.status, 'in_sit')).length
               const uatCount = channelTasks.filter((t) => matchTaskStatus(t.status, 'in_uat')).length
               const doneCount = channelTasks.filter((t) => isCompletedTask(t)).length
-              const weightedProg = calculateWeightedProgress(channelTasks)
 
               return (
                 <>
@@ -1273,17 +1272,6 @@ export default function MessagesPage() {
                   </div>
 
                   <div className="flex items-center gap-3 ml-auto">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground">Progress:</span>
-                      <div className="w-20 sm:w-28 h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
-                          style={{ width: `${weightedProg}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-black text-primary">{weightedProg}%</span>
-                    </div>
-
                     <Link
                       href={channelProject ? `/app/projects/${channelProject.id}` : '/app/tasks'}
                       className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline transition-colors"
@@ -1832,18 +1820,18 @@ export default function MessagesPage() {
                       </div>
                     )}
 
-                    {/* FLOATING HOVER REACTION & ACTION TOOLBAR (Image 3: Positioned near / on top of message bubble) */}
+                    {/* FLOATING HOVER REACTION & ACTION TOOLBAR */}
                     {!isMultiSelectMode && (
                       <div
-                        className={`absolute -top-7 ${
+                        className={`absolute -top-8 ${
                           isMe ? 'right-0' : 'left-0'
-                        } z-30 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-150 flex items-center bg-zinc-900/95 border border-zinc-700/80 rounded-xl px-1.5 py-1 shadow-xl backdrop-blur-md gap-0.5 text-xs select-none`}
+                        } z-30 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-150 flex items-center bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/90 dark:border-zinc-700/90 rounded-2xl px-2 py-1 shadow-xl dark:shadow-2xl backdrop-blur-md gap-1 text-xs select-none w-max whitespace-nowrap`}
                       >
                         {/* Quick reaction emojis */}
                         <button
                           type="button"
                           onClick={() => handleToggleReaction(msg.id, '👍')}
-                          className="p-1 hover:bg-zinc-800 rounded-lg transition-transform hover:scale-120 text-sm cursor-pointer"
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-transform hover:scale-125 text-base cursor-pointer shrink-0 leading-none"
                           title="Thumbs up"
                         >
                           👍
@@ -1851,7 +1839,7 @@ export default function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleReaction(msg.id, '✅')}
-                          className="p-1 hover:bg-zinc-800 rounded-lg transition-transform hover:scale-120 text-sm cursor-pointer"
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-transform hover:scale-125 text-base cursor-pointer shrink-0 leading-none"
                           title="Checkmark"
                         >
                           ✅
@@ -1859,7 +1847,7 @@ export default function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleReaction(msg.id, '🔥')}
-                          className="p-1 hover:bg-zinc-800 rounded-lg transition-transform hover:scale-120 text-sm cursor-pointer"
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-transform hover:scale-125 text-base cursor-pointer shrink-0 leading-none"
                           title="Fire"
                         >
                           🔥
@@ -1867,24 +1855,30 @@ export default function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleReaction(msg.id, '🤩')}
-                          className="p-1 hover:bg-zinc-800 rounded-lg transition-transform hover:scale-120 text-sm cursor-pointer"
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-transform hover:scale-125 text-base cursor-pointer shrink-0 leading-none"
                           title="Star eyes"
                         >
                           🤩
                         </button>
 
-                        <div className="w-px h-3.5 bg-zinc-700/80 mx-0.5" />
+                        <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1 shrink-0" />
 
                         {/* Pin / Unpin message */}
                         <button
                           type="button"
                           onClick={() => handleTogglePin(msg)}
-                          className={`p-1 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer ${
-                            msg.isPinned ? 'text-amber-400' : 'text-zinc-300 hover:text-amber-400'
+                          className={`p-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                            msg.isPinned
+                              ? 'text-amber-500 bg-amber-500/15'
+                              : 'text-zinc-600 dark:text-zinc-300 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                           }`}
                           title={msg.isPinned ? 'Unpin message' : 'Pin message'}
                         >
-                          {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                          {msg.isPinned ? (
+                            <PinOff className="w-4 h-4 shrink-0 text-amber-500" strokeWidth={2.2} />
+                          ) : (
+                            <Pin className="w-4 h-4 shrink-0" strokeWidth={2.2} />
+                          )}
                         </button>
 
                         {/* Select message to enter multi-select mode */}
@@ -1894,10 +1888,10 @@ export default function MessagesPage() {
                             setIsMultiSelectMode(true)
                             toggleSelectMessage(msg.id)
                           }}
-                          className="p-1 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
                           title="Select message"
                         >
-                          <CheckSquare className="w-3.5 h-3.5" />
+                          <CheckSquare className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                         </button>
 
                         {/* Edit message (only if sender is current user) */}
@@ -1905,10 +1899,10 @@ export default function MessagesPage() {
                           <button
                             type="button"
                             onClick={() => handleStartEditMessage(msg)}
-                            className="p-1 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-sky-500 dark:hover:text-sky-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
                             title="Edit message"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                           </button>
                         )}
 
@@ -1916,13 +1910,13 @@ export default function MessagesPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenDeleteDialog(msg)}
-                          className="p-1 hover:bg-red-950/60 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer flex items-center justify-center shrink-0"
                           title="Delete message"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                         </button>
 
-                        <div className="w-px h-3.5 bg-zinc-700/80 mx-0.5" />
+                        <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1 shrink-0" />
 
                         {/* Reply */}
                         <button
@@ -1931,12 +1925,13 @@ export default function MessagesPage() {
                             setToastMessage(`Drafted reply for @${msg.senderName}`)
                             setTimeout(() => setToastMessage(null), 2500)
                           }}
-                          className="p-1 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-primary dark:hover:text-primary hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
                           title="Reply"
                         >
-                          <CornerUpLeft className="w-3.5 h-3.5" />
+                          <CornerUpLeft className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                         </button>
 
+                        {/* Copy text */}
                         <button
                           type="button"
                           onClick={() => {
@@ -1946,10 +1941,10 @@ export default function MessagesPage() {
                               setTimeout(() => setToastMessage(null), 2500)
                             }
                           }}
-                          className="p-1 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
                           title="Copy text"
                         >
-                          <Copy className="w-3.5 h-3.5" />
+                          <Copy className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                         </button>
                       </div>
                     )}

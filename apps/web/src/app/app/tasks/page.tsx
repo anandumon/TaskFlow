@@ -957,14 +957,26 @@ export default function TasksPage() {
           ? 'Bug Fix'
           : (customTagInput.trim() || 'Custom')
 
+      const matchedAssignee = availableUsers.find(
+        (u) =>
+          u.name.toLowerCase() === (newTaskAssignee || '').toLowerCase() ||
+          (u.email && u.email.toLowerCase() === (newTaskAssignee || '').toLowerCase())
+      )
+      const matchedAssigner = availableUsers.find(
+        (u) =>
+          u.name.toLowerCase() === (newTaskAssignedBy || '').toLowerCase() ||
+          (u.email && u.email.toLowerCase() === (newTaskAssignedBy || '').toLowerCase())
+      )
+
       await createTask(wsId, {
         projectId: newTaskProjectId,
         title: newTaskTitle.trim(),
         description: newTaskDescription.trim(),
         tag: finalTag,
         tagColor: getTagColor(finalTag),
-        assigneeName: getFirstName(newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName)),
-        reviewerName: getFirstName(newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName)),
+        assigneeId: matchedAssignee?.id && matchedAssignee.id !== 'current-user' ? matchedAssignee.id : undefined,
+        assigneeName: matchedAssignee?.name || getFirstName(newTaskAssignee === 'You' ? currentUserName : (newTaskAssignee || currentUserName)),
+        reviewerName: matchedAssigner?.name || getFirstName(newTaskAssignedBy === 'You' ? currentUserName : (newTaskAssignedBy || currentUserName)),
         dueDate: newTaskDue || todayStr,
         status: 'todo', // Always defaults to todo
         environment: getEnvForStatus('todo') as TaskEnvironment,

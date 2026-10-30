@@ -187,7 +187,8 @@ export async function createProject(
     color?: string
     icon?: string
     environments?: string
-  }
+  },
+  creatorId?: string
 ): Promise<ProjectDto> {
   // Server-side idempotent deduplication: prevent duplicate rows from double-submits within 3 seconds
   const windowStart = new Date(Date.now() - 3000)
@@ -203,24 +204,56 @@ export async function createProject(
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000)
   const now = new Date()
 
-  const row = await queryOne(
-    `INSERT INTO projects (id, workspace_id, name, slug, description, status, progress, color, icon, environments, deleted, version, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, 0, $11, $11)
-     RETURNING *`,
-    [
-      id,
-      workspaceId,
-      input.name,
-      slug,
-      input.description || '',
-      input.status || 'ACTIVE',
-      input.progress || 0,
-      input.color || '#3b82f6',
-      input.icon || 'Folder',
-      input.environments || 'DEV,SIT,UAT,RELEASE,MAIN',
-      now,
-    ]
-  )
+  let row: any = null
+  try {
+    row = await queryOne(
+      `INSERT INTO projects (id, workspace_id, name, slug, description, status, progress, color, icon, environments, created_by, deleted, version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, 0, $12, $12)
+       RETURNING *`,
+      [
+        id,
+        workspaceId,
+        input.name,
+        slug,
+        input.description || '',
+        input.status || 'ACTIVE',
+        input.progress || 0,
+        input.color || '#3b82f6',
+        input.icon || 'Folder',
+        input.environments || 'DEV,SIT,UAT,RELEASE,MAIN',
+        creatorId || null,
+        now,
+      ]
+    )
+  } catch {
+    // Fallback if created_by column does not exist
+    row = await queryOne(
+      `INSERT INTO projects (id, workspace_id, name, slug, description, status, progress, color, icon, environments, deleted, version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, 0, $11, $11)
+       RETURNING *`,
+      [
+        id,
+        workspaceId,
+        input.name,
+        slug,
+        input.description || '',
+        input.status || 'ACTIVE',
+        input.progress || 0,
+        input.color || '#3b82f6',
+        input.icon || 'Folder',
+        input.environments || 'DEV,SIT,UAT,RELEASE,MAIN',
+        now,
+      ]
+    )
+  }
+
+  // Automatically create a dedicated channel for this project with access given to project members
+  try {
+    const { ensureProjectChannel } = await import('./chat.service')
+    await ensureProjectChannel(workspaceId, id, input.name, input.description, creatorId)
+  } catch (chanErr) {
+    console.warn('[project.service] Automatic channel creation warning:', chanErr)
+  }
 
   return mapProject(row)
 }
